@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: gym-pro-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: gymadmin
+      POSTGRES_PASSWORD: secret123
+      POSTGRES_DB: gym_pro_db
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gymadmin -d gym_pro_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - gym-pro-network
+
+  # Redis (Optional - for caching and sessions)
+  redis:
+    image: redis:7-alpine
+    container_name: gym-pro-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - gym-pro-network
+
+  # API Server (Uncomment to run with Docker)
+  # api:
+  #   build:
+  #     context: .
+  #     dockerfile: docker/Dockerfile
+  #   container_name: gym-pro-api
+  #   restart: unless-stopped
+  #   ports:
+  #     - "8080:8080"
+  #   environment:
+  #     - SERVER_PORT=8080
+  #     - SERVER_HOST=0.0.0.0
+  #     - GIN_MODE=release
+  #     - DB_HOST=postgres
+  #     - DB_PORT=5432
+  #     - DB_USER=gymadmin
+  #     - DB_PASSWORD=secret123
+  #     - DB_NAME=gym_pro_db
+  #     - DB_SSL_MODE=disable
+  #     - JWT_SECRET=your-production-secret-change-this
+  #     - LOG_LEVEL=info
+  #     - LOG_ENCODING=json
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #   networks:
+  #     - gym-pro-network
+  #   healthcheck:
+  #     test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 40s
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  gym-pro-network:
+    driver: bridge

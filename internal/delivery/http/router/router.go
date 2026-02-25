@@ -1,0 +1,233 @@
+package router
+
+import (
+	"gym-pro-2026-ptit/internal/config"
+	"gym-pro-2026-ptit/internal/delivery/http/handler"
+	"gym-pro-2026-ptit/internal/delivery/http/middleware"
+	"gym-pro-2026-ptit/internal/infrastructure/auth"
+	"gym-pro-2026-ptit/internal/infrastructure/logger"
+
+	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
+)
+
+// Router wraps Gin engine
+type Router struct {
+	engine *gin.Engine
+}
+
+// New creates a new router
+func New(
+	cfg *config.Config,
+	log logger.Logger,
+	jwtManager *auth.JWTManager,
+	authHandler *handler.AuthHandler,
+	workoutHandler *handler.WorkoutHandler,
+	// TODO: Add more handlers as parameters
+) *Router {
+	// Set Gin mode
+	gin.SetMode(cfg.Server.GinMode)
+
+	// Create engine
+	engine := gin.New()
+
+	// Global middleware
+	engine.Use(middleware.RecoveryMiddleware(log))
+	engine.Use(middleware.LoggerMiddleware(log))
+	engine.Use(middleware.CORSMiddleware(&cfg.Server))
+	engine.Use(middleware.ErrorHandlerMiddleware(log))
+
+	// Health check endpoint
+	engine.GET("/health", healthCheckHandler)
+	engine.GET("/ping", pingHandler)
+
+	// Swagger documentation
+	engine.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
+	// API v1 routes
+	v1 := engine.Group("/api/v1")
+	{
+		// Rate limiting for API routes
+		v1.Use(middleware.RateLimitMiddleware(&cfg.RateLimit))
+
+		// Public routes (no authentication required)
+		authRoutes := v1.Group("/auth")
+		{
+			authRoutes.POST("/register", authHandler.Register)
+			authRoutes.POST("/login", authHandler.Login)
+			authRoutes.POST("/refresh", authHandler.RefreshToken)
+			authRoutes.GET("/oauth/google", authHandler.GoogleOAuth)
+			authRoutes.GET("/oauth/google/callback", authHandler.GoogleOAuthCallback)
+			authRoutes.GET("/oauth/facebook", authHandler.FacebookOAuth)
+			authRoutes.GET("/oauth/facebook/callback", authHandler.FacebookOAuthCallback)
+		}
+
+		// Protected routes (authentication required)
+		authenticated := v1.Group("")
+		authenticated.Use(middleware.AuthMiddleware(jwtManager))
+		{
+			// User routes
+			users := authenticated.Group("/users")
+			{
+				users.GET("/me", authHandler.GetMe)
+				users.PUT("/me", authHandler.UpdateMe)
+				users.GET("/:id", placeholderHandler("Get user by ID"))
+			}
+
+			// Exercise routes
+			exercises := authenticated.Group("/exercises")
+			{
+				exercises.GET("", placeholderHandler("List exercises"))
+				exercises.GET("/:id", placeholderHandler("Get exercise"))
+				exercises.GET("/search", placeholderHandler("Search exercises"))
+			}
+
+			// Workout Plan routes
+			workoutPlans := authenticated.Group("/workout-plans")
+			{
+				workoutPlans.POST("", workoutHandler.CreateWorkoutPlan)
+				workoutPlans.GET("", workoutHandler.ListWorkoutPlans)
+				workoutPlans.GET("/:id", workoutHandler.GetWorkoutPlan)
+				workoutPlans.PUT("/:id", workoutHandler.UpdateWorkoutPlan)
+				workoutPlans.DELETE("/:id", workoutHandler.DeleteWorkoutPlan)
+				
+				// Exercise management
+				workoutPlans.POST("/:id/exercises", workoutHandler.AddExerciseToWorkout)
+				workoutPlans.PUT("/:id/exercises/:exerciseId", placeholderHandler("Update exercise in plan"))
+				workoutPlans.DELETE("/:id/exercises/:exerciseId", placeholderHandler("Remove exercise from plan"))
+			}
+
+			// Workout Schedule routes
+			workoutSchedules := authenticated.Group("/workout-schedules")
+			{
+				workoutSchedules.POST("", placeholderHandler("Schedule workout"))
+				workoutSchedules.POST("/bulk", placeholderHandler("Bulk schedule workouts"))
+				workoutSchedules.GET("", placeholderHandler("List schedules"))
+				workoutSchedules.GET("/calendar/:year/:month", placeholderHandler("Calendar view"))
+				workoutSchedules.PUT("/:id", placeholderHandler("Update schedule"))
+				workoutSchedules.DELETE("/:id", placeholderHandler("Delete schedule"))
+			}
+
+			// Workout Session routes
+			workoutSessions := authenticated.Group("/workout-sessions")
+			{
+				workoutSessions.POST("/start", placeholderHandler("Start workout session"))
+				workoutSessions.PUT("/:id/exercises/:exerciseId/log-set", placeholderHandler("Log exercise set"))
+				workoutSessions.POST("/:id/complete", placeholderHandler("Complete session"))
+				workoutSessions.GET("", placeholderHandler("Get session history"))
+				workoutSessions.GET("/:id", placeholderHandler("Get session details"))
+				workoutSessions.GET("/stats", placeholderHandler("Get workout stats"))
+			}
+
+			// Food routes
+			foods := authenticated.Group("/foods")
+			{
+				foods.GET("", placeholderHandler("List foods"))
+				foods.GET("/:id", placeholderHandler("Get food"))
+				foods.GET("/search", placeholderHandler("Search foods"))
+				foods.POST("", placeholderHandler("Create custom food"))
+				foods.PUT("/:id", placeholderHandler("Update custom food"))
+				foods.DELETE("/:id", placeholderHandler("Delete custom food"))
+			}
+
+			// Recipe routes
+			recipes := authenticated.Group("/recipes")
+			{
+				recipes.POST("", placeholderHandler("Create recipe"))
+				recipes.GET("", placeholderHandler("List recipes"))
+				recipes.GET("/:id", placeholderHandler("Get recipe"))
+				recipes.PUT("/:id", placeholderHandler("Update recipe"))
+				recipes.DELETE("/:id", placeholderHandler("Delete recipe"))
+				
+				// Food management in recipes
+				recipes.POST("/:id/foods", placeholderHandler("Add food to recipe"))
+				recipes.PUT("/:id/foods/:foodId", placeholderHandler("Update food in recipe"))
+				recipes.DELETE("/:id/foods/:foodId", placeholderHandler("Remove food from recipe"))
+			}
+
+			// Meal Log routes
+			mealLogs := authenticated.Group("/meal-logs")
+			{
+				mealLogs.POST("", placeholderHandler("Create meal log"))
+				mealLogs.GET("", placeholderHandler("Get meal log history"))
+				mealLogs.GET("/date/:date", placeholderHandler("Get logs by date"))
+				mealLogs.GET("/:id", placeholderHandler("Get meal log"))
+				mealLogs.PUT("/:id", placeholderHandler("Update meal log"))
+				mealLogs.DELETE("/:id", placeholderHandler("Delete meal log"))
+				
+				// Item management
+				mealLogs.POST("/:id/items", placeholderHandler("Add item to meal log"))
+				mealLogs.PUT("/:id/items/:itemId", placeholderHandler("Update item"))
+				mealLogs.DELETE("/:id/items/:itemId", placeholderHandler("Remove item"))
+				
+				// Statistics
+				mealLogs.GET("/stats/daily", placeholderHandler("Daily nutrition stats"))
+				mealLogs.GET("/stats/weekly", placeholderHandler("Weekly nutrition stats"))
+				mealLogs.GET("/stats/monthly", placeholderHandler("Monthly nutrition stats"))
+			}
+
+			// Social routes
+			social := authenticated.Group("/social")
+			{
+				// Follow management
+				social.POST("/follow/:userId", placeholderHandler("Follow user"))
+				social.DELETE("/follow/:userId", placeholderHandler("Unfollow user"))
+				social.GET("/followers", placeholderHandler("Get followers"))
+				social.GET("/following", placeholderHandler("Get following list"))
+				
+				// Post management
+				social.POST("/posts", placeholderHandler("Create post"))
+				social.GET("/posts", placeholderHandler("Get user posts"))
+				social.GET("/feed", placeholderHandler("Get activity feed"))
+				social.DELETE("/posts/:id", placeholderHandler("Delete post"))
+				
+				// Likes
+				social.POST("/posts/:id/like", placeholderHandler("Like post"))
+				social.DELETE("/posts/:id/like", placeholderHandler("Unlike post"))
+				
+				// Comments
+				social.POST("/posts/:id/comments", placeholderHandler("Add comment"))
+				social.GET("/posts/:id/comments", placeholderHandler("Get comments"))
+				social.PUT("/comments/:id", placeholderHandler("Update comment"))
+				social.DELETE("/comments/:id", placeholderHandler("Delete comment"))
+			}
+		}
+	}
+
+	return &Router{engine: engine}
+}
+
+// GetEngine returns the Gin engine
+func (r *Router) GetEngine() *gin.Engine {
+	return r.engine
+}
+
+// Run starts the HTTP server
+func (r *Router) Run(addr string) error {
+	return r.engine.Run(addr)
+}
+
+// healthCheckHandler handles health check requests
+func healthCheckHandler(c *gin.Context) {
+	c.JSON(200, gin.H{
+		"status": "ok",
+		"message": "Service is healthy",
+	})
+}
+
+// pingHandler handles ping requests
+func pingHandler(c *gin.Context) {
+	c.JSON(200, gin.H{
+		"message": "pong",
+	})
+}
+
+// placeholderHandler returns a placeholder handler for unimplemented routes
+func placeholderHandler(description string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.JSON(200, gin.H{
+			"message": "Endpoint not yet implemented: " + description,
+		})
+	}
+}
