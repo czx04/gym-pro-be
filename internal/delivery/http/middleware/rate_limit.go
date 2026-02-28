@@ -95,12 +95,10 @@ func (rl *RateLimiter) cleanup() {
 	}
 }
 
-// RateLimitMiddleware creates rate limiting middleware
 func RateLimitMiddleware(cfg *config.RateLimitConfig) gin.HandlerFunc {
 	limiter := NewRateLimiter(cfg.RequestsPerMinute)
 
 	return func(c *gin.Context) {
-		// Use IP address as key, or user ID if authenticated
 		key := c.ClientIP()
 		if userID, exists := c.Get(UserIDKey); exists {
 			key = userID.(string)

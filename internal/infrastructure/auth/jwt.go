@@ -10,7 +10,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// TokenType represents the type of JWT token
 type TokenType string
 
 const (
@@ -18,7 +17,6 @@ const (
 	RefreshToken TokenType = "refresh"
 )
 
-// Claims represents JWT claims
 type Claims struct {
 	UserID    uuid.UUID `json:"user_id"`
 	Email     string    `json:"email"`
@@ -26,23 +24,20 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-// JWTManager handles JWT operations
 type JWTManager struct {
-	secret              string
-	accessTokenExpire   time.Duration
-	refreshTokenExpire  time.Duration
+	secret             string
+	accessTokenExpire  time.Duration
+	refreshTokenExpire time.Duration
 }
 
-// NewJWTManager creates a new JWT manager
 func NewJWTManager(cfg *config.JWTConfig) *JWTManager {
 	return &JWTManager{
-		secret:              cfg.Secret,
-		accessTokenExpire:   cfg.AccessTokenExpire,
-		refreshTokenExpire:  cfg.RefreshTokenExpire,
+		secret:             cfg.Secret,
+		accessTokenExpire:  cfg.AccessTokenExpire,
+		refreshTokenExpire: cfg.RefreshTokenExpire,
 	}
 }
 
-// GenerateAccessToken generates a new access token
 func (j *JWTManager) GenerateAccessToken(userID uuid.UUID, email string) (string, error) {
 	now := time.Now()
 	expiresAt := now.Add(j.accessTokenExpire)

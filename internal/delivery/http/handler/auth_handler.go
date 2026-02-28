@@ -12,7 +12,8 @@ import (
 
 // AuthHandler handles authentication requests
 type AuthHandler struct {
-	registerUC      *useruc.RegisterUseCase
+	registerOTPUC   *useruc.RegisterRequestOTPUseCase
+	verifyOTPUC     *useruc.VerifyOTPUseCase
 	loginUC         *useruc.LoginUseCase
 	getProfileUC    *useruc.GetProfileUseCase
 	updateProfileUC *useruc.UpdateProfileUseCase
@@ -21,39 +22,71 @@ type AuthHandler struct {
 
 // NewAuthHandler creates a new auth handler
 func NewAuthHandler(
-	registerUC *useruc.RegisterUseCase,
+	registerOTPUC *useruc.RegisterRequestOTPUseCase,
+	verifyOTPUC *useruc.VerifyOTPUseCase,
 	loginUC *useruc.LoginUseCase,
 	getProfileUC *useruc.GetProfileUseCase,
 	updateProfileUC *useruc.UpdateProfileUseCase,
 ) *AuthHandler {
 	return &AuthHandler{
-		registerUC:      registerUC,
+		registerOTPUC:   registerOTPUC,
+		verifyOTPUC:     verifyOTPUC,
 		loginUC:         loginUC,
 		getProfileUC:    getProfileUC,
 		updateProfileUC: updateProfileUC,
 	}
 }
 
-// Register godoc
-// @Summary Register a new user
-// @Description Create a new user account with email and password
+// RegisterRequestOTP godoc
+// @Summary Request OTP for registration
+// @Description Request an OTP code to be sent via email for registration
 // @Tags auth
 // @Accept json
 // @Produce json
-// @Param request body user.CreateUserInput true "Registration request"
-// @Success 201 {object} response.Response{data=useruc.TokenPair}
+// @Param request body useruc.RegisterRequestOTPInput true "Registration OTP request"
+// @Success 200 {object} response.Response
 // @Failure 400 {object} response.Response
 // @Failure 409 {object} response.Response
 // @Failure 422 {object} response.Response
-// @Router /auth/register [post]
-func (h *AuthHandler) Register(c *gin.Context) {
-	var input user.CreateUserInput
+// @Router /auth/register/request [post]
+func (h *AuthHandler) RegisterRequestOTP(c *gin.Context) {
+	var input useruc.RegisterRequestOTPInput
 	if err := c.ShouldBindJSON(&input); err != nil {
 		response.Error(c, errors.BadRequest("invalid request body"))
 		return
 	}
 
-	result, err := h.registerUC.Execute(c.Request.Context(), input)
+	err := h.registerOTPUC.Execute(c.Request.Context(), input)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	response.Success(c, gin.H{
+		"message": "OTP sent to your email. Please verify within 5 minutes.",
+	})
+}
+
+// VerifyOTP godoc
+// @Summary Verify OTP and complete registration
+// @Description Verify OTP code and create user account
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body useruc.VerifyOTPInput true "OTP verification"
+// @Success 201 {object} response.Response{data=useruc.TokenPair}
+// @Failure 400 {object} response.Response
+// @Failure 401 {object} response.Response
+// @Failure 422 {object} response.Response
+// @Router /auth/register/verify [post]
+func (h *AuthHandler) VerifyOTP(c *gin.Context) {
+	var input useruc.VerifyOTPInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		response.Error(c, errors.BadRequest("invalid request body"))
+		return
+	}
+
+	result, err := h.verifyOTPUC.Execute(c.Request.Context(), input)
 	if err != nil {
 		response.Error(c, err)
 		return

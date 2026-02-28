@@ -26,35 +26,29 @@ func New(
 	workoutHandler *handler.WorkoutHandler,
 	// TODO: Add more handlers as parameters
 ) *Router {
-	// Set Gin mode
 	gin.SetMode(cfg.Server.GinMode)
 
-	// Create engine
 	engine := gin.New()
 
-	// Global middleware
 	engine.Use(middleware.RecoveryMiddleware(log))
 	engine.Use(middleware.LoggerMiddleware(log))
 	engine.Use(middleware.CORSMiddleware(&cfg.Server))
 	engine.Use(middleware.ErrorHandlerMiddleware(log))
 
-	// Health check endpoint
 	engine.GET("/health", healthCheckHandler)
 	engine.GET("/ping", pingHandler)
 
-	// Swagger documentation
 	engine.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
-	// API v1 routes
 	v1 := engine.Group("/api/v1")
 	{
-		// Rate limiting for API routes
-		v1.Use(middleware.RateLimitMiddleware(&cfg.RateLimit))
+		//v1.Use(middleware.RateLimitMiddleware(&cfg.RateLimit))
 
-		// Public routes (no authentication required)
 		authRoutes := v1.Group("/auth")
 		{
-			authRoutes.POST("/register", authHandler.Register)
+			authRoutes.POST("/register/request", authHandler.RegisterRequestOTP)
+			authRoutes.POST("/register/verify", authHandler.VerifyOTP)
+
 			authRoutes.POST("/login", authHandler.Login)
 			authRoutes.POST("/refresh", authHandler.RefreshToken)
 			authRoutes.GET("/oauth/google", authHandler.GoogleOAuth)
@@ -63,7 +57,6 @@ func New(
 			authRoutes.GET("/oauth/facebook/callback", authHandler.FacebookOAuthCallback)
 		}
 
-		// Protected routes (authentication required)
 		authenticated := v1.Group("")
 		authenticated.Use(middleware.AuthMiddleware(jwtManager))
 		{
@@ -91,7 +84,7 @@ func New(
 				workoutPlans.GET("/:id", workoutHandler.GetWorkoutPlan)
 				workoutPlans.PUT("/:id", workoutHandler.UpdateWorkoutPlan)
 				workoutPlans.DELETE("/:id", workoutHandler.DeleteWorkoutPlan)
-				
+
 				// Exercise management
 				workoutPlans.POST("/:id/exercises", workoutHandler.AddExerciseToWorkout)
 				workoutPlans.PUT("/:id/exercises/:exerciseId", placeholderHandler("Update exercise in plan"))
@@ -139,7 +132,7 @@ func New(
 				recipes.GET("/:id", placeholderHandler("Get recipe"))
 				recipes.PUT("/:id", placeholderHandler("Update recipe"))
 				recipes.DELETE("/:id", placeholderHandler("Delete recipe"))
-				
+
 				// Food management in recipes
 				recipes.POST("/:id/foods", placeholderHandler("Add food to recipe"))
 				recipes.PUT("/:id/foods/:foodId", placeholderHandler("Update food in recipe"))
@@ -155,12 +148,12 @@ func New(
 				mealLogs.GET("/:id", placeholderHandler("Get meal log"))
 				mealLogs.PUT("/:id", placeholderHandler("Update meal log"))
 				mealLogs.DELETE("/:id", placeholderHandler("Delete meal log"))
-				
+
 				// Item management
 				mealLogs.POST("/:id/items", placeholderHandler("Add item to meal log"))
 				mealLogs.PUT("/:id/items/:itemId", placeholderHandler("Update item"))
 				mealLogs.DELETE("/:id/items/:itemId", placeholderHandler("Remove item"))
-				
+
 				// Statistics
 				mealLogs.GET("/stats/daily", placeholderHandler("Daily nutrition stats"))
 				mealLogs.GET("/stats/weekly", placeholderHandler("Weekly nutrition stats"))
@@ -175,17 +168,17 @@ func New(
 				social.DELETE("/follow/:userId", placeholderHandler("Unfollow user"))
 				social.GET("/followers", placeholderHandler("Get followers"))
 				social.GET("/following", placeholderHandler("Get following list"))
-				
+
 				// Post management
 				social.POST("/posts", placeholderHandler("Create post"))
 				social.GET("/posts", placeholderHandler("Get user posts"))
 				social.GET("/feed", placeholderHandler("Get activity feed"))
 				social.DELETE("/posts/:id", placeholderHandler("Delete post"))
-				
+
 				// Likes
 				social.POST("/posts/:id/like", placeholderHandler("Like post"))
 				social.DELETE("/posts/:id/like", placeholderHandler("Unlike post"))
-				
+
 				// Comments
 				social.POST("/posts/:id/comments", placeholderHandler("Add comment"))
 				social.GET("/posts/:id/comments", placeholderHandler("Get comments"))
@@ -198,32 +191,27 @@ func New(
 	return &Router{engine: engine}
 }
 
-// GetEngine returns the Gin engine
 func (r *Router) GetEngine() *gin.Engine {
 	return r.engine
 }
 
-// Run starts the HTTP server
 func (r *Router) Run(addr string) error {
 	return r.engine.Run(addr)
 }
 
-// healthCheckHandler handles health check requests
 func healthCheckHandler(c *gin.Context) {
 	c.JSON(200, gin.H{
-		"status": "ok",
+		"status":  "ok",
 		"message": "Service is healthy",
 	})
 }
 
-// pingHandler handles ping requests
 func pingHandler(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"message": "pong",
 	})
 }
 
-// placeholderHandler returns a placeholder handler for unimplemented routes
 func placeholderHandler(description string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.JSON(200, gin.H{

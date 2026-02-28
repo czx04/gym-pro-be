@@ -12,16 +12,18 @@ import (
 
 // Config application
 type Config struct {
-	Server   ServerConfig
-	Database DatabaseConfig
-	JWT      JWTConfig
-	OAuth    OAuthConfig
-	Logger   LoggerConfig
-	RateLimit RateLimitConfig
+	Server     ServerConfig
+	Database   DatabaseConfig
+	JWT        JWTConfig
+	OAuth      OAuthConfig
+	Logger     LoggerConfig
+	RateLimit  RateLimitConfig
 	Pagination PaginationConfig
+	Cache      CacheConfig
+	Email      EmailConfig
 }
 
-// ServerConfig 
+// ServerConfig
 type ServerConfig struct {
 	Port           string
 	Host           string
@@ -29,7 +31,7 @@ type ServerConfig struct {
 	AllowedOrigins []string
 }
 
-// DatabaseConfig 
+// DatabaseConfig
 type DatabaseConfig struct {
 	Host               string
 	Port               string
@@ -42,48 +44,63 @@ type DatabaseConfig struct {
 	MaxLifetimeMinutes int
 }
 
-// JWTConfig 
+// JWTConfig
 type JWTConfig struct {
-	Secret              string
-	AccessTokenExpire   time.Duration
-	RefreshTokenExpire  time.Duration
+	Secret             string
+	AccessTokenExpire  time.Duration
+	RefreshTokenExpire time.Duration
 }
 
-// OAuthConfig 
+// OAuthConfig
 type OAuthConfig struct {
 	Google   OAuthProviderConfig
 	Facebook OAuthProviderConfig
 }
 
-// OAuthProviderConfig 
+// OAuthProviderConfig
 type OAuthProviderConfig struct {
 	ClientID     string
 	ClientSecret string
 	RedirectURL  string
 }
 
-// LoggerConfig 
+// LoggerConfig
 type LoggerConfig struct {
-	Level             string
-	Encoding          string
-	OutputPaths       []string
-	ErrorOutputPaths  []string
+	Level            string
+	Encoding         string
+	OutputPaths      []string
+	ErrorOutputPaths []string
 }
 
-// RateLimitConfig 
+// RateLimitConfig
 type RateLimitConfig struct {
 	RequestsPerMinute int
 }
 
-// PaginationConfig 
+// PaginationConfig
 type PaginationConfig struct {
 	DefaultPageSize int
 	MaxPageSize     int
 }
 
-// Load configuration 
+type CacheConfig struct {
+	Addr     string
+	Password string
+	DB       int
+}
+
+type EmailConfig struct {
+	SMTPHost     string
+	SMTPPort     int
+	SMTPUsername string
+	SMTPPassword string
+	FromAddress  string
+	FromName     string
+}
+
+// Load configuration
 func Load() (*Config, error) {
-	// Load .env 
+	// Load .env
 	if err := godotenv.Load(); err != nil {
 		fmt.Printf("Warning: Could not load .env file: %v\n", err)
 	}
@@ -149,9 +166,9 @@ func Load() (*Config, error) {
 			MaxLifetimeMinutes: getEnvInt("DB_MAX_LIFETIME_MINUTES", 30),
 		},
 		JWT: JWTConfig{
-			Secret:              getEnv("JWT_SECRET", ""),
-			AccessTokenExpire:   getEnvDuration("JWT_ACCESS_TOKEN_EXPIRE", 15*time.Minute),
-			RefreshTokenExpire:  getEnvDuration("JWT_REFRESH_TOKEN_EXPIRE", 168*time.Hour),
+			Secret:             getEnv("JWT_SECRET", ""),
+			AccessTokenExpire:  getEnvDuration("JWT_ACCESS_TOKEN_EXPIRE", 15*time.Minute),
+			RefreshTokenExpire: getEnvDuration("JWT_REFRESH_TOKEN_EXPIRE", 168*time.Hour),
 		},
 		OAuth: OAuthConfig{
 			Google: OAuthProviderConfig{
@@ -166,10 +183,10 @@ func Load() (*Config, error) {
 			},
 		},
 		Logger: LoggerConfig{
-			Level:             getEnv("LOG_LEVEL", "debug"),
-			Encoding:          getEnv("LOG_ENCODING", "json"),
-			OutputPaths:       logOutputPaths,
-			ErrorOutputPaths:  logErrorPaths,
+			Level:            getEnv("LOG_LEVEL", "debug"),
+			Encoding:         getEnv("LOG_ENCODING", "json"),
+			OutputPaths:      logOutputPaths,
+			ErrorOutputPaths: logErrorPaths,
 		},
 		RateLimit: RateLimitConfig{
 			RequestsPerMinute: getEnvInt("RATE_LIMIT_REQUESTS_PER_MINUTE", 100),
@@ -177,6 +194,19 @@ func Load() (*Config, error) {
 		Pagination: PaginationConfig{
 			DefaultPageSize: getEnvInt("DEFAULT_PAGE_SIZE", 20),
 			MaxPageSize:     getEnvInt("MAX_PAGE_SIZE", 100),
+		},
+		Cache: CacheConfig{
+			Addr:     getEnv("REDIS_ADDR", "localhost:6379"),
+			Password: getEnv("REDIS_PASSWORD", ""),
+			DB:       getEnvInt("REDIS_DB", 0),
+		},
+		Email: EmailConfig{
+			SMTPHost:     getEnv("SMTP_HOST", "smtp.gmail.com"),
+			SMTPPort:     getEnvInt("SMTP_PORT", 587),
+			SMTPUsername: getEnv("SMTP_USERNAME", ""),
+			SMTPPassword: getEnv("SMTP_PASSWORD", ""),
+			FromAddress:  getEnv("SMTP_FROM", "noreply@gympro.com"),
+			FromName:     getEnv("SMTP_FROM_NAME", "Gym Pro"),
 		},
 	}
 
@@ -211,4 +241,3 @@ func (c *DatabaseConfig) GetDSN() string {
 		c.Host, c.Port, c.User, c.Password, c.DBName, c.SSLMode,
 	)
 }
-

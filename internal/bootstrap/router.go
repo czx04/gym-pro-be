@@ -1,9 +1,12 @@
-package router
+package bootstrap
 
 import (
 	"context"
 	"fmt"
 	"gym-pro-2026-ptit/internal/config"
+	"gym-pro-2026-ptit/internal/delivery/http/handler"
+	"gym-pro-2026-ptit/internal/delivery/http/router"
+	"gym-pro-2026-ptit/internal/infrastructure/auth"
 	"gym-pro-2026-ptit/internal/infrastructure/logger"
 	"net/http"
 
@@ -11,17 +14,22 @@ import (
 	"go.uber.org/zap"
 )
 
-// Module provides router dependency
-var Module = fx.Module("router",
-	fx.Provide(New),
-	fx.Invoke(registerHooks),
-)
+// ProvideRouter creates a new router instance
+func ProvideRouter(
+	cfg *config.Config,
+	log logger.Logger,
+	jwtManager *auth.JWTManager,
+	authHandler *handler.AuthHandler,
+	workoutHandler *handler.WorkoutHandler,
+) *router.Router {
+	return router.New(cfg, log, jwtManager, authHandler, workoutHandler)
+}
 
-// registerHooks registers lifecycle hooks for HTTP server
-func registerHooks(lc fx.Lifecycle, router *Router, cfg *config.Config, log logger.Logger) {
+// RegisterRouterHooks registers lifecycle hooks for HTTP server
+func RegisterRouterHooks(lc fx.Lifecycle, r *router.Router, cfg *config.Config, log logger.Logger) {
 	server := &http.Server{
 		Addr:    fmt.Sprintf("%s:%s", cfg.Server.Host, cfg.Server.Port),
-		Handler: router.GetEngine(),
+		Handler: r.GetEngine(),
 	}
 
 	lc.Append(fx.Hook{
