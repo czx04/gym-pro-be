@@ -13,8 +13,8 @@ import (
 
 // WorkoutHandler handles workout-related requests
 type WorkoutHandler struct {
-	createPlanUC    *workoutuc.CreateWorkoutPlanUseCase
-	addExerciseUC   *workoutuc.AddExerciseToWorkoutUseCase
+	createPlanUC  *workoutuc.CreateWorkoutPlanUseCase
+	addExerciseUC *workoutuc.AddExerciseToWorkoutUseCase
 	// TODO: Add more use cases as you implement them
 }
 
@@ -61,7 +61,7 @@ func (h *WorkoutHandler) CreateWorkoutPlan(c *gin.Context) {
 		return
 	}
 
-	response.Created(c, plan, "Workout plan created successfully")
+	response.Created(c, plan)
 }
 
 // AddExerciseToWorkout godoc
@@ -96,7 +96,7 @@ func (h *WorkoutHandler) AddExerciseToWorkout(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, nil, "Exercise added to workout plan")
+	response.Success(c, nil)
 }
 
 // ListWorkoutPlans godoc

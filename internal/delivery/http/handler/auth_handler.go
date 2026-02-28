@@ -59,7 +59,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	response.Created(c, result, "User registered successfully")
+	response.Created(c, result)
 }
 
 // Login godoc
@@ -86,7 +86,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, result, "Login successful")
+	response.Success(c, result)
 }
 
 // RefreshToken godoc
@@ -136,7 +136,7 @@ func (h *AuthHandler) GetMe(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, u, "Profile retrieved successfully")
+	response.Success(c, u)
 }
 
 // UpdateMe godoc
@@ -171,7 +171,7 @@ func (h *AuthHandler) UpdateMe(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, u, "Profile updated successfully")
+	response.Success(c, u)
 }
 
 // GoogleOAuth godoc
