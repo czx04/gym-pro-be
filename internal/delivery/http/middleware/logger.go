@@ -24,15 +24,21 @@ func LoggerMiddleware(log logger.Logger) gin.HandlerFunc {
 		// Get status code
 		status := c.Writer.Status()
 
-		// Log request details
+		// Format latency for readability
+		latencyMs := float64(latency.Microseconds()) / 1000.0
+
+		// Build log fields for request logging [method, path, status, latency_ms, ip]
 		fields := []zap.Field{
-			zap.Int("status", status),
 			zap.String("method", c.Request.Method),
 			zap.String("path", path),
-			zap.String("query", query),
+			zap.Int("status", status),
+			zap.Float64("latency_ms", latencyMs),
 			zap.String("ip", c.ClientIP()),
-			zap.Duration("latency", latency),
-			zap.String("user_agent", c.Request.UserAgent()),
+		}
+
+		// Add query
+		if query != "" {
+			fields = append(fields, zap.String("query", query))
 		}
 
 		// Add error if exists
@@ -40,13 +46,16 @@ func LoggerMiddleware(log logger.Logger) gin.HandlerFunc {
 			fields = append(fields, zap.String("error", c.Errors.String()))
 		}
 
+		// Create message
+		msg := c.Request.Method + " " + path
+
 		// Log based on status code
 		if status >= 500 {
-			log.Error("Server error", fields...)
+			log.Error(msg, fields...)
 		} else if status >= 400 {
-			log.Warn("Client error", fields...)
+			log.Warn(msg, fields...)
 		} else {
-			log.Info("Request processed", fields...)
+			log.Info(msg, fields...)
 		}
 	}
 }

@@ -33,25 +33,31 @@ func New(cfg *config.LoggerConfig) (Logger, error) {
 
 	// Create encoder config
 	encoderConfig := zapcore.EncoderConfig{
-		TimeKey:        "timestamp",
+		TimeKey:        "time",
 		LevelKey:       "level",
 		NameKey:        "logger",
 		CallerKey:      "caller",
 		FunctionKey:    zapcore.OmitKey,
-		MessageKey:     "message",
+		MessageKey:     "msg",
 		StacktraceKey:  "stacktrace",
 		LineEnding:     zapcore.DefaultLineEnding,
-		EncodeLevel:    zapcore.LowercaseLevelEncoder,
-		EncodeTime:     zapcore.ISO8601TimeEncoder,
 		EncodeDuration: zapcore.SecondsDurationEncoder,
 		EncodeCaller:   zapcore.ShortCallerEncoder,
 	}
 
-	// Create encoder based on encoding type
-	// encoder := zapcore.NewJSONEncoder(encoderConfig)
-	// if cfg.Encoding == "console" {
-	// 	encoder = zapcore.NewConsoleEncoder(encoderConfig)
-	// }
+	// Configure encoding based on environment (dev vs prod)
+	encoding := cfg.Encoding
+	if encoding == "console" || level == zapcore.DebugLevel {
+		// Development mode: colorful console output
+		encoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
+		encoderConfig.EncodeTime = zapcore.TimeEncoderOfLayout("15:04:05")
+		encoding = "console"
+	} else {
+		// Production mode: JSON output
+		encoderConfig.EncodeLevel = zapcore.LowercaseLevelEncoder
+		encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+		encoding = "json"
+	}
 
 	// Create zap config
 	zapConfig := zap.Config{
@@ -60,7 +66,7 @@ func New(cfg *config.LoggerConfig) (Logger, error) {
 		DisableCaller:     false,
 		DisableStacktrace: level != zapcore.ErrorLevel && level != zapcore.FatalLevel,
 		Sampling:          nil,
-		Encoding:          cfg.Encoding,
+		Encoding:          encoding,
 		EncoderConfig:     encoderConfig,
 		OutputPaths:       cfg.OutputPaths,
 		ErrorOutputPaths:  cfg.ErrorOutputPaths,
