@@ -6,39 +6,36 @@ import (
 	"github.com/google/uuid"
 )
 
-// User represents a user in the system
 type User struct {
-	ID                  uuid.UUID  `json:"id"`
-	Email               string     `json:"email"`
-	PasswordHash        string     `json:"-"`
-	OAuthProvider       *string    `json:"oauth_provider,omitempty"`
-	OAuthID             *string    `json:"oauth_id,omitempty"`
-	Name                string     `json:"name"`
-	Bio                 *string    `json:"bio,omitempty"`
-	AvatarURL           *string    `json:"avatar_url,omitempty"`
-	DateOfBirth         *time.Time `json:"date_of_birth,omitempty"`
-	Gender              *string    `json:"gender,omitempty"`
-	HeightCm            *float64   `json:"height_cm,omitempty"`
-	WeightKg            *float64   `json:"weight_kg,omitempty"`
-	FitnessGoal         *string    `json:"fitness_goal,omitempty"`
-	ActivityLevel       *string    `json:"activity_level,omitempty"`
-	DailyCalorieTarget  *int       `json:"daily_calorie_target,omitempty"`
-	ProteinTargetG      *int       `json:"protein_target_g,omitempty"`
-	CarbsTargetG        *int       `json:"carbs_target_g,omitempty"`
-	FatTargetG          *int       `json:"fat_target_g,omitempty"`
-	PrivacySettings     *string    `json:"privacy_settings,omitempty"` // JSON string
-	CreatedAt           time.Time  `json:"created_at"`
-	UpdatedAt           time.Time  `json:"updated_at"`
+	ID                 uuid.UUID  `json:"id"`
+	Email              string     `json:"email"`
+	PasswordHash       string     `json:"-"`
+	OAuthProvider      *string    `json:"oauth_provider,omitempty"`
+	OAuthID            *string    `json:"oauth_id,omitempty"`
+	Name               string     `json:"name"`
+	Bio                *string    `json:"bio,omitempty"`
+	AvatarURL          *string    `json:"avatar_url,omitempty"`
+	DateOfBirth        *time.Time `json:"date_of_birth,omitempty"`
+	Gender             *string    `json:"gender,omitempty"`
+	HeightCm           *float64   `json:"height_cm,omitempty"`
+	WeightKg           *float64   `json:"weight_kg,omitempty"`
+	FitnessGoal        *string    `json:"fitness_goal,omitempty"`
+	ActivityLevel      *string    `json:"activity_level,omitempty"`
+	DailyCalorieTarget *int       `json:"daily_calorie_target,omitempty"`
+	ProteinTargetG     *int       `json:"protein_target_g,omitempty"`
+	CarbsTargetG       *int       `json:"carbs_target_g,omitempty"`
+	FatTargetG         *int       `json:"fat_target_g,omitempty"`
+	PrivacySettings    *string    `json:"privacy_settings,omitempty"` // JSON string
+	CreatedAt          time.Time  `json:"created_at"`
+	UpdatedAt          time.Time  `json:"updated_at"`
 }
 
-// CreateUserInput represents input for creating a user
 type CreateUserInput struct {
-	Email        string  `json:"email" validate:"required,email"`
-	Password     string  `json:"password" validate:"required,min=8"`
-	Name         string  `json:"name" validate:"required,min=2,max=100"`
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required,min=8"`
+	Name     string `json:"name" validate:"required,min=2,max=100"`
 }
 
-// UpdateProfileInput represents input for updating user profile
 type UpdateProfileInput struct {
 	Name               *string    `json:"name,omitempty" validate:"omitempty,min=2,max=100"`
 	Bio                *string    `json:"bio,omitempty" validate:"omitempty,max=500"`
@@ -55,13 +52,11 @@ type UpdateProfileInput struct {
 	FatTargetG         *int       `json:"fat_target_g,omitempty" validate:"omitempty,gte=0,lte=300"`
 }
 
-// LoginInput represents login credentials
 type LoginInput struct {
 	Email    string `json:"email" validate:"required,email"`
 	Password string `json:"password" validate:"required"`
 }
 
-// OAuthUserInfo represents OAuth user information
 type OAuthUserInfo struct {
 	Provider  string
 	ID        string

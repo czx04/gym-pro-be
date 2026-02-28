@@ -18,11 +18,7 @@ type DB struct {
 
 // New creates a new database connection pool
 func New(cfg *config.DatabaseConfig, log logger.Logger) (*DB, error) {
-	log.Info("Connecting to PostgreSQL database",
-		zap.String("host", cfg.Host),
-		zap.String("port", cfg.Port),
-		zap.String("database", cfg.DBName),
-	)
+	log.Info("Connecting to PostgreSQL database")
 
 	// Create connection pool config
 	poolConfig, err := pgxpool.ParseConfig(cfg.GetDSN())

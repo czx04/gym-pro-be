@@ -143,7 +143,6 @@ func (r *userRepository) GetByOAuth(ctx context.Context, provider, oauthID strin
 	return &u, nil
 }
 
-// Update updates a user
 func (r *userRepository) Update(ctx context.Context, u *user.User) error {
 	// TODO: Implement full user update
 	query := `
@@ -172,9 +171,7 @@ func (r *userRepository) Update(ctx context.Context, u *user.User) error {
 	return nil
 }
 
-// Delete deletes a user
 func (r *userRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	// TODO: Implement user deletion (consider soft delete)
 	query := `DELETE FROM users WHERE id = $1`
 
 	result, err := r.db.Exec(ctx, query, id)
@@ -189,16 +186,55 @@ func (r *userRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
-// UpdateProfile updates user profile information
 func (r *userRepository) UpdateProfile(ctx context.Context, id uuid.UUID, input user.UpdateProfileInput) error {
-	// TODO: Implement selective profile update (only update non-nil fields)
-	// Build dynamic query based on which fields are provided
-	return errors.InternalServer("not implemented", nil)
+	query := `
+		UPDATE users SET
+			name = COALESCE($2, name),
+			bio = COALESCE($3, bio),
+			avatar_url = COALESCE($4, avatar_url),
+			date_of_birth = COALESCE($5, date_of_birth),
+			gender = COALESCE($6, gender),
+			height_cm = COALESCE($7, height_cm),
+			weight_kg = COALESCE($8, weight_kg),
+			fitness_goal = COALESCE($9, fitness_goal),
+			activity_level = COALESCE($10, activity_level),
+			daily_calorie_target = COALESCE($11, daily_calorie_target),
+			protein_target_g = COALESCE($12, protein_target_g),
+			carbs_target_g = COALESCE($13, carbs_target_g),
+			fat_target_g = COALESCE($14, fat_target_g),
+			updated_at = NOW()
+		WHERE id = $1
+	`
+
+	result, err := r.db.Exec(ctx, query,
+		id,
+		input.Name,
+		input.Bio,
+		input.AvatarURL,
+		input.DateOfBirth,
+		input.Gender,
+		input.HeightCm,
+		input.WeightKg,
+		input.FitnessGoal,
+		input.ActivityLevel,
+		input.DailyCalorieTarget,
+		input.ProteinTargetG,
+		input.CarbsTargetG,
+		input.FatTargetG,
+	)
+
+	if err != nil {
+		return errors.DatabaseError("update profile", err)
+	}
+
+	if result.RowsAffected() == 0 {
+		return errors.NotFound("user")
+	}
+
+	return nil
 }
 
-// UpdatePassword updates user password
 func (r *userRepository) UpdatePassword(ctx context.Context, id uuid.UUID, passwordHash string) error {
-	// TODO: Implement password update
 	query := `UPDATE users SET password_hash = $2, updated_at = NOW() WHERE id = $1`
 
 	result, err := r.db.Exec(ctx, query, id, passwordHash)
@@ -213,7 +249,6 @@ func (r *userRepository) UpdatePassword(ctx context.Context, id uuid.UUID, passw
 	return nil
 }
 
-// Exists checks if a user with given email exists
 func (r *userRepository) Exists(ctx context.Context, email string) (bool, error) {
 	query := `SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)`
 
