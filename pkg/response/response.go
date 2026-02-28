@@ -9,9 +9,9 @@ import (
 
 // Response represents a standard API response
 type Response struct {
-	Success bool        `json:"success"`
-	Message string      `json:"message,omitempty"`
-	Data    interface{} `json:"data,omitempty"`
+	Success bool         `json:"success"`
+	Message string       `json:"message,omitempty"`
+	Data    interface{}  `json:"data,omitempty"`
 	Error   *ErrorDetail `json:"error,omitempty"`
 }
 
@@ -38,19 +38,17 @@ type Pagination struct {
 }
 
 // Success sends a success response
-func Success(c *gin.Context, data interface{}, message string) {
+func Success(c *gin.Context, data interface{}) {
 	c.JSON(http.StatusOK, Response{
 		Success: true,
-		Message: message,
 		Data:    data,
 	})
 }
 
 // Created sends a 201 Created response
-func Created(c *gin.Context, data interface{}, message string) {
+func Created(c *gin.Context, data interface{}) {
 	c.JSON(http.StatusCreated, Response{
 		Success: true,
-		Message: message,
 		Data:    data,
 	})
 }
