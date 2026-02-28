@@ -2,12 +2,15 @@ package config
 
 import (
 	"fmt"
+	"os"
+	"strconv"
+	"strings"
 	"time"
 
-	"github.com/spf13/viper"
+	"github.com/joho/godotenv"
 )
 
-// Config holds all configuration for the application
+// Config application
 type Config struct {
 	Server   ServerConfig
 	Database DatabaseConfig
@@ -18,7 +21,7 @@ type Config struct {
 	Pagination PaginationConfig
 }
 
-// ServerConfig holds server configuration
+// ServerConfig 
 type ServerConfig struct {
 	Port           string
 	Host           string
@@ -26,7 +29,7 @@ type ServerConfig struct {
 	AllowedOrigins []string
 }
 
-// DatabaseConfig holds database configuration
+// DatabaseConfig 
 type DatabaseConfig struct {
 	Host               string
 	Port               string
@@ -39,27 +42,27 @@ type DatabaseConfig struct {
 	MaxLifetimeMinutes int
 }
 
-// JWTConfig holds JWT configuration
+// JWTConfig 
 type JWTConfig struct {
 	Secret              string
 	AccessTokenExpire   time.Duration
 	RefreshTokenExpire  time.Duration
 }
 
-// OAuthConfig holds OAuth providers configuration
+// OAuthConfig 
 type OAuthConfig struct {
 	Google   OAuthProviderConfig
 	Facebook OAuthProviderConfig
 }
 
-// OAuthProviderConfig holds individual OAuth provider configuration
+// OAuthProviderConfig 
 type OAuthProviderConfig struct {
 	ClientID     string
 	ClientSecret string
 	RedirectURL  string
 }
 
-// LoggerConfig holds logger configuration
+// LoggerConfig 
 type LoggerConfig struct {
 	Level             string
 	Encoding          string
@@ -67,77 +70,113 @@ type LoggerConfig struct {
 	ErrorOutputPaths  []string
 }
 
-// RateLimitConfig holds rate limiting configuration
+// RateLimitConfig 
 type RateLimitConfig struct {
 	RequestsPerMinute int
 }
 
-// PaginationConfig holds pagination configuration
+// PaginationConfig 
 type PaginationConfig struct {
 	DefaultPageSize int
 	MaxPageSize     int
 }
 
-// Load loads configuration from environment variables and config files
+// Load configuration 
 func Load() (*Config, error) {
-	viper.SetConfigName(".env")
-	viper.SetConfigType("env")
-	viper.AddConfigPath(".")
-	viper.AutomaticEnv()
+	// Load .env 
+	if err := godotenv.Load(); err != nil {
+		fmt.Printf("Warning: Could not load .env file: %v\n", err)
+	}
 
-	// Try to read config file, but don't fail if it doesn't exist
-	_ = viper.ReadInConfig()
+	getEnv := func(key, defaultVal string) string {
+		if val := os.Getenv(key); val != "" {
+			return val
+		}
+		return defaultVal
+	}
 
-	// Set defaults
-	setDefaults()
+	getEnvInt := func(key string, defaultVal int) int {
+		if val := os.Getenv(key); val != "" {
+			if intVal, err := strconv.Atoi(val); err == nil {
+				return intVal
+			}
+		}
+		return defaultVal
+	}
+
+	getEnvDuration := func(key string, defaultVal time.Duration) time.Duration {
+		if val := os.Getenv(key); val != "" {
+			if duration, err := time.ParseDuration(val); err == nil {
+				return duration
+			}
+		}
+		return defaultVal
+	}
+
+	// Parse allowed origins
+	allowedOriginsStr := getEnv("ALLOWED_ORIGINS", "http://localhost:3000")
+	allowedOrigins := strings.Split(allowedOriginsStr, ",")
+	for i := range allowedOrigins {
+		allowedOrigins[i] = strings.TrimSpace(allowedOrigins[i])
+	}
+
+	// Parse log paths
+	logOutputPaths := strings.Split(getEnv("LOG_OUTPUT_PATHS", "stdout"), ",")
+	logErrorPaths := strings.Split(getEnv("LOG_ERROR_OUTPUT_PATHS", "stderr"), ",")
+	for i := range logOutputPaths {
+		logOutputPaths[i] = strings.TrimSpace(logOutputPaths[i])
+	}
+	for i := range logErrorPaths {
+		logErrorPaths[i] = strings.TrimSpace(logErrorPaths[i])
+	}
 
 	config := &Config{
 		Server: ServerConfig{
-			Port:           viper.GetString("SERVER_PORT"),
-			Host:           viper.GetString("SERVER_HOST"),
-			GinMode:        viper.GetString("GIN_MODE"),
-			AllowedOrigins: viper.GetStringSlice("ALLOWED_ORIGINS"),
+			Port:           getEnv("SERVER_PORT", "8080"),
+			Host:           getEnv("SERVER_HOST", "0.0.0.0"),
+			GinMode:        getEnv("GIN_MODE", "debug"),
+			AllowedOrigins: allowedOrigins,
 		},
 		Database: DatabaseConfig{
-			Host:               viper.GetString("DB_HOST"),
-			Port:               viper.GetString("DB_PORT"),
-			User:               viper.GetString("DB_USER"),
-			Password:           viper.GetString("DB_PASSWORD"),
-			DBName:             viper.GetString("DB_NAME"),
-			SSLMode:            viper.GetString("DB_SSL_MODE"),
-			MaxConnections:     viper.GetInt("DB_MAX_CONNECTIONS"),
-			MaxIdleConnections: viper.GetInt("DB_MAX_IDLE_CONNECTIONS"),
-			MaxLifetimeMinutes: viper.GetInt("DB_MAX_LIFETIME_MINUTES"),
+			Host:               getEnv("DB_HOST", "localhost"),
+			Port:               getEnv("DB_PORT", "5432"),
+			User:               getEnv("DB_USER", "gymadmin"),
+			Password:           getEnv("DB_PASSWORD", "secret123"),
+			DBName:             getEnv("DB_NAME", "gym_pro_db"),
+			SSLMode:            getEnv("DB_SSL_MODE", "disable"),
+			MaxConnections:     getEnvInt("DB_MAX_CONNECTIONS", 20),
+			MaxIdleConnections: getEnvInt("DB_MAX_IDLE_CONNECTIONS", 5),
+			MaxLifetimeMinutes: getEnvInt("DB_MAX_LIFETIME_MINUTES", 30),
 		},
 		JWT: JWTConfig{
-			Secret:              viper.GetString("JWT_SECRET"),
-			AccessTokenExpire:   viper.GetDuration("JWT_ACCESS_TOKEN_EXPIRE"),
-			RefreshTokenExpire:  viper.GetDuration("JWT_REFRESH_TOKEN_EXPIRE"),
+			Secret:              getEnv("JWT_SECRET", ""),
+			AccessTokenExpire:   getEnvDuration("JWT_ACCESS_TOKEN_EXPIRE", 15*time.Minute),
+			RefreshTokenExpire:  getEnvDuration("JWT_REFRESH_TOKEN_EXPIRE", 168*time.Hour),
 		},
 		OAuth: OAuthConfig{
 			Google: OAuthProviderConfig{
-				ClientID:     viper.GetString("GOOGLE_CLIENT_ID"),
-				ClientSecret: viper.GetString("GOOGLE_CLIENT_SECRET"),
-				RedirectURL:  viper.GetString("GOOGLE_REDIRECT_URL"),
+				ClientID:     getEnv("GOOGLE_CLIENT_ID", ""),
+				ClientSecret: getEnv("GOOGLE_CLIENT_SECRET", ""),
+				RedirectURL:  getEnv("GOOGLE_REDIRECT_URL", ""),
 			},
 			Facebook: OAuthProviderConfig{
-				ClientID:     viper.GetString("FACEBOOK_APP_ID"),
-				ClientSecret: viper.GetString("FACEBOOK_APP_SECRET"),
-				RedirectURL:  viper.GetString("FACEBOOK_REDIRECT_URL"),
+				ClientID:     getEnv("FACEBOOK_APP_ID", ""),
+				ClientSecret: getEnv("FACEBOOK_APP_SECRET", ""),
+				RedirectURL:  getEnv("FACEBOOK_REDIRECT_URL", ""),
 			},
 		},
 		Logger: LoggerConfig{
-			Level:             viper.GetString("LOG_LEVEL"),
-			Encoding:          viper.GetString("LOG_ENCODING"),
-			OutputPaths:       viper.GetStringSlice("LOG_OUTPUT_PATHS"),
-			ErrorOutputPaths:  viper.GetStringSlice("LOG_ERROR_OUTPUT_PATHS"),
+			Level:             getEnv("LOG_LEVEL", "debug"),
+			Encoding:          getEnv("LOG_ENCODING", "json"),
+			OutputPaths:       logOutputPaths,
+			ErrorOutputPaths:  logErrorPaths,
 		},
 		RateLimit: RateLimitConfig{
-			RequestsPerMinute: viper.GetInt("RATE_LIMIT_REQUESTS_PER_MINUTE"),
+			RequestsPerMinute: getEnvInt("RATE_LIMIT_REQUESTS_PER_MINUTE", 100),
 		},
 		Pagination: PaginationConfig{
-			DefaultPageSize: viper.GetInt("DEFAULT_PAGE_SIZE"),
-			MaxPageSize:     viper.GetInt("MAX_PAGE_SIZE"),
+			DefaultPageSize: getEnvInt("DEFAULT_PAGE_SIZE", 20),
+			MaxPageSize:     getEnvInt("MAX_PAGE_SIZE", 100),
 		},
 	}
 
@@ -148,7 +187,7 @@ func Load() (*Config, error) {
 	return config, nil
 }
 
-// Validate validates the configuration
+// Validate config
 func (c *Config) Validate() error {
 	if c.Server.Port == "" {
 		return fmt.Errorf("SERVER_PORT is required")
@@ -165,7 +204,7 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// GetDSN returns the database connection string
+// Build database connection string
 func (c *DatabaseConfig) GetDSN() string {
 	return fmt.Sprintf(
 		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
@@ -173,30 +212,3 @@ func (c *DatabaseConfig) GetDSN() string {
 	)
 }
 
-// setDefaults sets default configuration values
-func setDefaults() {
-	viper.SetDefault("SERVER_PORT", "8080")
-	viper.SetDefault("SERVER_HOST", "0.0.0.0")
-	viper.SetDefault("GIN_MODE", "debug")
-	viper.SetDefault("ALLOWED_ORIGINS", []string{"http://localhost:3000"})
-
-	viper.SetDefault("DB_HOST", "localhost")
-	viper.SetDefault("DB_PORT", "5432")
-	viper.SetDefault("DB_SSL_MODE", "disable")
-	viper.SetDefault("DB_MAX_CONNECTIONS", 20)
-	viper.SetDefault("DB_MAX_IDLE_CONNECTIONS", 5)
-	viper.SetDefault("DB_MAX_LIFETIME_MINUTES", 30)
-
-	viper.SetDefault("JWT_ACCESS_TOKEN_EXPIRE", "15m")
-	viper.SetDefault("JWT_REFRESH_TOKEN_EXPIRE", "168h") // 7 days
-
-	viper.SetDefault("LOG_LEVEL", "debug")
-	viper.SetDefault("LOG_ENCODING", "json")
-	viper.SetDefault("LOG_OUTPUT_PATHS", []string{"stdout"})
-	viper.SetDefault("LOG_ERROR_OUTPUT_PATHS", []string{"stderr"})
-
-	viper.SetDefault("RATE_LIMIT_REQUESTS_PER_MINUTE", 100)
-
-	viper.SetDefault("DEFAULT_PAGE_SIZE", 20)
-	viper.SetDefault("MAX_PAGE_SIZE", 100)
-}
