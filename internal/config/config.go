@@ -90,12 +90,17 @@ type CacheConfig struct {
 }
 
 type EmailConfig struct {
+	Provider     string // "smtp" or "sendgrid"
 	SMTPHost     string
 	SMTPPort     int
 	SMTPUsername string
 	SMTPPassword string
 	FromAddress  string
 	FromName     string
+	// SendGrid API Key (alternative to SMTP)
+	SendGridAPIKey string
+	// Timeout in seconds
+	TimeoutSeconds int
 }
 
 // Load configuration
@@ -201,12 +206,15 @@ func Load() (*Config, error) {
 			DB:       getEnvInt("REDIS_DB", 0),
 		},
 		Email: EmailConfig{
-			SMTPHost:     getEnv("SMTP_HOST", "smtp.gmail.com"),
-			SMTPPort:     getEnvInt("SMTP_PORT", 587),
-			SMTPUsername: getEnv("SMTP_USERNAME", ""),
-			SMTPPassword: getEnv("SMTP_PASSWORD", ""),
-			FromAddress:  getEnv("SMTP_FROM", "noreply@gympro.com"),
-			FromName:     getEnv("SMTP_FROM_NAME", "Gym Pro"),
+			Provider:       getEnv("EMAIL_PROVIDER", "smtp"),
+			SMTPHost:       getEnv("SMTP_HOST", "smtp.gmail.com"),
+			SMTPPort:       getEnvInt("SMTP_PORT", 587),
+			SMTPUsername:   getEnv("SMTP_USERNAME", ""),
+			SMTPPassword:   getEnv("SMTP_PASSWORD", ""),
+			FromAddress:    getEnv("SMTP_FROM", "noreply@gympro.com"),
+			FromName:       getEnv("SMTP_FROM_NAME", "Gym Pro"),
+			SendGridAPIKey: getEnv("SENDGRID_API_KEY", ""),
+			TimeoutSeconds: getEnvInt("EMAIL_TIMEOUT_SECONDS", 10),
 		},
 	}
 
