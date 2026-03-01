@@ -54,7 +54,7 @@ func (uc *RegisterRequestOTPUseCase) Execute(ctx context.Context, input Register
 	}
 
 	if err := uc.emailService.SendOTP(input.Email, otpCode); err != nil {
-		return nil // errors.InternalServer("failed to send OTP email", err)
+		return errors.InternalServer("failed to send OTP email", err)
 	}
 
 	return nil
