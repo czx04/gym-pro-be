@@ -68,8 +68,8 @@ func New(cfg *config.LoggerConfig) (Logger, error) {
 		Sampling:          nil,
 		Encoding:          encoding,
 		EncoderConfig:     encoderConfig,
-		OutputPaths:       cfg.OutputPaths,
-		ErrorOutputPaths:  cfg.ErrorOutputPaths,
+		// OutputPaths:       cfg.OutputPaths,
+		// ErrorOutputPaths:  cfg.ErrorOutputPaths,
 	}
 
 	// Build logger
