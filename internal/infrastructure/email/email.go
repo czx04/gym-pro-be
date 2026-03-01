@@ -6,6 +6,7 @@ import (
 	"gym-pro-2026-ptit/internal/config"
 	"gym-pro-2026-ptit/internal/infrastructure/logger"
 
+	"go.uber.org/zap"
 	"gopkg.in/gomail.v2"
 )
 
@@ -97,6 +98,7 @@ func (s *emailService) sendEmail(to, subject, body string) error {
 
 	// Nếu dùng cổng 465 thì để mặc định, nếu 587 thư viện tự hiểu STARTTLS
 	if err := d.DialAndSend(m); err != nil {
+		s.log.Error("failed to send email", zap.Error(err))
 		return err
 	}
 	return nil
