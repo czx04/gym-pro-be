@@ -24,7 +24,7 @@ func New(
 	jwtManager *auth.JWTManager,
 	authHandler *handler.AuthHandler,
 	workoutHandler *handler.WorkoutHandler,
-	// TODO: Add more handlers as parameters
+	exerciseHandler *handler.ExerciseHandler,
 ) *Router {
 	gin.SetMode(cfg.Server.GinMode)
 
@@ -71,9 +71,8 @@ func New(
 			// Exercise routes
 			exercises := authenticated.Group("/exercises")
 			{
-				exercises.GET("", placeholderHandler("List exercises"))
-				exercises.GET("/:id", placeholderHandler("Get exercise"))
-				exercises.GET("/search", placeholderHandler("Search exercises"))
+				exercises.GET("", exerciseHandler.ListExercises)
+				exercises.GET("/:id", exerciseHandler.GetExercise)
 			}
 
 			// Workout Plan routes

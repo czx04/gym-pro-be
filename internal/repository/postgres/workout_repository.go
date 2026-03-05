@@ -8,50 +8,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// ExerciseRepository implementation
-type exerciseRepository struct {
-	db *database.DB
-}
-
-func NewExerciseRepository(db *database.DB) workout.ExerciseRepository {
-	return &exerciseRepository{db: db}
-}
-
-// TODO: Implement all ExerciseRepository methods
-func (r *exerciseRepository) Create(ctx context.Context, exercise *workout.Exercise) error {
-	// TODO: Insert exercise into exercises table
-	// Include: name, description, category, muscle_groups (JSONB), equipment_needed (JSONB),
-	// difficulty_level, calories_per_minute, video_url, thumbnail_url, is_active, created_by
-	return nil
-}
-
-func (r *exerciseRepository) GetByID(ctx context.Context, id uuid.UUID) (*workout.Exercise, error) {
-	// TODO: Query exercise by ID, parse JSONB fields
-	return nil, nil
-}
-
-func (r *exerciseRepository) List(ctx context.Context, page, pageSize int) ([]workout.Exercise, int64, error) {
-	// TODO: Query exercises with pagination
-	// Return exercises and total count
-	return nil, 0, nil
-}
-
-func (r *exerciseRepository) Search(ctx context.Context, filter workout.SearchExercisesFilter) ([]workout.Exercise, int64, error) {
-	// TODO: Build dynamic query based on filters (category, muscle_group, equipment, difficulty, query)
-	// Use ILIKE for name search, JSONB operators for array searches
-	return nil, 0, nil
-}
-
-func (r *exerciseRepository) Update(ctx context.Context, exercise *workout.Exercise) error {
-	// TODO: Update exercise
-	return nil
-}
-
-func (r *exerciseRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	// TODO: Soft delete (set is_active = false)
-	return nil
-}
-
 // WorkoutPlanRepository implementation
 type workoutPlanRepository struct {
 	db *database.DB
