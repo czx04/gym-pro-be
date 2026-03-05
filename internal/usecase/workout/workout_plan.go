@@ -77,24 +77,19 @@ func NewAddExerciseToWorkoutUseCase(
 
 // Execute adds an exercise to a workout plan
 func (uc *AddExerciseToWorkoutUseCase) Execute(ctx context.Context, planID uuid.UUID, input workout.AddExerciseToWorkoutInput) error {
-	// TODO: 1. Validate input
 	if err := uc.validator.Validate(input); err != nil {
 		return errors.Validation(err.Error())
 	}
 
-	// TODO: 2. Check if workout plan exists
 	_, err := uc.workoutPlanRepo.GetByID(ctx, planID)
 	if err != nil {
 		return err
 	}
 
-	// TODO: 3. Check if exercise exists
 	_, err = uc.exerciseRepo.GetByID(ctx, input.ExerciseID)
 	if err != nil {
 		return errors.NotFound("exercise")
 	}
-
-	// TODO: 4. Create workout plan exercise
 	planExercise := &workout.WorkoutPlanExercise{
 		ID:            uuid.New(),
 		WorkoutPlanID: planID,
@@ -107,7 +102,6 @@ func (uc *AddExerciseToWorkoutUseCase) Execute(ctx context.Context, planID uuid.
 		Notes:         input.Notes,
 	}
 
-	// TODO: 5. Save to database
 	if err := uc.workoutPlanRepo.AddExercise(ctx, planID, planExercise); err != nil {
 		return err
 	}

@@ -21,8 +21,9 @@ func ProvideRouter(
 	jwtManager *auth.JWTManager,
 	authHandler *handler.AuthHandler,
 	workoutHandler *handler.WorkoutHandler,
+	exerciseHandler *handler.ExerciseHandler,
 ) *router.Router {
-	return router.New(cfg, log, jwtManager, authHandler, workoutHandler)
+	return router.New(cfg, log, jwtManager, authHandler, workoutHandler, exerciseHandler)
 }
 
 // RegisterRouterHooks registers lifecycle hooks for HTTP server

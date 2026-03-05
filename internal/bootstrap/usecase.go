@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	exerciseuc "gym-pro-2026-ptit/internal/usecase/exercise"
 	useruc "gym-pro-2026-ptit/internal/usecase/user"
 	workoutuc "gym-pro-2026-ptit/internal/usecase/workout"
 
@@ -21,6 +22,13 @@ var UseCaseProviders = fx.Options(
 	fx.Provide(
 		workoutuc.NewCreateWorkoutPlanUseCase,
 		workoutuc.NewAddExerciseToWorkoutUseCase,
+	),
+
+	// Exercise use cases
+	fx.Provide(
+		exerciseuc.NewListExercisesUseCase,
+		exerciseuc.NewGetExerciseUseCase,
+		exerciseuc.NewFilterExerciseUseCase,
 	),
 
 	// TODO: Add more use cases
