@@ -16,6 +16,7 @@ var UseCaseProviders = fx.Options(
 		useruc.NewLoginUseCase,
 		useruc.NewGetProfileUseCase,
 		useruc.NewUpdateProfileUseCase,
+		useruc.NewRefreshTokenUseCase,
 	),
 
 	// Workout use cases
