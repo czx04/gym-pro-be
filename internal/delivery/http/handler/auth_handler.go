@@ -17,6 +17,7 @@ type AuthHandler struct {
 	loginUC         *useruc.LoginUseCase
 	getProfileUC    *useruc.GetProfileUseCase
 	updateProfileUC *useruc.UpdateProfileUseCase
+	refreshTokenUC  *useruc.RefreshTokenUseCase
 	// TODO: Add OAuth use cases when implemented
 }
 
@@ -27,6 +28,7 @@ func NewAuthHandler(
 	loginUC *useruc.LoginUseCase,
 	getProfileUC *useruc.GetProfileUseCase,
 	updateProfileUC *useruc.UpdateProfileUseCase,
+	refreshTokenUC *useruc.RefreshTokenUseCase,
 ) *AuthHandler {
 	return &AuthHandler{
 		registerOTPUC:   registerOTPUC,
@@ -34,6 +36,7 @@ func NewAuthHandler(
 		loginUC:         loginUC,
 		getProfileUC:    getProfileUC,
 		updateProfileUC: updateProfileUC,
+		refreshTokenUC:  refreshTokenUC,
 	}
 }
 
@@ -133,16 +136,17 @@ func (h *AuthHandler) Login(c *gin.Context) {
 // @Failure 401 {object} response.Response
 // @Router /auth/refresh [post]
 func (h *AuthHandler) RefreshToken(c *gin.Context) {
-	// TODO: Implement refresh token logic
-	response.Error(c, errors.InternalServer("not implemented", nil))
-}
-
-type RefreshTokenRequest struct {
-	RefreshToken string `json:"refresh_token" validate:"required"`
-}
-
-type RefreshTokenResponse struct {
-	AccessToken string `json:"access_token"`
+	var input useruc.RefreshTokenRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		response.Error(c, errors.BadRequest("invalid request body"))
+		return
+	}
+	result, err := h.refreshTokenUC.Execute(c.Request.Context(), input)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, result)
 }
 
 // GetMe godoc
