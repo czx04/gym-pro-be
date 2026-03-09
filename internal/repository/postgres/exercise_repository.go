@@ -4,8 +4,8 @@ import (
 	"context"
 	"gym-pro-2026-ptit/internal/domain/workout"
 	"gym-pro-2026-ptit/internal/infrastructure/database"
+	"gym-pro-2026-ptit/internal/infrastructure/logger"
 	"gym-pro-2026-ptit/pkg/errors"
-	"log"
 	"strconv"
 
 	"github.com/google/uuid"
@@ -21,11 +21,25 @@ func NewExerciseRepository(db *database.DB) workout.ExerciseRepository {
 	return &exerciseRepository{db: db}
 }
 
+func (r *exerciseRepository) WithTx(tx *database.DB) workout.ExerciseRepository {
+	return &exerciseRepository{db: tx}
+}
+
 // TODO: Implement all ExerciseRepository methods
 func (r *exerciseRepository) Create(ctx context.Context, exercise *workout.Exercise) error {
-	// TODO: Insert exercise into exercises table
-	// Include: name, description, category, muscle_groups (JSONB), equipment_needed (JSONB),
-	// difficulty_level, calories_per_minute, video_url, thumbnail_url, is_active, created_by
+	query := `
+		INSERT INTO exercises (
+			id, name, description, category, muscle_groups, equipment_needed, difficulty_level, calories_per_minute, video_url, thumbnail_url, is_active, created_by, created_at, updated_at
+		) VALUES (
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+		)
+	`
+	_, err := r.db.Exec(ctx, query,
+		exercise.ID, exercise.Name, exercise.Description, exercise.Category, exercise.MuscleGroups, exercise.EquipmentNeeded, exercise.DifficultyLevel, exercise.CaloriesPerMinute, exercise.VideoURL, exercise.ThumbnailURL, exercise.IsActive, exercise.CreatedBy, exercise.CreatedAt, exercise.UpdatedAt,
+	)
+	if err != nil {
+		return errors.DatabaseError("create exercise", err)
+	}
 	return nil
 }
 
@@ -69,10 +83,23 @@ func (r *exerciseRepository) List(ctx context.Context, page, pageSize int) ([]wo
 	`
 	rows, err := r.db.Query(ctx, query, pageSize, (page-1)*pageSize)
 	if err != nil {
+		logger.Error("error listing exercises", "err", err)
 		return nil, 0, errors.DatabaseError("list exercises", err)
 	}
 	defer rows.Close()
-	return r.rowsToModels(rows)
+
+	var totalCount int64
+	err = r.db.QueryRow(ctx, "SELECT COUNT(*) FROM exercises").Scan(&totalCount)
+	if err != nil {
+		logger.Error("error counting exercises", "err", err)
+		return nil, 0, errors.DatabaseError("count exercises", err)
+	}
+	exercises, err := r.rowsToModels(rows)
+	if err != nil {
+		logger.Error("error rows to models", "err", err)
+		return nil, 0, errors.DatabaseError("list exercises", err)
+	}
+	return exercises, totalCount, nil
 }
 
 func (r *exerciseRepository) Search(ctx context.Context, filter workout.SearchExercisesFilter) ([]workout.Exercise, int64, error) {
@@ -81,49 +108,60 @@ func (r *exerciseRepository) Search(ctx context.Context, filter workout.SearchEx
 		SELECT * FROM exercises
 		WHERE 1=1
 	`
+	countQuery := `
+		SELECT COUNT(*) FROM exercises WHERE 1=1
+	`
+
 	args := make([]interface{}, 0)
 	if filter.Category != nil && *filter.Category != "" {
 		query += ` AND category = $` + strconv.Itoa(len(args)+1)
+		countQuery += ` AND category = $` + strconv.Itoa(len(args)+1)
 		args = append(args, filter.Category)
 	}
 	if filter.MuscleGroup != nil && *filter.MuscleGroup != "" {
 		query += ` AND muscle_groups @> $` + strconv.Itoa(len(args)+1)
+		countQuery += ` AND muscle_groups @> $` + strconv.Itoa(len(args)+1)
 		args = append(args, []string{*filter.MuscleGroup})
 	}
 	if filter.Equipment != nil && *filter.Equipment != "" {
 		query += ` AND equipment_needed @> $` + strconv.Itoa(len(args)+1)
+		countQuery += ` AND equipment_needed @> $` + strconv.Itoa(len(args)+1)
 		args = append(args, []string{*filter.Equipment})
 	}
 	if filter.DifficultyLevel != nil && *filter.DifficultyLevel != "" {
 		query += ` AND difficulty_level = $` + strconv.Itoa(len(args)+1)
+		countQuery += ` AND difficulty_level = $` + strconv.Itoa(len(args)+1)
 		args = append(args, filter.DifficultyLevel)
 	}
 	if filter.Query != nil && *filter.Query != "" {
-		query += ` AND name ILIKE $` + strconv.Itoa(len(args)+1)
+		query += ` AND name ILIKE '%' || $` + strconv.Itoa(len(args)+1) + ` || '%'`
+		countQuery += ` AND name ILIKE '%' || $` + strconv.Itoa(len(args)+1) + ` || '%'`
 		args = append(args, filter.Query)
 	}
 	query += `
 		ORDER BY created_at DESC
 		LIMIT $` + strconv.Itoa(len(args)+1) + ` OFFSET $` + strconv.Itoa(len(args)+2)
-	log.Println("query", query)
-	for _, arg := range args {
-		log.Println("arg", arg)
-		switch arg.(type) {
-		case string:
-			log.Println("string", arg)
-		case int:
-			log.Println("int", arg)
-		case float64:
-			log.Println("float64", arg)
-		}
+
+	var totalCount int64
+	err := r.db.QueryRow(ctx, countQuery, args...).Scan(&totalCount)
+	if err != nil {
+		logger.Error("error counting exercises", "err", err)
+		return nil, 0, errors.DatabaseError("count exercises", err)
 	}
+
 	args = append(args, filter.PageSize, (filter.Page-1)*filter.PageSize)
 	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil {
+		logger.Error("error querying exercises", "err", err)
 		return nil, 0, errors.DatabaseError("search exercises", err)
 	}
 	defer rows.Close()
-	return r.rowsToModels(rows)
+	exercises, err := r.rowsToModels(rows)
+	if err != nil {
+		logger.Error("error rows to models", "err", err)
+		return nil, 0, errors.DatabaseError("search exercises", err)
+	}
+	return exercises, totalCount, nil
 }
 
 func (r *exerciseRepository) Update(ctx context.Context, exercise *workout.Exercise) error {
@@ -155,19 +193,21 @@ func (r *exerciseRepository) rowToModel(row pgx.Row) (*workout.Exercise, error) 
 		&exercise.UpdatedAt,
 	)
 	if err != nil {
+		logger.Error("error row to model", "err", err)
 		return nil, errors.DatabaseError("row to model", err)
 	}
 	return &exercise, nil
 }
 
-func (r *exerciseRepository) rowsToModels(rows pgx.Rows) ([]workout.Exercise, int64, error) {
+func (r *exerciseRepository) rowsToModels(rows pgx.Rows) ([]workout.Exercise, error) {
 	exercises := make([]workout.Exercise, 0)
 	for rows.Next() {
 		exercise, err := r.rowToModel(rows)
 		if err != nil {
-			return nil, 0, errors.DatabaseError("rows to models", err)
+			logger.Error("error rows to models", "err", err)
+			return nil, errors.DatabaseError("rows to models", err)
 		}
 		exercises = append(exercises, *exercise)
 	}
-	return exercises, int64(rows.CommandTag().RowsAffected()), nil
+	return exercises, nil
 }

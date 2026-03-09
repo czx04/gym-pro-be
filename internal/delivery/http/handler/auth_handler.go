@@ -12,32 +12,12 @@ import (
 
 // AuthHandler handles authentication requests
 type AuthHandler struct {
-	registerOTPUC   *useruc.RegisterRequestOTPUseCase
-	verifyOTPUC     *useruc.VerifyOTPUseCase
-	loginUC         *useruc.LoginUseCase
-	getProfileUC    *useruc.GetProfileUseCase
-	updateProfileUC *useruc.UpdateProfileUseCase
-	refreshTokenUC  *useruc.RefreshTokenUseCase
-	// TODO: Add OAuth use cases when implemented
+	userUC *useruc.UserUseCases
 }
 
 // NewAuthHandler creates a new auth handler
-func NewAuthHandler(
-	registerOTPUC *useruc.RegisterRequestOTPUseCase,
-	verifyOTPUC *useruc.VerifyOTPUseCase,
-	loginUC *useruc.LoginUseCase,
-	getProfileUC *useruc.GetProfileUseCase,
-	updateProfileUC *useruc.UpdateProfileUseCase,
-	refreshTokenUC *useruc.RefreshTokenUseCase,
-) *AuthHandler {
-	return &AuthHandler{
-		registerOTPUC:   registerOTPUC,
-		verifyOTPUC:     verifyOTPUC,
-		loginUC:         loginUC,
-		getProfileUC:    getProfileUC,
-		updateProfileUC: updateProfileUC,
-		refreshTokenUC:  refreshTokenUC,
-	}
+func NewAuthHandler(userUC *useruc.UserUseCases) *AuthHandler {
+	return &AuthHandler{userUC: userUC}
 }
 
 // RegisterRequestOTP godoc
@@ -59,7 +39,7 @@ func (h *AuthHandler) RegisterRequestOTP(c *gin.Context) {
 		return
 	}
 
-	err := h.registerOTPUC.Execute(c.Request.Context(), input)
+	err := h.userUC.RegisterRequestOTP(c.Request.Context(), input)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -89,7 +69,7 @@ func (h *AuthHandler) VerifyOTP(c *gin.Context) {
 		return
 	}
 
-	result, err := h.verifyOTPUC.Execute(c.Request.Context(), input)
+	result, err := h.userUC.VerifyOTP(c.Request.Context(), input)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -116,7 +96,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	result, err := h.loginUC.Execute(c.Request.Context(), input)
+	result, err := h.userUC.Login(c.Request.Context(), input)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -141,7 +121,7 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		response.Error(c, errors.BadRequest("invalid request body"))
 		return
 	}
-	result, err := h.refreshTokenUC.Execute(c.Request.Context(), input)
+	result, err := h.userUC.RefreshToken(c.Request.Context(), input)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -167,7 +147,7 @@ func (h *AuthHandler) GetMe(c *gin.Context) {
 		return
 	}
 
-	u, err := h.getProfileUC.Execute(c.Request.Context(), userID)
+	u, err := h.userUC.GetProfile(c.Request.Context(), userID)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -202,7 +182,7 @@ func (h *AuthHandler) UpdateMe(c *gin.Context) {
 		return
 	}
 
-	u, err := h.updateProfileUC.Execute(c.Request.Context(), userID, input)
+	u, err := h.userUC.UpdateProfile(c.Request.Context(), userID, input)
 	if err != nil {
 		response.Error(c, err)
 		return

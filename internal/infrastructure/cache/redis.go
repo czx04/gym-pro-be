@@ -13,8 +13,8 @@ type Cache struct {
 	*redis.Client
 }
 
-func NewCache(cfg *config.CacheConfig, log logger.Logger) *Cache {
-	log.Info("Connecting to Redis cache")
+func NewCache(cfg *config.CacheConfig) *Cache {
+	logger.Info("Connecting to Redis cache")
 	return &Cache{
 		Client: redis.NewClient(&redis.Options{
 			Addr:     cfg.Addr,

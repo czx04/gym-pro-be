@@ -1,6 +1,7 @@
 package user
 
 import (
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -63,4 +64,8 @@ type OAuthUserInfo struct {
 	Email     string
 	Name      string
 	AvatarURL *string
+}
+
+func (u *User) IsAdmin() bool {
+	return strings.Contains(u.Email, "@gym-pro.com")
 }

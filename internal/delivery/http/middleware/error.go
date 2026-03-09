@@ -7,45 +7,28 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
 )
 
 // ErrorHandlerMiddleware creates error handling middleware
-func ErrorHandlerMiddleware(log logger.Logger) gin.HandlerFunc {
+func ErrorHandlerMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		defer func() {
 			if err := recover(); err != nil {
-				// Log panic
-				log.Error("Panic recovered",
-					zap.Any("error", err),
-					zap.String("path", c.Request.URL.Path),
-					zap.String("method", c.Request.Method),
-				)
-
-				// Return internal server error
+				logger.Error("Panic recovered", "error", err, "path", c.Request.URL.Path, "method", c.Request.Method)
 				response.Error(c, errors.InternalServer("an unexpected error occurred", nil))
 			}
 		}()
 
 		c.Next()
 
-		// Handle errors from handlers
 		if len(c.Errors) > 0 {
 			err := c.Errors.Last().Err
+			logger.Error("Request error", "err", err, "path", c.Request.URL.Path, "method", c.Request.Method)
 
-			// Log error
-			log.Error("Request error",
-				zap.Error(err),
-				zap.String("path", c.Request.URL.Path),
-				zap.String("method", c.Request.Method),
-			)
-
-			// Check if response was already sent
 			if c.Writer.Written() {
 				return
 			}
 
-			// Send error response
 			var appErr *errors.AppError
 			if e, ok := err.(*errors.AppError); ok {
 				appErr = e
@@ -65,13 +48,9 @@ func ErrorHandlerMiddleware(log logger.Logger) gin.HandlerFunc {
 }
 
 // RecoveryMiddleware creates recovery middleware
-func RecoveryMiddleware(log logger.Logger) gin.HandlerFunc {
+func RecoveryMiddleware() gin.HandlerFunc {
 	return gin.CustomRecovery(func(c *gin.Context, recovered interface{}) {
-		log.Error("Panic recovered",
-			zap.Any("panic", recovered),
-			zap.String("path", c.Request.URL.Path),
-			zap.String("method", c.Request.Method),
-		)
+		logger.Error("Panic recovered", "panic", recovered, "path", c.Request.URL.Path, "method", c.Request.Method)
 
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"success": false,

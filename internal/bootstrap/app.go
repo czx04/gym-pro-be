@@ -39,34 +39,39 @@ func NewApp() *fx.App {
 
 		// HTTP Layer (Handlers & Router)
 		HandlerProviders,
+		fx.Provide(ProvideAuthMiddleware),
 		fx.Provide(ProvideRouter),
 
 		// Lifecycle hooks
 		fx.Invoke(
+			InitGlobalLogger,
 			RegisterInfrastructureHooks,
 			RegisterRouterHooks,
-			registerAppLifecycle,
+			RegisterAppLifecycle,
 		),
 	)
 }
 
-// registerAppLifecycle registers application lifecycle hooks
-func registerAppLifecycle(lc fx.Lifecycle, log logger.Logger) {
+func RegisterAppLifecycle(lc fx.Lifecycle) {
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			log.Info("===========================================")
-			log.Info("🚀 Gym Pro API Server Starting...")
-			log.Info("===========================================")
+			logger.Info("===========================================")
+			logger.Info("🚀 Gym Pro API Server Starting...")
+			logger.Info("===========================================")
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
-			log.Info("===========================================")
-			log.Info("👋 Gym Pro API Server Stopping...")
-			log.Info("===========================================")
-			if err := log.Sync(); err != nil {
+			logger.Info("===========================================")
+			logger.Info("👋 Gym Pro API Server Stopping...")
+			logger.Info("===========================================")
+			if err := logger.Sync(); err != nil {
 				fmt.Fprintf(os.Stderr, "Failed to sync logger: %v\n", err)
 			}
 			return nil
 		},
 	})
+}
+
+func InitGlobalLogger(l logger.Logger) {
+	logger.SetGlobal(l)
 }

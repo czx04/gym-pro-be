@@ -13,20 +13,12 @@ import (
 
 // WorkoutHandler handles workout-related requests
 type WorkoutHandler struct {
-	createPlanUC  *workoutuc.CreateWorkoutPlanUseCase
-	addExerciseUC *workoutuc.AddExerciseToWorkoutUseCase
-	// TODO: Add more use cases as you implement them
+	workoutUC *workoutuc.WorkoutUseCases
 }
 
 // NewWorkoutHandler creates a new workout handler
-func NewWorkoutHandler(
-	createPlanUC *workoutuc.CreateWorkoutPlanUseCase,
-	addExerciseUC *workoutuc.AddExerciseToWorkoutUseCase,
-) *WorkoutHandler {
-	return &WorkoutHandler{
-		createPlanUC:  createPlanUC,
-		addExerciseUC: addExerciseUC,
-	}
+func NewWorkoutHandler(workoutUC *workoutuc.WorkoutUseCases) *WorkoutHandler {
+	return &WorkoutHandler{workoutUC: workoutUC}
 }
 
 // CreateWorkoutPlan godoc
@@ -43,7 +35,7 @@ func NewWorkoutHandler(
 // @Failure 422 {object} response.Response
 // @Router /workout-plans [post]
 func (h *WorkoutHandler) CreateWorkoutPlan(c *gin.Context) {
-	userID, err := middleware.GetUserID(c)
+	user, err := middleware.GetUser(c)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -55,48 +47,13 @@ func (h *WorkoutHandler) CreateWorkoutPlan(c *gin.Context) {
 		return
 	}
 
-	plan, err := h.createPlanUC.Execute(c.Request.Context(), userID, input)
+	plan, err := h.workoutUC.CreateWorkoutPlan(c.Request.Context(), user, input)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
 
 	response.Created(c, plan)
-}
-
-// AddExerciseToWorkout godoc
-// @Summary Add exercise to workout plan
-// @Description Add an exercise to a workout plan with configuration
-// @Tags workout-plans
-// @Accept json
-// @Produce json
-// @Security BearerAuth
-// @Param id path string true "Workout Plan ID" format(uuid)
-// @Param request body workout.AddExerciseToWorkoutInput true "Exercise configuration"
-// @Success 200 {object} response.Response
-// @Failure 400 {object} response.Response
-// @Failure 401 {object} response.Response
-// @Failure 404 {object} response.Response
-// @Router /workout-plans/{id}/exercises [post]
-func (h *WorkoutHandler) AddExerciseToWorkout(c *gin.Context) {
-	planID, err := uuid.Parse(c.Param("id"))
-	if err != nil {
-		response.Error(c, errors.BadRequest("invalid workout plan ID"))
-		return
-	}
-
-	var input workout.AddExerciseToWorkoutInput
-	if err := c.ShouldBindJSON(&input); err != nil {
-		response.Error(c, errors.BadRequest("invalid request body"))
-		return
-	}
-
-	if err := h.addExerciseUC.Execute(c.Request.Context(), planID, input); err != nil {
-		response.Error(c, err)
-		return
-	}
-
-	response.Success(c, nil)
 }
 
 // ListWorkoutPlans godoc
@@ -112,8 +69,26 @@ func (h *WorkoutHandler) AddExerciseToWorkout(c *gin.Context) {
 // @Failure 401 {object} response.Response
 // @Router /workout-plans [get]
 func (h *WorkoutHandler) ListWorkoutPlans(c *gin.Context) {
-	// TODO: Implement list workout plans
-	response.Error(c, errors.InternalServer("not implemented", nil))
+	user, err := middleware.GetUser(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	page, pageSize := c.GetInt("page"), c.GetInt("page_size")
+	if page == 0 {
+		page = 1
+	}
+	if pageSize == 0 {
+		pageSize = 20
+	}
+
+	plans, total, err := h.workoutUC.ListWorkoutPlans(c.Request.Context(), *user, page, pageSize)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Paginated(c, plans, page, pageSize, total)
 }
 
 // GetWorkoutPlan godoc
@@ -129,8 +104,17 @@ func (h *WorkoutHandler) ListWorkoutPlans(c *gin.Context) {
 // @Failure 404 {object} response.Response
 // @Router /workout-plans/{id} [get]
 func (h *WorkoutHandler) GetWorkoutPlan(c *gin.Context) {
-	// TODO: Implement get workout plan
-	response.Error(c, errors.InternalServer("not implemented", nil))
+	user, err := middleware.GetUser(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	plan, err := h.workoutUC.GetWorkoutPlan(c.Request.Context(), user.ID, c.Param("id"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, plan)
 }
 
 // UpdateWorkoutPlan godoc
@@ -148,8 +132,32 @@ func (h *WorkoutHandler) GetWorkoutPlan(c *gin.Context) {
 // @Failure 404 {object} response.Response
 // @Router /workout-plans/{id} [put]
 func (h *WorkoutHandler) UpdateWorkoutPlan(c *gin.Context) {
-	// TODO: Implement update workout plan
-	response.Error(c, errors.InternalServer("not implemented", nil))
+	user, err := middleware.GetUser(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	planID := c.Param("id")
+	isUpdateExercises := c.Query("is_update_exercises") == "true"
+
+	uuidPlanID, err := uuid.Parse(planID)
+	if err != nil {
+		response.Error(c, errors.BadRequest("invalid plan ID"))
+		return
+	}
+	var input workout.UpdateWorkoutPlanInput
+	input.ID = uuidPlanID
+	input.IsUpdateExercises = isUpdateExercises
+	if err := c.ShouldBindJSON(&input); err != nil {
+		response.Error(c, errors.BadRequest("invalid request body"))
+		return
+	}
+	plan, err := h.workoutUC.UpdateWorkoutPlan(c.Request.Context(), user.ID, input)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, plan)
 }
 
 // DeleteWorkoutPlan godoc
@@ -165,8 +173,19 @@ func (h *WorkoutHandler) UpdateWorkoutPlan(c *gin.Context) {
 // @Failure 404 {object} response.Response
 // @Router /workout-plans/{id} [delete]
 func (h *WorkoutHandler) DeleteWorkoutPlan(c *gin.Context) {
-	// TODO: Implement delete workout plan
-	response.Error(c, errors.InternalServer("not implemented", nil))
+	user, err := middleware.GetUser(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	err = h.workoutUC.DeleteWorkoutPlan(c.Request.Context(), user.ID, c.Param("id"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	response.Success(c, nil)
 }
 
 // TODO: Implement more handlers:
