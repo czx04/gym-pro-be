@@ -4,8 +4,6 @@ import (
 	"gym-pro-2026-ptit/internal/config"
 	"gym-pro-2026-ptit/internal/delivery/http/handler"
 	"gym-pro-2026-ptit/internal/delivery/http/middleware"
-	"gym-pro-2026-ptit/internal/infrastructure/auth"
-	"gym-pro-2026-ptit/internal/infrastructure/logger"
 
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
@@ -20,8 +18,7 @@ type Router struct {
 // New creates a new router
 func New(
 	cfg *config.Config,
-	log logger.Logger,
-	jwtManager *auth.JWTManager,
+	authMiddleware middleware.AuthMiddleware,
 	authHandler *handler.AuthHandler,
 	workoutHandler *handler.WorkoutHandler,
 	exerciseHandler *handler.ExerciseHandler,
@@ -30,10 +27,10 @@ func New(
 
 	engine := gin.New()
 
-	engine.Use(middleware.RecoveryMiddleware(log))
-	engine.Use(middleware.LoggerMiddleware(log))
+	engine.Use(middleware.RecoveryMiddleware())
+	engine.Use(middleware.LoggerMiddleware())
 	engine.Use(middleware.CORSMiddleware(&cfg.Server))
-	engine.Use(middleware.ErrorHandlerMiddleware(log))
+	engine.Use(middleware.ErrorHandlerMiddleware())
 
 	engine.GET("/health", healthCheckHandler)
 	engine.GET("/ping", pingHandler)
@@ -58,7 +55,7 @@ func New(
 		}
 
 		authenticated := v1.Group("")
-		authenticated.Use(middleware.AuthMiddleware(jwtManager))
+		authenticated.Use(gin.HandlerFunc(authMiddleware))
 		{
 			// User routes
 			users := authenticated.Group("/users")
@@ -85,7 +82,7 @@ func New(
 				workoutPlans.DELETE("/:id", workoutHandler.DeleteWorkoutPlan)
 
 				// Exercise management
-				workoutPlans.POST("/:id/exercises", workoutHandler.AddExerciseToWorkout)
+				workoutPlans.POST("/:id/exercises", placeholderHandler("Update exercise in plan"))
 				workoutPlans.PUT("/:id/exercises/:exerciseId", placeholderHandler("Update exercise in plan"))
 				workoutPlans.DELETE("/:id/exercises/:exerciseId", placeholderHandler("Remove exercise from plan"))
 			}

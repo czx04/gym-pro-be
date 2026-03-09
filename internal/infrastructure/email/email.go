@@ -9,7 +9,6 @@ import (
 
 	"github.com/sendgrid/sendgrid-go"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
-	"go.uber.org/zap"
 	"gopkg.in/gomail.v2"
 )
 
@@ -20,14 +19,10 @@ type Service interface {
 
 type emailService struct {
 	cfg *config.EmailConfig
-	log logger.Logger
 }
 
-func NewEmailService(cfg *config.EmailConfig, log logger.Logger) Service {
-	return &emailService{
-		cfg: cfg,
-		log: log,
-	}
+func NewEmailService(cfg *config.EmailConfig) Service {
+	return &emailService{cfg: cfg}
 }
 
 // SendOTP sends OTP verification email
@@ -94,11 +89,8 @@ func (s *emailService) sendEmail(to, subject, body string) error {
 	// Dev mode: just log email instead of sending
 	if s.cfg.Provider == "" || s.cfg.Provider == "smtp" {
 		if s.cfg.SMTPUsername == "" || s.cfg.SMTPPassword == "" {
-			s.log.Info("Email would be sent (dev mode - not actually sent)",
-				zap.String("to", to),
-				zap.String("subject", subject),
-			)
-			s.log.Debug("Email content", zap.String("body", body))
+			logger.Info("Email would be sent (dev mode - not actually sent)", "to", to, "subject", subject)
+			logger.Debug("Email content", "body", body)
 			return nil
 		}
 	}
@@ -125,13 +117,13 @@ func (s *emailService) sendViaSMTP(to, subject, body string) error {
 
 	// Configure SMTP dialer
 	d := gomail.NewDialer(s.cfg.SMTPHost, s.cfg.SMTPPort, s.cfg.SMTPUsername, s.cfg.SMTPPassword)
-	
+
 	// TLS configuration for better compatibility
 	// For port 465, use SSL/TLS. For port 587, use STARTTLS
 	if s.cfg.SMTPPort == 465 {
 		d.SSL = true
 	}
-	
+
 	d.TLSConfig = &tls.Config{
 		ServerName:         s.cfg.SMTPHost,
 		InsecureSkipVerify: false,
@@ -139,29 +131,21 @@ func (s *emailService) sendViaSMTP(to, subject, body string) error {
 	}
 
 	// Send email with detailed error logging
-	s.log.Debug("Attempting to send email via SMTP",
-		zap.String("to", to),
-		zap.String("smtp_host", s.cfg.SMTPHost),
-		zap.Int("smtp_port", s.cfg.SMTPPort),
-		zap.Bool("use_ssl", d.SSL),
-	)
+	logger.Debug("Attempting to send email via SMTP", "to", to, "smtp_host", s.cfg.SMTPHost, "smtp_port", s.cfg.SMTPPort, "use_ssl", d.SSL)
 
 	if err := d.DialAndSend(m); err != nil {
-		s.log.Error("Failed to send email via SMTP",
-			zap.String("to", to),
-			zap.String("smtp_host", s.cfg.SMTPHost),
-			zap.Int("smtp_port", s.cfg.SMTPPort),
-			zap.String("username", s.cfg.SMTPUsername),
-			zap.Error(err),
-			zap.String("help", "Railway may block SMTP ports. Consider using EMAIL_PROVIDER=sendgrid"),
+		logger.Error("Failed to send email via SMTP",
+			"to", to,
+			"smtp_host", s.cfg.SMTPHost,
+			"smtp_port", s.cfg.SMTPPort,
+			"username", s.cfg.SMTPUsername,
+			"err", err,
+			"help", "Railway may block SMTP ports. Consider using EMAIL_PROVIDER=sendgrid",
 		)
 		return fmt.Errorf("SMTP send failed (use SendGrid for Railway): %w", err)
 	}
 
-	s.log.Info("Email sent successfully via SMTP",
-		zap.String("to", to),
-		zap.String("subject", subject),
-	)
+	logger.Info("Email sent successfully via SMTP", "to", to, "subject", subject)
 
 	return nil
 }
@@ -177,34 +161,21 @@ func (s *emailService) sendViaSendGrid(to, subject, body string) error {
 	message := mail.NewSingleEmail(from, subject, toEmail, "", body)
 
 	client := sendgrid.NewSendClient(s.cfg.SendGridAPIKey)
-	
-	s.log.Debug("Attempting to send email via SendGrid",
-		zap.String("to", to),
-	)
+
+	logger.Debug("Attempting to send email via SendGrid", "to", to)
 
 	response, err := client.Send(message)
 	if err != nil {
-		s.log.Error("Failed to send email via SendGrid",
-			zap.String("to", to),
-			zap.Error(err),
-		)
+		logger.Error("Failed to send email via SendGrid", "to", to, "err", err)
 		return fmt.Errorf("SendGrid send failed: %w", err)
 	}
 
 	if response.StatusCode >= 400 {
-		s.log.Error("SendGrid returned error status",
-			zap.String("to", to),
-			zap.Int("status_code", response.StatusCode),
-			zap.String("body", response.Body),
-		)
+		logger.Error("SendGrid returned error status", "to", to, "status_code", response.StatusCode, "body", response.Body)
 		return fmt.Errorf("SendGrid error: status %d - %s", response.StatusCode, response.Body)
 	}
 
-	s.log.Info("Email sent successfully via SendGrid",
-		zap.String("to", to),
-		zap.String("subject", subject),
-		zap.Int("status_code", response.StatusCode),
-	)
+	logger.Info("Email sent successfully via SendGrid", "to", to, "subject", subject, "status_code", response.StatusCode)
 
 	return nil
 }

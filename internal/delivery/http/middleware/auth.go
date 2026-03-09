@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	userdomain "gym-pro-2026-ptit/internal/domain/user"
 	"gym-pro-2026-ptit/internal/infrastructure/auth"
 	"gym-pro-2026-ptit/pkg/errors"
 	"gym-pro-2026-ptit/pkg/response"
@@ -15,11 +16,15 @@ const (
 	BearerPrefix        = "Bearer "
 	UserIDKey           = "user_id"
 	UserEmailKey        = "user_email"
+	UserKey             = "user"
 )
 
-// AuthMiddleware creates JWT authentication middleware
-func AuthMiddleware(jwtManager *auth.JWTManager) gin.HandlerFunc {
-	return func(c *gin.Context) {
+// AuthMiddleware is the JWT auth middleware (injectable as gin.HandlerFunc).
+type AuthMiddleware gin.HandlerFunc
+
+// NewAuthMiddleware creates JWT authentication middleware for DI.
+func NewAuthMiddleware(jwtManager *auth.JWTManager, userRepo userdomain.Repository) AuthMiddleware {
+	return AuthMiddleware(func(c *gin.Context) {
 		// Get authorization header
 		authHeader := c.GetHeader(AuthorizationHeader)
 		if authHeader == "" {
@@ -51,12 +56,26 @@ func AuthMiddleware(jwtManager *auth.JWTManager) gin.HandlerFunc {
 			return
 		}
 
+		// Get user by ID
+		user, err := userRepo.GetByID(c.Request.Context(), claims.UserID)
+		if err != nil {
+			response.Error(c, err)
+			c.Abort()
+			return
+		}
+
+		if user == nil {
+			response.Error(c, errors.Unauthorized("user not found"))
+			c.Abort()
+			return
+		}
+
 		// Set user info in context
 		c.Set(UserIDKey, claims.UserID)
 		c.Set(UserEmailKey, claims.Email)
-
+		c.Set(UserKey, user)
 		c.Next()
-	}
+	})
 }
 
 // GetUserID retrieves user ID from context
@@ -87,6 +106,20 @@ func GetUserEmail(c *gin.Context) (string, error) {
 	}
 
 	return emailStr, nil
+}
+
+func GetUser(c *gin.Context) (*userdomain.User, error) {
+	user, exists := c.Get(UserKey)
+	if !exists {
+		return nil, errors.Unauthorized("user not authenticated")
+	}
+
+	u, ok := user.(*userdomain.User)
+	if !ok {
+		return nil, errors.Unauthorized("invalid user")
+	}
+
+	return u, nil
 }
 
 // MustGetUserID retrieves user ID from context or panics

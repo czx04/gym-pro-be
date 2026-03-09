@@ -14,15 +14,20 @@ import (
 )
 
 func ProvideLogger(cfg *config.Config) (logger.Logger, error) {
-	return logger.New(&cfg.Logger)
+	l, err := logger.New(&cfg.Logger)
+	if err != nil {
+		return nil, err
+	}
+	logger.SetGlobal(l)
+	return l, nil
 }
 
-func ProvideDatabase(cfg *config.Config, log logger.Logger) (*database.DB, error) {
-	return database.New(&cfg.Database, log)
+func ProvideDatabase(cfg *config.Config) (*database.DB, error) {
+	return database.New(&cfg.Database)
 }
 
-func ProvideCache(cfg *config.Config, log logger.Logger) *cache.Cache {
-	return cache.NewCache(&cfg.Cache, log)
+func ProvideCache(cfg *config.Config) *cache.Cache {
+	return cache.NewCache(&cfg.Cache)
 }
 
 func ProvideJWTManager(cfg *config.Config) *auth.JWTManager {
@@ -33,29 +38,29 @@ func ProvidePasswordManager() *auth.PasswordManager {
 	return auth.NewPasswordManager()
 }
 
-func ProvideOTPService(cache *cache.Cache, log logger.Logger) otp.Service {
-	return otp.NewOTPService(cache, log)
+func ProvideOTPService(cache *cache.Cache) otp.Service {
+	return otp.NewOTPService(cache)
 }
 
-func ProvideEmailService(cfg *config.Config, log logger.Logger) email.Service {
-	return email.NewEmailService(&cfg.Email, log)
+func ProvideEmailService(cfg *config.Config) email.Service {
+	return email.NewEmailService(&cfg.Email)
 }
 
-func RegisterInfrastructureHooks(lc fx.Lifecycle, db *database.DB, cache *cache.Cache, log logger.Logger) {
+func RegisterInfrastructureHooks(lc fx.Lifecycle, db *database.DB, cache *cache.Cache) {
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			log.Info("Database connection pool started")
-			log.Info("Redis cache started")
+			logger.Info("Database connection pool started")
+			logger.Info("Redis cache started")
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
-			log.Info("Closing Redis cache")
+			logger.Info("Closing Redis cache")
 			cache.Close()
-			log.Info("Redis cache closed")
+			logger.Info("Redis cache closed")
 
-			log.Info("Closing database connection pool")
+			logger.Info("Closing database connection pool")
 			db.Close()
-			log.Info("Database connection pool closed")
+			logger.Info("Database connection pool closed")
 			return nil
 		},
 	})
