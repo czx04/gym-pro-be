@@ -21,6 +21,12 @@ type Config struct {
 	Pagination PaginationConfig
 	Cache      CacheConfig
 	Email      EmailConfig
+	Cloudinary CloudinaryConfig
+}
+
+// CloudinaryConfig
+type CloudinaryConfig struct {
+	URL string
 }
 
 // ServerConfig
@@ -215,6 +221,9 @@ func Load() (*Config, error) {
 			FromName:       getEnv("SMTP_FROM_NAME", "Gym Pro"),
 			SendGridAPIKey: getEnv("SENDGRID_API_KEY", ""),
 			TimeoutSeconds: getEnvInt("EMAIL_TIMEOUT_SECONDS", 10),
+		},
+		Cloudinary: CloudinaryConfig{
+			URL: getEnv("CLOUDINARY_URL", ""),
 		},
 	}
 

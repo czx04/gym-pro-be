@@ -22,6 +22,7 @@ func New(
 	authHandler *handler.AuthHandler,
 	workoutHandler *handler.WorkoutHandler,
 	exerciseHandler *handler.ExerciseHandler,
+	foodHandler *handler.FoodHandler,
 ) *Router {
 	gin.SetMode(cfg.Server.GinMode)
 
@@ -117,12 +118,12 @@ func New(
 			// Food routes
 			foods := authenticated.Group("/foods")
 			{
-				foods.GET("", placeholderHandler("List foods"))
-				foods.GET("/:id", placeholderHandler("Get food"))
-				foods.GET("/search", placeholderHandler("Search foods"))
-				foods.POST("", placeholderHandler("Create custom food"))
-				foods.PUT("/:id", placeholderHandler("Update custom food"))
-				foods.DELETE("/:id", placeholderHandler("Delete custom food"))
+				foods.GET("", foodHandler.ListFoods)
+				foods.GET("/:id", foodHandler.GetFood)
+				foods.GET("/search", foodHandler.SearchFoods)
+				foods.POST("", foodHandler.CreateFood)
+				foods.PUT("/:id", foodHandler.UpdateFood)
+				foods.DELETE("/:id", foodHandler.DeleteFood)
 			}
 
 			// Recipe routes

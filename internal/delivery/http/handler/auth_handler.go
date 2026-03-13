@@ -111,8 +111,8 @@ func (h *AuthHandler) Login(c *gin.Context) {
 // @Tags auth
 // @Accept json
 // @Produce json
-// @Param request body RefreshTokenRequest true "Refresh token"
-// @Success 200 {object} response.Response{data=RefreshTokenResponse}
+// @Param request body useruc.RefreshTokenRequest true "Refresh token"
+// @Success 200 {object} response.Response{data=useruc.TokenPair}
 // @Failure 401 {object} response.Response
 // @Router /auth/refresh [post]
 func (h *AuthHandler) RefreshToken(c *gin.Context) {
