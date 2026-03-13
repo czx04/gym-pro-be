@@ -43,7 +43,7 @@ func NewApp() *fx.App {
 		fx.Provide(ProvideAuthMiddleware),
 		fx.Provide(ProvideRouter),
 
-		// Lifecycle hooks (AutoMigrate runs first so DB is ready before server starts)
+		// Lifecycle hooks
 		fx.Invoke(
 			InitGlobalLogger,
 			RegisterAutoMigrateHook,
