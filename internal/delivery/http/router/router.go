@@ -52,6 +52,9 @@ func New(
 			authRoutes.GET("/oauth/google/callback", authHandler.GoogleOAuthCallback)
 			authRoutes.GET("/oauth/facebook", authHandler.FacebookOAuth)
 			authRoutes.GET("/oauth/facebook/callback", authHandler.FacebookOAuthCallback)
+			authRoutes.POST("/reset-password/request", authHandler.ResetPasswordRequestOTP)
+			authRoutes.POST("/reset-password/verify", authHandler.VerifyOTPForgotPassword)
+			authRoutes.POST("/reset-password", authHandler.ResetPassword)
 		}
 
 		authenticated := v1.Group("")

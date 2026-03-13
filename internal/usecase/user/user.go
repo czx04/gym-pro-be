@@ -19,10 +19,21 @@ type (
 		Email    string `json:"email" validate:"required,email"`
 		Password string `json:"password" validate:"required,min=8"`
 	}
+	ResetPasswordRequestOTPInput struct {
+		Email string `json:"email" validate:"required,email"`
+	}
 	VerifyOTPInput struct {
 		Email    string `json:"email" validate:"required,email"`
 		Password string `json:"password" validate:"required,min=8"`
 		OTP      string `json:"otp" validate:"required,len=6"`
+	}
+	VerifyOTPForgotPassword struct {
+		Email string `json:"email" validate:"required,email"`
+		OTP   string `json:"otp" validate:"required,len=6"`
+	}
+	ResetPasswordInput struct {
+		Email    string `json:"email" validate:"required,email"`
+		Password string `json:"password" validate:"required,min=8"`
 	}
 	TokenPair struct {
 		AccessToken  string     `json:"access_token"`
@@ -187,4 +198,50 @@ func (uc *UserUseCases) UpdateProfile(ctx context.Context, userID uuid.UUID, inp
 	updated.PasswordHash = ""
 	updated.UpdatedAt = time.Now()
 	return updated, nil
+}
+
+func (uc *UserUseCases) ResetPasswordRequestOTP(ctx context.Context, input ResetPasswordRequestOTPInput) error {
+	if err := uc.validator.Validate(input); err != nil {
+		return errors.Validation(err.Error())
+	}
+	exists, err := uc.userRepo.Exists(ctx, input.Email)
+	if !exists {
+		return errors.NotFound("Email not found")
+	}
+	otpCode, err := uc.otpService.Generate(ctx, input.Email)
+	if err != nil {
+		return err
+	}
+	if err := uc.emailService.SendResetPasswordOTP(input.Email, otpCode); err != nil {
+		return errors.InternalServer("failed to send OTP email", err)
+	}
+	return nil
+}
+
+func (uc *UserUseCases) VerifyOTPForgotPassword(ctx context.Context, input VerifyOTPForgotPassword) error {
+	if err := uc.validator.Validate(input); err != nil {
+		return errors.Validation(err.Error())
+	}
+	if err := uc.otpService.Verify(ctx, input.Email, input.OTP); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (uc *UserUseCases) ResetPassword(ctx context.Context, input ResetPasswordInput) (*user.User, error) {
+	u, err := uc.userRepo.GetByEmail(ctx, input.Email)
+	if err != nil {
+		return nil, err
+	}
+	if u == nil {
+		return nil, errors.NotFound("Email not found")
+	}
+	passwordHash, err := uc.passwordMgr.HashPassword(input.Password)
+	if err != nil {
+		return nil, errors.InternalServer("Failed to hash password", err)
+	}
+	if err := uc.userRepo.UpdatePassword(ctx, u.ID, passwordHash); err != nil {
+		return nil, errors.InternalServer("Failed to update password", err)
+	}
+	return u, nil
 }
