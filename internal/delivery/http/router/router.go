@@ -69,6 +69,7 @@ func New(
 			exercises := authenticated.Group("/exercises")
 			{
 				exercises.GET("", exerciseHandler.ListExercises)
+				exercises.GET("/:id/stats", exerciseHandler.GetExerciseStats)
 				exercises.GET("/:id", exerciseHandler.GetExercise)
 			}
 
@@ -98,15 +99,16 @@ func New(
 				workoutSchedules.DELETE("/:id", placeholderHandler("Delete schedule"))
 			}
 
-			// Workout Session routes
+			// Workout Session routes (calendar & tracking)
 			workoutSessions := authenticated.Group("/workout-sessions")
 			{
-				workoutSessions.POST("/start", placeholderHandler("Start workout session"))
-				workoutSessions.PUT("/:id/exercises/:exerciseId/log-set", placeholderHandler("Log exercise set"))
-				workoutSessions.POST("/:id/complete", placeholderHandler("Complete session"))
-				workoutSessions.GET("", placeholderHandler("Get session history"))
-				workoutSessions.GET("/:id", placeholderHandler("Get session details"))
-				workoutSessions.GET("/stats", placeholderHandler("Get workout stats"))
+				workoutSessions.GET("/scheduled-dates", workoutHandler.GetScheduledDates)
+				workoutSessions.GET("", workoutHandler.GetSessionsByDate)
+				workoutSessions.GET("/:id", workoutHandler.GetSessionByID)
+				workoutSessions.POST("", workoutHandler.CreateWorkoutSession)
+				workoutSessions.PATCH("/:id", workoutHandler.UpdateWorkoutSession)
+				workoutSessions.PATCH("/:id/exercise-sets/:setId", workoutHandler.UpdateSessionSet)
+				workoutSessions.PATCH("/:id/finish", workoutHandler.FinishWorkoutSession)
 			}
 
 			// Food routes

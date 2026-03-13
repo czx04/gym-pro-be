@@ -8,6 +8,7 @@ import (
 	"gym-pro-2026-ptit/internal/infrastructure/logger"
 	"gym-pro-2026-ptit/pkg/errors"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -326,54 +327,286 @@ func (r *workoutSessionRepository) WithTx(tx *database.DB) workout.WorkoutSessio
 	return &workoutSessionRepository{db: tx}
 }
 
-// TODO: Implement all WorkoutSessionRepository methods
 func (r *workoutSessionRepository) Create(ctx context.Context, session *workout.WorkoutSession) error {
-	// TODO: Insert into workout_sessions
+	q := `INSERT INTO workout_sessions (
+		id, workout_schedule_id, user_id, workout_plan_id, scheduled_date, status, started_at, completed_at, duration_mins, total_calories_burned, notes, mood, difficulty_rating, created_at, updated_at
+	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`
+	var startedAt, completedAt interface{}
+	if session.StartedAt != nil {
+		startedAt = *session.StartedAt
+	}
+	if session.CompletedAt != nil {
+		completedAt = *session.CompletedAt
+	}
+	_, err := r.db.Exec(ctx, q,
+		session.ID, session.WorkoutScheduleID, session.UserID, session.WorkoutPlanID, session.ScheduledDate, session.Status, startedAt, completedAt,
+		session.DurationMins, session.TotalCaloriesBurned, session.Notes, session.Mood, session.DifficultyRating, session.CreatedAt, session.UpdatedAt,
+	)
+	if err != nil {
+		return errors.DatabaseError("create workout session", err)
+	}
+	for i := range session.Exercises {
+		ex := &session.Exercises[i]
+		if err := r.insertSessionExercise(ctx, session.ID, ex); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *workoutSessionRepository) insertSessionExercise(ctx context.Context, sessionID uuid.UUID, ex *workout.WorkoutSessionExercise) error {
+	q := `INSERT INTO workout_session_exercises (id, workout_session_id, exercise_id, "order", target_sets, target_reps, duration_secs, notes, skipped)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`
+	_, err := r.db.Exec(ctx, q, ex.ID, sessionID, ex.ExerciseID, ex.Order, ex.TargetSets, ex.TargetReps, ex.DurationSecs, ex.Notes, ex.Skipped)
+	if err != nil {
+		return errors.DatabaseError("insert session exercise", err)
+	}
+	sets := ex.TargetSets
+	if sets == nil || *sets < 1 {
+		return nil
+	}
+	for i := 0; i < *sets; i++ {
+		setID := uuid.New()
+		_, err = r.db.Exec(ctx, `INSERT INTO workout_session_sets (id, workout_session_exercise_id, set_index, completed) VALUES ($1, $2, $3, false)`,
+			setID, ex.ID, i+1)
+		if err != nil {
+			return errors.DatabaseError("insert session set", err)
+		}
+	}
 	return nil
 }
 
 func (r *workoutSessionRepository) GetByID(ctx context.Context, id uuid.UUID) (*workout.WorkoutSession, error) {
-	// TODO: Query session with exercises and workout plan details
-	return nil, nil
+	q := `SELECT s.id, s.workout_schedule_id, s.user_id, s.workout_plan_id, s.scheduled_date::text, s.status, s.started_at, s.completed_at, s.duration_mins, s.total_calories_burned, s.notes, s.mood, s.difficulty_rating, s.created_at, s.updated_at, p.title
+		FROM workout_sessions s LEFT JOIN workout_plans p ON p.id = s.workout_plan_id WHERE s.id = $1`
+	var s workout.WorkoutSession
+	var scheduledDate *string
+	var title *string
+	err := r.db.QueryRow(ctx, q, id).Scan(
+		&s.ID, &s.WorkoutScheduleID, &s.UserID, &s.WorkoutPlanID, &scheduledDate, &s.Status, &s.StartedAt, &s.CompletedAt,
+		&s.DurationMins, &s.TotalCaloriesBurned, &s.Notes, &s.Mood, &s.DifficultyRating, &s.CreatedAt, &s.UpdatedAt, &title,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, errors.NotFound("workout session")
+		}
+		return nil, errors.DatabaseError("get workout session", err)
+	}
+	if scheduledDate != nil {
+		s.ScheduledDate = scheduledDate
+	}
+	if title != nil {
+		s.Title = *title
+	}
+	s.Exercises, err = r.getSessionExercisesWithSets(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
+func (r *workoutSessionRepository) getSessionExercisesWithSets(ctx context.Context, sessionID uuid.UUID) ([]workout.WorkoutSessionExercise, error) {
+	q := `SELECT e.id, e.workout_session_id, e.exercise_id, e."order", e.target_sets, e.target_reps, e.duration_secs, e.notes, e.skipped,
+		ex.id, ex.name, ex.description, ex.category, ex.muscle_groups, ex.equipment_needed, ex.difficulty_level, ex.calories_per_minute, ex.video_url, ex.thumbnail_url, ex.is_active
+		FROM workout_session_exercises e JOIN exercises ex ON ex.id = e.exercise_id WHERE e.workout_session_id = $1 ORDER BY e."order"`
+	rows, err := r.db.Query(ctx, q, sessionID)
+	if err != nil {
+		return nil, errors.DatabaseError("get session exercises", err)
+	}
+	defer rows.Close()
+	var list []workout.WorkoutSessionExercise
+	for rows.Next() {
+		var ex workout.WorkoutSessionExercise
+		ex.Exercise = &workout.Exercise{}
+		err := rows.Scan(
+			&ex.ID, &ex.WorkoutSessionID, &ex.ExerciseID, &ex.Order, &ex.TargetSets, &ex.TargetReps, &ex.DurationSecs, &ex.Notes, &ex.Skipped,
+			&ex.Exercise.ID, &ex.Exercise.Name, &ex.Exercise.Description, &ex.Exercise.Category, &ex.Exercise.MuscleGroups, &ex.Exercise.EquipmentNeeded, &ex.Exercise.DifficultyLevel, &ex.Exercise.CaloriesPerMinute, &ex.Exercise.VideoURL, &ex.Exercise.ThumbnailURL, &ex.Exercise.IsActive,
+		)
+		if err != nil {
+			return nil, errors.DatabaseError("scan session exercise", err)
+		}
+		ex.Sets, err = r.getSessionSets(ctx, ex.ID)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, ex)
+	}
+	return list, nil
+}
+
+func (r *workoutSessionRepository) getSessionSets(ctx context.Context, sessionExerciseID uuid.UUID) ([]workout.WorkoutSessionSet, error) {
+	rows, err := r.db.Query(ctx, `SELECT id, workout_session_exercise_id, set_index, reps, weight_kg, completed, completed_at, created_at, updated_at FROM workout_session_sets WHERE workout_session_exercise_id = $1 ORDER BY set_index`, sessionExerciseID)
+	if err != nil {
+		return nil, errors.DatabaseError("get session sets", err)
+	}
+	defer rows.Close()
+	var list []workout.WorkoutSessionSet
+	for rows.Next() {
+		var s workout.WorkoutSessionSet
+		err := rows.Scan(&s.ID, &s.WorkoutSessionExerciseID, &s.SetIndex, &s.Reps, &s.WeightKg, &s.Completed, &s.CompletedAt, &s.CreatedAt, &s.UpdatedAt)
+		if err != nil {
+			return nil, errors.DatabaseError("scan session set", err)
+		}
+		list = append(list, s)
+	}
+	return list, nil
+}
+
+func (r *workoutSessionRepository) GetScheduledDates(ctx context.Context, userID uuid.UUID, month, year int) ([]string, error) {
+	q := `SELECT DISTINCT scheduled_date::text FROM workout_sessions WHERE user_id = $1 AND scheduled_date IS NOT NULL AND EXTRACT(MONTH FROM scheduled_date) = $2 AND EXTRACT(YEAR FROM scheduled_date) = $3 ORDER BY 1`
+	rows, err := r.db.Query(ctx, q, userID, month, year)
+	if err != nil {
+		return nil, errors.DatabaseError("get scheduled dates", err)
+	}
+	defer rows.Close()
+	var dates []string
+	for rows.Next() {
+		var d string
+		if err := rows.Scan(&d); err != nil {
+			return nil, errors.DatabaseError("scan scheduled date", err)
+		}
+		dates = append(dates, d)
+	}
+	return dates, nil
+}
+
+func (r *workoutSessionRepository) GetByDate(ctx context.Context, userID uuid.UUID, date string) ([]workout.WorkoutSession, error) {
+	q := `SELECT s.id, s.workout_schedule_id, s.user_id, s.workout_plan_id, s.scheduled_date::text, s.status, s.started_at, s.completed_at, s.duration_mins, s.total_calories_burned, s.notes, s.mood, s.difficulty_rating, s.created_at, s.updated_at, p.title
+		FROM workout_sessions s LEFT JOIN workout_plans p ON p.id = s.workout_plan_id
+		WHERE s.user_id = $1 AND (s.scheduled_date = $2::date OR (s.started_at IS NOT NULL AND s.started_at::date = $2::date)) ORDER BY s.scheduled_date NULLS LAST, s.started_at NULLS LAST`
+	rows, err := r.db.Query(ctx, q, userID, date)
+	if err != nil {
+		return nil, errors.DatabaseError("get sessions by date", err)
+	}
+	defer rows.Close()
+	var list []workout.WorkoutSession
+	for rows.Next() {
+		var s workout.WorkoutSession
+		var scheduledDate *string
+		var title *string
+		err := rows.Scan(
+			&s.ID, &s.WorkoutScheduleID, &s.UserID, &s.WorkoutPlanID, &scheduledDate, &s.Status, &s.StartedAt, &s.CompletedAt,
+			&s.DurationMins, &s.TotalCaloriesBurned, &s.Notes, &s.Mood, &s.DifficultyRating, &s.CreatedAt, &s.UpdatedAt, &title,
+		)
+		if err != nil {
+			return nil, errors.DatabaseError("scan session", err)
+		}
+		if scheduledDate != nil {
+			s.ScheduledDate = scheduledDate
+		}
+		if title != nil {
+			s.Title = *title
+		}
+		list = append(list, s)
+	}
+	return list, nil
 }
 
 func (r *workoutSessionRepository) GetByUserID(ctx context.Context, userID uuid.UUID, page, pageSize int) ([]workout.WorkoutSession, int64, error) {
-	// TODO: Query user's sessions with pagination
-	return nil, 0, nil
+	q := `SELECT id, workout_schedule_id, user_id, workout_plan_id, scheduled_date::text, status, started_at, completed_at, duration_mins, total_calories_burned, notes, mood, difficulty_rating, created_at, updated_at FROM workout_sessions WHERE user_id = $1 ORDER BY COALESCE(started_at, created_at) DESC LIMIT $2 OFFSET $3`
+	rows, err := r.db.Query(ctx, q, userID, pageSize, (page-1)*pageSize)
+	if err != nil {
+		return nil, 0, errors.DatabaseError("get sessions by user", err)
+	}
+	defer rows.Close()
+	var list []workout.WorkoutSession
+	for rows.Next() {
+		var s workout.WorkoutSession
+		var scheduledDate *string
+		err := rows.Scan(&s.ID, &s.WorkoutScheduleID, &s.UserID, &s.WorkoutPlanID, &scheduledDate, &s.Status, &s.StartedAt, &s.CompletedAt, &s.DurationMins, &s.TotalCaloriesBurned, &s.Notes, &s.Mood, &s.DifficultyRating, &s.CreatedAt, &s.UpdatedAt)
+		if err != nil {
+			return nil, 0, errors.DatabaseError("scan session", err)
+		}
+		if scheduledDate != nil {
+			s.ScheduledDate = scheduledDate
+		}
+		list = append(list, s)
+	}
+	var total int64
+	_ = r.db.QueryRow(ctx, "SELECT COUNT(*) FROM workout_sessions WHERE user_id = $1", userID).Scan(&total)
+	return list, total, nil
 }
 
 func (r *workoutSessionRepository) Update(ctx context.Context, session *workout.WorkoutSession) error {
-	// TODO: Update session
-	return nil
+	q := `UPDATE workout_sessions SET status = $2, started_at = $3, completed_at = $4, duration_mins = $5, total_calories_burned = $6, notes = $7, mood = $8, difficulty_rating = $9, updated_at = $10 WHERE id = $1`
+	_, err := r.db.Exec(ctx, q, session.ID, session.Status, session.StartedAt, session.CompletedAt, session.DurationMins, session.TotalCaloriesBurned, session.Notes, session.Mood, session.DifficultyRating, session.UpdatedAt)
+	return errors.DatabaseError("update workout session", err)
 }
 
 func (r *workoutSessionRepository) Complete(ctx context.Context, id uuid.UUID, input workout.CompleteWorkoutSessionInput) error {
-	// TODO: Set completed_at, calculate duration_mins, update notes/mood/difficulty
+	var durationMins *int
+	if input.DurationSecs != nil {
+		m := *input.DurationSecs / 60
+		durationMins = &m
+	}
+	q := `UPDATE workout_sessions SET status = 'completed', completed_at = COALESCE($2, NOW()), duration_mins = COALESCE($3, duration_mins), notes = COALESCE($4, notes), mood = $5, difficulty_rating = $6, updated_at = NOW() WHERE id = $1`
+	_, err := r.db.Exec(ctx, q, id, input.CompletedAt, durationMins, input.Notes, input.Mood, input.DifficultyRating)
+	if err != nil {
+		return errors.DatabaseError("complete workout session", err)
+	}
+	return nil
+}
+
+func (r *workoutSessionRepository) UpdateSet(ctx context.Context, setID uuid.UUID, input workout.UpdateSessionSetInput) error {
+	// PATCH: reps/weight_kg/completed; weight_kg nullable (client có thể gửi null để xóa)
+	q := `UPDATE workout_session_sets SET reps = COALESCE($2, reps), weight_kg = $3, completed = COALESCE($4, completed), completed_at = CASE WHEN $4 = true THEN COALESCE(completed_at, NOW()) WHEN $4 = false THEN NULL ELSE completed_at END, updated_at = NOW() WHERE id = $1`
+	var reps interface{} = input.Reps
+	var weightKg interface{} = input.WeightKg
+	var completed interface{}
+	if input.Completed != nil {
+		completed = *input.Completed
+	}
+	_, err := r.db.Exec(ctx, q, setID, reps, weightKg, completed)
+	if err != nil {
+		return errors.DatabaseError("update session set", err)
+	}
 	return nil
 }
 
 func (r *workoutSessionRepository) AddExerciseLog(ctx context.Context, sessionID uuid.UUID, exercise *workout.WorkoutSessionExercise) error {
-	// TODO: Insert or update workout_session_exercises
-	// Handle actual_sets_completed as JSONB
-	return nil
+	return r.insertSessionExercise(ctx, sessionID, exercise)
 }
 
 func (r *workoutSessionRepository) GetExercises(ctx context.Context, sessionID uuid.UUID) ([]workout.WorkoutSessionExercise, error) {
-	// TODO: Query exercises in session with exercise details
-	return nil, nil
+	return r.getSessionExercisesWithSets(ctx, sessionID)
 }
 
 func (r *workoutSessionRepository) GetStats(ctx context.Context, userID uuid.UUID) (*workout.WorkoutStats, error) {
-	// TODO: Calculate statistics:
-	// - Total workouts
-	// - Total duration
-	// - Total calories
-	// - Average duration
-	// - Completion rate (scheduled vs completed)
+	// TODO: aggregate stats
 	return nil, nil
 }
 
 func (r *workoutSessionRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	// TODO: Delete session
+	_, err := r.db.Exec(ctx, "DELETE FROM workout_sessions WHERE id = $1", id)
+	if err != nil {
+		return errors.DatabaseError("delete workout session", err)
+	}
 	return nil
+}
+
+func (r *workoutSessionRepository) GetExerciseStats(ctx context.Context, userID, exerciseID uuid.UUID) (*workout.ExerciseStats, error) {
+	stats := &workout.ExerciseStats{}
+	qMax := `SELECT MAX(s.weight_kg) FROM workout_session_sets s
+		JOIN workout_session_exercises e ON e.id = s.workout_session_exercise_id
+		JOIN workout_sessions sess ON sess.id = e.workout_session_id
+		WHERE e.exercise_id = $1 AND sess.user_id = $2 AND s.weight_kg IS NOT NULL`
+	if err := r.db.QueryRow(ctx, qMax, exerciseID, userID).Scan(&stats.MaxWeightKg); err != nil && err != pgx.ErrNoRows {
+		return nil, errors.DatabaseError("get exercise max weight", err)
+	}
+	qLast := `SELECT s.weight_kg, COALESCE(s.completed_at, s.updated_at) AS logged_at
+		FROM workout_session_sets s
+		JOIN workout_session_exercises e ON e.id = s.workout_session_exercise_id
+		JOIN workout_sessions sess ON sess.id = e.workout_session_id
+		WHERE e.exercise_id = $1 AND sess.user_id = $2 AND s.weight_kg IS NOT NULL
+		ORDER BY COALESCE(s.completed_at, s.updated_at) DESC, s.updated_at DESC
+		LIMIT 1`
+	var lastLoggedAt time.Time
+	err := r.db.QueryRow(ctx, qLast, exerciseID, userID).Scan(&stats.LastWeightKg, &lastLoggedAt)
+	if err != nil && err != pgx.ErrNoRows {
+		return nil, errors.DatabaseError("get exercise last weight", err)
+	}
+	if err == nil {
+		stats.LastLoggedAt = &lastLoggedAt
+	}
+	return stats, nil
 }

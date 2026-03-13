@@ -9,19 +9,20 @@ import (
 	"github.com/google/uuid"
 )
 
-// ExerciseUseCases groups all exercise use cases with a single dependency set.
 type ExerciseUseCases struct {
 	exerciseRepo workout.ExerciseRepository
+	sessionRepo  workout.WorkoutSessionRepository
 	validator    *validator.Validator
 }
 
-// NewExerciseUseCases creates the exercise use cases container.
 func NewExerciseUseCases(
 	exerciseRepo workout.ExerciseRepository,
+	sessionRepo workout.WorkoutSessionRepository,
 	validator *validator.Validator,
 ) *ExerciseUseCases {
 	return &ExerciseUseCases{
 		exerciseRepo: exerciseRepo,
+		sessionRepo:  sessionRepo,
 		validator:    validator,
 	}
 }
@@ -59,4 +60,14 @@ func (uc *ExerciseUseCases) FilterExercises(ctx context.Context, page, pageSize 
 		return nil, 0, err
 	}
 	return exercises, total, nil
+}
+
+// GetExerciseStats trả về thống kê mức tạ (max, last) của user cho bài tập (Cách B).
+func (uc *ExerciseUseCases) GetExerciseStats(ctx context.Context, userID, exerciseID uuid.UUID) (*workout.ExerciseStats, error) {
+	stats, err := uc.sessionRepo.GetExerciseStats(ctx, userID, exerciseID)
+	if err != nil {
+		logger.Error("error getting exercise stats", "err", err)
+		return nil, err
+	}
+	return stats, nil
 }

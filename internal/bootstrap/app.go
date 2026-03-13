@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"gym-pro-2026-ptit/internal/infrastructure/database"
 	"gym-pro-2026-ptit/internal/infrastructure/logger"
 	"gym-pro-2026-ptit/pkg/validator"
 
@@ -42,14 +43,28 @@ func NewApp() *fx.App {
 		fx.Provide(ProvideAuthMiddleware),
 		fx.Provide(ProvideRouter),
 
-		// Lifecycle hooks
+		// Lifecycle hooks (AutoMigrate runs first so DB is ready before server starts)
 		fx.Invoke(
 			InitGlobalLogger,
+			RegisterAutoMigrateHook,
 			RegisterInfrastructureHooks,
 			RegisterRouterHooks,
 			RegisterAppLifecycle,
 		),
 	)
+}
+
+// RegisterAutoMigrateHook runs pending migrations on startup (uses same db as repositories).
+func RegisterAutoMigrateHook(lc fx.Lifecycle, db *database.DB) {
+	migrationsPath := os.Getenv("MIGRATIONS_PATH")
+	if migrationsPath == "" {
+		migrationsPath = "migrations"
+	}
+	lc.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			return RunAutoMigrate(ctx, db, migrationsPath)
+		},
+	})
 }
 
 func RegisterAppLifecycle(lc fx.Lifecycle) {

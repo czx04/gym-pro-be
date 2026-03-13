@@ -1,11 +1,13 @@
 package handler
 
 import (
+	"gym-pro-2026-ptit/internal/delivery/http/middleware"
 	"gym-pro-2026-ptit/internal/infrastructure/logger"
 	"gym-pro-2026-ptit/pkg/errors"
 	"gym-pro-2026-ptit/pkg/response"
 
 	exerciseuc "gym-pro-2026-ptit/internal/usecase/exercise"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -68,4 +70,23 @@ func (h *ExerciseHandler) GetExercise(c *gin.Context) {
 		return
 	}
 	response.Success(c, exercise)
+}
+
+func (h *ExerciseHandler) GetExerciseStats(c *gin.Context) {
+	exerciseID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.Error(c, errors.BadRequest("invalid exercise ID"))
+		return
+	}
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	stats, err := h.exerciseUC.GetExerciseStats(c.Request.Context(), userID, exerciseID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, stats)
 }
