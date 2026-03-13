@@ -11,6 +11,7 @@ var HandlerProviders = fx.Options(
 		handler.NewAuthHandler,
 		handler.NewWorkoutHandler,
 		handler.NewExerciseHandler,
+		handler.NewFoodHandler,
 		// TODO: Add more handlers
 		// handler.NewMealHandler,
 		// handler.NewSocialHandler,
