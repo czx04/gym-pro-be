@@ -13,25 +13,23 @@ import (
 	"github.com/google/uuid"
 )
 
-// WorkoutUseCases groups all workout use cases with a single dependency set.
 type WorkoutUseCases struct {
 	db              *database.DB
 	workoutPlanRepo workout.WorkoutPlanRepository
-	exerciseRepo    workout.ExerciseRepository
+	sessionRepo     workout.WorkoutSessionRepository
 	validator       *validator.Validator
 }
 
-// NewWorkoutUseCases creates the workout use cases container.
 func NewWorkoutUseCases(
 	db *database.DB,
 	workoutPlanRepo workout.WorkoutPlanRepository,
-	exerciseRepo workout.ExerciseRepository,
+	sessionRepo workout.WorkoutSessionRepository,
 	validator *validator.Validator,
 ) *WorkoutUseCases {
 	return &WorkoutUseCases{
 		db:              db,
 		workoutPlanRepo: workoutPlanRepo,
-		exerciseRepo:    exerciseRepo,
+		sessionRepo:     sessionRepo,
 		validator:       validator,
 	}
 }
@@ -211,4 +209,144 @@ func (uc *WorkoutUseCases) buildWorkoutPlanFromUpdateInput(currentPlan *workout.
 		currentPlan.IsPublic = *input.IsPublic
 	}
 	currentPlan.UpdatedAt = time.Now()
+}
+
+// ——— Workout Session (Calendar / Tracking) ———
+
+func (uc *WorkoutUseCases) GetScheduledDates(ctx context.Context, userID uuid.UUID, month, year int) ([]string, error) {
+	return uc.sessionRepo.GetScheduledDates(ctx, userID, month, year)
+}
+
+func (uc *WorkoutUseCases) GetSessionsByDate(ctx context.Context, userID uuid.UUID, date string) ([]workout.WorkoutSession, error) {
+	return uc.sessionRepo.GetByDate(ctx, userID, date)
+}
+
+func (uc *WorkoutUseCases) GetSessionByID(ctx context.Context, userID uuid.UUID, sessionID string) (*workout.WorkoutSession, error) {
+	id, err := uuid.Parse(sessionID)
+	if err != nil {
+		return nil, errors.BadRequest("invalid session ID")
+	}
+	s, err := uc.sessionRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if s.UserID != userID {
+		return nil, errors.Forbidden("not your session")
+	}
+	return s, nil
+}
+
+func (uc *WorkoutUseCases) CreateWorkoutSession(ctx context.Context, userID uuid.UUID, input workout.CreateWorkoutSessionInput) (*workout.WorkoutSession, error) {
+	if err := uc.validator.Validate(input); err != nil {
+		return nil, errors.Validation(err.Error())
+	}
+	plan, err := uc.workoutPlanRepo.GetByID(ctx, input.WorkoutPlanID)
+	if err != nil {
+		return nil, err
+	}
+	if plan.UserID != userID && !plan.IsPublic {
+		return nil, errors.Forbidden("plan not found or not yours")
+	}
+	exercises, err := uc.workoutPlanRepo.GetExercises(ctx, plan.ID)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now()
+	session := &workout.WorkoutSession{
+		ID:            uuid.New(),
+		UserID:        userID,
+		WorkoutPlanID: plan.ID,
+		ScheduledDate: &input.ScheduledDate,
+		Status:        workout.SessionStatusScheduled,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+		Title:         plan.Title,
+	}
+	if input.StartNow {
+		session.Status = workout.SessionStatusInProgress
+		session.StartedAt = &now
+	}
+	session.Exercises = make([]workout.WorkoutSessionExercise, 0, len(exercises))
+	for _, pe := range exercises {
+		ex := workout.WorkoutSessionExercise{
+			ID:               uuid.New(),
+			WorkoutSessionID: session.ID,
+			ExerciseID:       pe.ExerciseID,
+			Order:            pe.Order,
+			TargetSets:       pe.Sets,
+			TargetReps:       pe.Reps,
+			DurationSecs:     pe.DurationSecs,
+			Notes:            pe.Notes,
+			Skipped:          false,
+			Exercise:         pe.Exercise,
+		}
+		session.Exercises = append(session.Exercises, ex)
+	}
+	if err := uc.sessionRepo.Create(ctx, session); err != nil {
+		return nil, err
+	}
+	session.Title = plan.Title
+	return session, nil
+}
+
+func (uc *WorkoutUseCases) UpdateWorkoutSession(ctx context.Context, userID uuid.UUID, sessionID string, input workout.UpdateWorkoutSessionInput) (*workout.WorkoutSession, error) {
+	id, err := uuid.Parse(sessionID)
+	if err != nil {
+		return nil, errors.BadRequest("invalid session ID")
+	}
+	s, err := uc.sessionRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if s.UserID != userID {
+		return nil, errors.Forbidden("not your session")
+	}
+	if input.Status != nil {
+		s.Status = *input.Status
+	}
+	if input.StartedAt != nil {
+		s.StartedAt = input.StartedAt
+	}
+	s.UpdatedAt = time.Now()
+	if err := uc.sessionRepo.Update(ctx, s); err != nil {
+		return nil, err
+	}
+	return uc.sessionRepo.GetByID(ctx, id)
+}
+
+func (uc *WorkoutUseCases) UpdateSessionSet(ctx context.Context, userID uuid.UUID, sessionID, setID string, input workout.UpdateSessionSetInput) error {
+	sid, err := uuid.Parse(sessionID)
+	if err != nil {
+		return errors.BadRequest("invalid session ID")
+	}
+	setUUID, err := uuid.Parse(setID)
+	if err != nil {
+		return errors.BadRequest("invalid set ID")
+	}
+	s, err := uc.sessionRepo.GetByID(ctx, sid)
+	if err != nil {
+		return err
+	}
+	if s.UserID != userID {
+		return errors.Forbidden("not your session")
+	}
+	return uc.sessionRepo.UpdateSet(ctx, setUUID, input)
+}
+
+func (uc *WorkoutUseCases) FinishWorkoutSession(ctx context.Context, userID uuid.UUID, sessionID string, input workout.CompleteWorkoutSessionInput) (*workout.WorkoutSession, error) {
+	id, err := uuid.Parse(sessionID)
+	if err != nil {
+		return nil, errors.BadRequest("invalid session ID")
+	}
+	s, err := uc.sessionRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if s.UserID != userID {
+		return nil, errors.Forbidden("not your session")
+	}
+	if err := uc.sessionRepo.Complete(ctx, id, input); err != nil {
+		return nil, err
+	}
+	return uc.sessionRepo.GetByID(ctx, id)
 }

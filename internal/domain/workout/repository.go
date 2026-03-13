@@ -91,30 +91,19 @@ type WorkoutScheduleRepository interface {
 // WorkoutSessionRepository defines the interface for workout session data access
 type WorkoutSessionRepository interface {
 	WithTx(tx *database.DB) WorkoutSessionRepository
-	// Create creates a new workout session
 	Create(ctx context.Context, session *WorkoutSession) error
-
-	// GetByID retrieves a session by ID with exercises
 	GetByID(ctx context.Context, id uuid.UUID) (*WorkoutSession, error)
-
-	// GetByUserID retrieves sessions for a user with pagination
 	GetByUserID(ctx context.Context, userID uuid.UUID, page, pageSize int) ([]WorkoutSession, int64, error)
-
-	// Update updates a session
 	Update(ctx context.Context, session *WorkoutSession) error
-
-	// Complete marks a session as completed
 	Complete(ctx context.Context, id uuid.UUID, input CompleteWorkoutSessionInput) error
-
-	// AddExerciseLog adds or updates exercise log in a session
 	AddExerciseLog(ctx context.Context, sessionID uuid.UUID, exercise *WorkoutSessionExercise) error
-
-	// GetExercises retrieves exercises logged in a session
 	GetExercises(ctx context.Context, sessionID uuid.UUID) ([]WorkoutSessionExercise, error)
-
-	// GetStats retrieves workout statistics for a user
 	GetStats(ctx context.Context, userID uuid.UUID) (*WorkoutStats, error)
-
-	// Delete deletes a session
 	Delete(ctx context.Context, id uuid.UUID) error
+
+	GetScheduledDates(ctx context.Context, userID uuid.UUID, month, year int) ([]string, error)
+	GetByDate(ctx context.Context, userID uuid.UUID, date string) ([]WorkoutSession, error)
+	UpdateSet(ctx context.Context, setID uuid.UUID, input UpdateSessionSetInput) error
+
+	GetExerciseStats(ctx context.Context, userID, exerciseID uuid.UUID) (*ExerciseStats, error)
 }
