@@ -15,6 +15,7 @@ import (
 type Service interface {
 	SendOTP(to, otp string) error
 	SendWelcome(to, name string) error
+	SendResetPasswordOTP(to, otp string) error
 }
 
 type emailService struct {
@@ -178,4 +179,70 @@ func (s *emailService) sendViaSendGrid(to, subject, body string) error {
 	logger.Info("Email sent successfully via SendGrid", "to", to, "subject", subject, "status_code", response.StatusCode)
 
 	return nil
+}
+
+func (s *emailService) SendResetPasswordOTP(to, otp string) error {
+	subject := "Reset Your Gym Pro Password"
+
+    body := fmt.Sprintf(`
+
+<!DOCTYPE html>
+
+<html>
+<head>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            line-height: 1.6; 
+            background-color: #f9f9f9;
+        }
+        .container { 
+            max-width: 600px; 
+            margin: 0 auto; 
+            padding: 20px; 
+            background: #ffffff;
+            border-radius: 8px;
+        }
+        .reset-code { 
+            font-size: 32px; 
+            font-weight: bold; 
+            color: #ff5722; 
+            letter-spacing: 5px; 
+            text-align: center; 
+            padding: 20px; 
+            background: #f5f5f5; 
+            border-radius: 5px; 
+            margin: 20px 0;
+        }
+        .footer { 
+            color: #666; 
+            font-size: 12px; 
+            margin-top: 20px; 
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Reset Your Password</h2>
+
+    <p>We received a request to reset your Gym Pro account password.</p>
+
+    <p>Please use the following OTP code to reset your password:</p>
+
+    <div class="reset-code">%s</div>
+
+    <p>This code will expire in <strong>5 minutes</strong>.</p>
+
+    <p>If you did not request a password reset, please ignore this email. Your account will remain secure.</p>
+
+    <div class="footer">
+        <p>Best regards,<br>The Gym Pro Team</p>
+    </div>
+</div>
+
+</body>
+</html>
+`, otp)
+
+	return s.sendEmail(to, subject, body)
 }

@@ -246,3 +246,79 @@ func (h *AuthHandler) FacebookOAuthCallback(c *gin.Context) {
 	// TODO: Implement Facebook OAuth callback
 	response.Error(c, errors.InternalServer("not implemented", nil))
 }
+
+// ResetPasswordRequestOTP godoc
+// @Summary Request OTP for resetting password
+// @Description Request an OTP code to be sent via email for resetting password
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body useruc.ResetPasswordRequestOTPInput true "Reset password OTP request"
+// @Success 200 {object} response.Response
+// @Failure 400 {object} response.Response
+// @Failure 409 {object} response.Response
+// @Failure 422 {object} response.Response
+// @Router /auth/reset-password/request [post]
+func (h *AuthHandler) ResetPasswordRequestOTP(c *gin.Context) {
+	var input useruc.ResetPasswordRequestOTPInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		response.Error(c, errors.BadRequest("invalid request body"))
+		return
+	}
+	err := h.userUC.ResetPasswordRequestOTP(c.Request.Context(), input)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+}
+
+// VerifyOTPForgotPassword godoc
+// @Summary Verify OTP for resetting password
+// @Description Verify OTP code for resetting password
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body useruc.VerifyOTPForgotPassword true "Verify OTP for resetting password"
+// @Success 200 {object} response.Response
+// @Failure 400 {object} response.Response
+// @Failure 401 {object} response.Response
+// @Failure 422 {object} response.Response
+// @Router /auth/reset-password/verify [post]
+func (h *AuthHandler) VerifyOTPForgotPassword(c *gin.Context) {
+	var input useruc.VerifyOTPForgotPassword
+	if err := c.ShouldBindJSON(&input); err != nil {
+		response.Error(c, errors.BadRequest("invalid request body"))
+		return
+	}
+	err := h.userUC.VerifyOTPForgotPassword(c.Request.Context(), input)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+}
+
+// ResetPassword godoc
+// @Summary Reset password
+// @Description Reset password for user
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body useruc.ResetPasswordInput true "Reset password"
+// @Success 200 {object} response.Response{data=user.User}
+// @Failure 400 {object} response.Response
+// @Failure 401 {object} response.Response
+// @Failure 422 {object} response.Response
+// @Router /auth/reset-password [post]
+func (h *AuthHandler) ResetPassword(c *gin.Context) {
+	var input useruc.ResetPasswordInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		response.Error(c, errors.BadRequest("invalid request body"))
+		return
+	}
+	result, err := h.userUC.ResetPassword(c.Request.Context(), input)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, result)
+}
