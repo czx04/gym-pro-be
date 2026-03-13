@@ -60,7 +60,6 @@ func runSQLScript(ctx context.Context, db *database.DB, content string) error {
 		if s == "" {
 			continue
 		}
-		// Không bỏ qua statement chỉ vì bắt đầu bằng "--" (comment): cả block CREATE TABLE ... có thể có comment ở đầu.
 		if _, err := db.Exec(ctx, s); err != nil {
 			return err
 		}
@@ -81,7 +80,6 @@ func RunAutoMigrate(ctx context.Context, db *database.DB, migrationsPath string)
 		return fmt.Errorf("migrations path: %w", err)
 	}
 
-	// Đảm bảo bảng schema_migrations tồn tại (Docker init đã tạo hoặc app tự tạo lần đầu).
 	if _, err := db.Exec(ctx, createSchemaMigrationsTable); err != nil {
 		return fmt.Errorf("create schema_migrations table: %w", err)
 	}
@@ -101,14 +99,12 @@ func RunAutoMigrate(ctx context.Context, db *database.DB, migrationsPath string)
 		var exists int
 		err := db.QueryRow(ctx, "SELECT 1 FROM schema_migrations WHERE version = $1", f.Version).Scan(&exists)
 		if err == nil {
-			// đã có trong bảng -> bỏ qua
 			continue
 		}
 		if err != pgx.ErrNoRows {
 			return fmt.Errorf("check migration version %d: %w", f.Version, err)
 		}
 
-		// Chưa chạy: đọc file, chạy SQL, ghi bảng, log tên file.
 		path := filepath.Join(absPath, f.Name)
 		content, err := os.ReadFile(path)
 		if err != nil {
