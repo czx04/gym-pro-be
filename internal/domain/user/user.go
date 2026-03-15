@@ -53,6 +53,13 @@ type UpdateProfileInput struct {
 	FatTargetG         *int       `json:"fat_target_g,omitempty" validate:"omitempty,gte=0,lte=300"`
 }
 
+type UserNutritionTarget struct {
+	DailyCalorieTarget *int `json:"daily_calorie_target,omitempty"`
+	ProteinTargetG     *int `json:"protein_target_g,omitempty"`
+	CarbsTargetG       *int `json:"carbs_target_g,omitempty"`
+	FatTargetG         *int `json:"fat_target_g,omitempty"`
+}
+
 type LoginInput struct {
 	Email    string `json:"email" validate:"required,email"`
 	Password string `json:"password" validate:"required"`
