@@ -45,18 +45,28 @@ type MealLogItem struct {
 
 // CreateMealLogInput represents input for creating a meal log
 type CreateMealLogInput struct {
-	LogDate     time.Time `json:"log_date" validate:"required"`
-	MealTime    string    `json:"meal_time" validate:"required,oneof=breakfast lunch dinner snack other"`
-	Notes       *string   `json:"notes,omitempty" validate:"omitempty,max=1000"`
-	Mood        *string   `json:"mood,omitempty" validate:"omitempty,oneof=great good okay tired"`
-	EnergyLevel *int      `json:"energy_level,omitempty" validate:"omitempty,gte=1,lte=5"`
+	LogDate     time.Time              `json:"log_date" validate:"required"`
+	MealTime    string                 `json:"meal_time" validate:"required,oneof=breakfast lunch dinner snack other"`
+	Notes       *string                `json:"notes,omitempty" validate:"omitempty,max=1000"`
+	Mood        *string                `json:"mood,omitempty" validate:"omitempty,oneof=great good okay tired"`
+	EnergyLevel *int                   `json:"energy_level,omitempty" validate:"omitempty,gte=1,lte=5"`
+	Items       []AddItemToMealLogInput `json:"items,omitempty"`
 }
 
 // UpdateMealLogInput represents input for updating a meal log
 type UpdateMealLogInput struct {
-	Notes       *string `json:"notes,omitempty" validate:"omitempty,max=1000"`
-	Mood        *string `json:"mood,omitempty" validate:"omitempty,oneof=great good okay tired"`
-	EnergyLevel *int    `json:"energy_level,omitempty" validate:"omitempty,gte=1,lte=5"`
+	Notes       *string                 `json:"notes,omitempty" validate:"omitempty,max=1000"`
+	Mood        *string                 `json:"mood,omitempty" validate:"omitempty,oneof=great good okay tired"`
+	EnergyLevel *int                    `json:"energy_level,omitempty" validate:"omitempty,gte=1,lte=5"`
+	// Items, when non-nil, replaces ALL existing items in the meal log.
+	Items       []AddItemToMealLogInput `json:"items,omitempty"`
+}
+
+// DailyMealResponse represents the response for getting meal logs by date
+type DailyMealResponse struct {
+	Date    time.Time              `json:"date"`
+	MealLog []MealLog              `json:"meal_logs"`
+	Summary *DailyNutritionSummary `json:"summary"`
 }
 
 // AddItemToMealLogInput represents input for adding item to meal log

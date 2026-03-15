@@ -9,6 +9,7 @@ import (
 	"gym-pro-2026-ptit/internal/domain/user"
 	"gym-pro-2026-ptit/pkg/cloudinary"
 	"gym-pro-2026-ptit/pkg/errors"
+	"gym-pro-2026-ptit/pkg/utils"
 	"gym-pro-2026-ptit/pkg/validator"
 
 	"github.com/google/uuid"
@@ -83,7 +84,13 @@ func (uc *RecipeUseCases) CreateRecipe(ctx context.Context, userID uuid.UUID, in
 	}
 
 	// Fetch fresh to return with computed fields
-	return uc.recipeRepo.GetByID(ctx, recipe.ID)
+	createdRecipe, err := uc.recipeRepo.GetByID(ctx, recipe.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	uc.roundRecipe(createdRecipe)
+	return createdRecipe, nil
 }
 
 func (uc *RecipeUseCases) GetRecipe(ctx context.Context, id uuid.UUID, userID uuid.UUID) (*meal.Recipe, error) {
@@ -100,6 +107,7 @@ func (uc *RecipeUseCases) GetRecipe(ctx context.Context, id uuid.UUID, userID uu
 		return nil, errors.Forbidden("you do not have permission to view this recipe")
 	}
 
+	uc.roundRecipe(recipe)
 	return recipe, nil
 }
 
@@ -114,6 +122,10 @@ func (uc *RecipeUseCases) ListRecipes(ctx context.Context, userID uuid.UUID, pag
 	recipes, total, err := uc.recipeRepo.GetByUserID(ctx, userID, page, pageSize, query)
 	if err != nil {
 		return nil, 0, errors.DatabaseError("failed to list recipes", err)
+	}
+
+	for i := range recipes {
+		uc.roundRecipe(&recipes[i])
 	}
 
 	return recipes, total, nil
@@ -165,7 +177,13 @@ func (uc *RecipeUseCases) UpdateRecipe(ctx context.Context, id uuid.UUID, userID
 		}
 	}
 
-	return uc.recipeRepo.GetByID(ctx, id)
+	recipe, err = uc.recipeRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	uc.roundRecipe(recipe)
+	return recipe, nil
 }
 
 func (uc *RecipeUseCases) DeleteRecipe(ctx context.Context, id uuid.UUID, userID uuid.UUID) error {
@@ -222,3 +240,33 @@ func (uc *RecipeUseCases) processRecipeFoods(ctx context.Context, recipeID uuid.
 	}
 	return nil
 }
+
+func (uc *RecipeUseCases) roundRecipe(recipe *meal.Recipe) {
+	if recipe == nil {
+		return
+	}
+	recipe.TotalCalories = utils.RoundToTwo(recipe.TotalCalories)
+	recipe.TotalProteinG = utils.RoundToTwo(recipe.TotalProteinG)
+	recipe.TotalCarbsG = utils.RoundToTwo(recipe.TotalCarbsG)
+	recipe.TotalFatG = utils.RoundToTwo(recipe.TotalFatG)
+	recipe.PerServingCalories = utils.RoundToTwo(recipe.PerServingCalories)
+	recipe.PerServingProteinG = utils.RoundToTwo(recipe.PerServingProteinG)
+	recipe.PerServingCarbsG = utils.RoundToTwo(recipe.PerServingCarbsG)
+	recipe.PerServingFatG = utils.RoundToTwo(recipe.PerServingFatG)
+
+	for i := range recipe.Foods {
+		rf := &recipe.Foods[i]
+		rf.Calories = utils.RoundToTwo(rf.Calories)
+		rf.ProteinG = utils.RoundToTwo(rf.ProteinG)
+		rf.CarbsG = utils.RoundToTwo(rf.CarbsG)
+		rf.FatG = utils.RoundToTwo(rf.FatG)
+
+		if rf.Food != nil {
+			rf.Food.Calories = utils.RoundToTwo(rf.Food.Calories)
+			rf.Food.ProteinG = utils.RoundToTwo(rf.Food.ProteinG)
+			rf.Food.CarbsG = utils.RoundToTwo(rf.Food.CarbsG)
+			rf.Food.FatG = utils.RoundToTwo(rf.Food.FatG)
+		}
+	}
+}
+

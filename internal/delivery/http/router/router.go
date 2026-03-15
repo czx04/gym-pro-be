@@ -24,6 +24,7 @@ func New(
 	exerciseHandler *handler.ExerciseHandler,
 	foodHandler *handler.FoodHandler,
 	recipeHandler *handler.RecipeHandler,
+	mealLogHandler *handler.MealLogHandler,
 ) *Router {
 	gin.SetMode(cfg.Server.GinMode)
 
@@ -145,22 +146,11 @@ func New(
 			// Meal Log routes
 			mealLogs := authenticated.Group("/meal-logs")
 			{
-				mealLogs.POST("", placeholderHandler("Create meal log"))
-				mealLogs.GET("", placeholderHandler("Get meal log history"))
-				mealLogs.GET("/date/:date", placeholderHandler("Get logs by date"))
-				mealLogs.GET("/:id", placeholderHandler("Get meal log"))
-				mealLogs.PUT("/:id", placeholderHandler("Update meal log"))
-				mealLogs.DELETE("/:id", placeholderHandler("Delete meal log"))
-
-				// Item management
-				mealLogs.POST("/:id/items", placeholderHandler("Add item to meal log"))
-				mealLogs.PUT("/:id/items/:itemId", placeholderHandler("Update item"))
-				mealLogs.DELETE("/:id/items/:itemId", placeholderHandler("Remove item"))
-
-				// Statistics
-				mealLogs.GET("/stats/daily", placeholderHandler("Daily nutrition stats"))
-				mealLogs.GET("/stats/weekly", placeholderHandler("Weekly nutrition stats"))
-				mealLogs.GET("/stats/monthly", placeholderHandler("Monthly nutrition stats"))
+				mealLogs.POST("", mealLogHandler.CreateMealLog)
+				mealLogs.GET("/date/:date", mealLogHandler.GetMealLogsByDate)
+				mealLogs.GET("/:id", mealLogHandler.GetMealLog)
+				mealLogs.PUT("/:id", mealLogHandler.UpdateMealLog)
+				mealLogs.DELETE("/:id", mealLogHandler.DeleteMealLog)
 			}
 
 			// Social routes
