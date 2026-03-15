@@ -3,6 +3,7 @@ package user
 import (
 	"context"
 	"gym-pro-2026-ptit/internal/domain/user"
+	"gym-pro-2026-ptit/internal/helper"
 	"gym-pro-2026-ptit/internal/infrastructure/auth"
 	"gym-pro-2026-ptit/internal/infrastructure/email"
 	"gym-pro-2026-ptit/internal/infrastructure/otp"
@@ -42,6 +43,12 @@ type (
 	}
 	RefreshTokenRequest struct {
 		RefreshToken string `json:"refresh_token" validate:"required"`
+	}
+	UpdateUserNutritionTargetInput struct {
+		DailyCalorieTarget *int `json:"daily_calorie_target,omitempty" validate:"omitempty,gte=500,lte=10000"`
+		ProteinTargetG     *int `json:"protein_target_g,omitempty" validate:"omitempty,gte=0,lte=500"`
+		CarbsTargetG       *int `json:"carbs_target_g,omitempty" validate:"omitempty,gte=0,lte=1000"`
+		FatTargetG         *int `json:"fat_target_g,omitempty" validate:"omitempty,gte=0,lte=300"`
 	}
 )
 
@@ -244,4 +251,41 @@ func (uc *UserUseCases) ResetPassword(ctx context.Context, input ResetPasswordIn
 		return nil, errors.InternalServer("Failed to update password", err)
 	}
 	return u, nil
+}
+
+func (uc *UserUseCases) GetUserNutritionTarget(ctx context.Context, userID uuid.UUID) (*user.UserNutritionTarget, error) {
+	u, err := uc.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return nil, errors.InternalServer("Failed to get user", err)
+	}
+	return &user.UserNutritionTarget{
+		DailyCalorieTarget: u.DailyCalorieTarget,
+		ProteinTargetG:     u.ProteinTargetG,
+		CarbsTargetG:       u.CarbsTargetG,
+		FatTargetG:         u.FatTargetG,
+	}, nil
+}
+
+func (uc *UserUseCases) UpdateUserNutritionTarget(ctx context.Context, userID uuid.UUID, input UpdateUserNutritionTargetInput) (*user.UserNutritionTarget, error) {
+	if err := uc.validator.Validate(input); err != nil {
+		return nil, errors.Validation(err.Error())
+	}
+	u, err := uc.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return nil, errors.InternalServer("Failed to get user", err)
+	}
+
+	helper.SetIfNotNil(&u.DailyCalorieTarget, &input.DailyCalorieTarget)
+	helper.SetIfNotNil(&u.ProteinTargetG, &input.ProteinTargetG)
+	helper.SetIfNotNil(&u.CarbsTargetG, &input.CarbsTargetG)
+	helper.SetIfNotNil(&u.FatTargetG, &input.FatTargetG)
+	if err := uc.userRepo.Update(ctx, u); err != nil {
+		return nil, errors.InternalServer("Failed to update user", err)
+	}
+	return &user.UserNutritionTarget{
+		DailyCalorieTarget: u.DailyCalorieTarget,
+		ProteinTargetG:     u.ProteinTargetG,
+		CarbsTargetG:       u.CarbsTargetG,
+		FatTargetG:         u.FatTargetG,
+	}, nil
 }

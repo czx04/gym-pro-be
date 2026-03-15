@@ -23,6 +23,7 @@ func New(
 	workoutHandler *handler.WorkoutHandler,
 	exerciseHandler *handler.ExerciseHandler,
 	foodHandler *handler.FoodHandler,
+	userHandler *handler.UserHandler,
 ) *Router {
 	gin.SetMode(cfg.Server.GinMode)
 
@@ -67,6 +68,8 @@ func New(
 				users.GET("/me", authHandler.GetMe)
 				users.PUT("/me", authHandler.UpdateMe)
 				users.GET("/:id", placeholderHandler("Get user by ID"))
+				users.GET("/nutrition-target", userHandler.GetUserNutritionTarget)
+				users.PUT("/nutrition-target", userHandler.UpdateUserNutritionTarget)
 			}
 
 			// Exercise routes
