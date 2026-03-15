@@ -39,8 +39,8 @@ type RecipeRepository interface {
 	// GetByID retrieves a recipe by ID with foods
 	GetByID(ctx context.Context, id uuid.UUID) (*Recipe, error)
 
-	// GetByUserID retrieves recipes for a user
-	GetByUserID(ctx context.Context, userID uuid.UUID, page, pageSize int) ([]Recipe, int64, error)
+	// GetByUserID retrieves recipes for a user, optionally filtering by name
+	GetByUserID(ctx context.Context, userID uuid.UUID, page, pageSize int, query string) ([]Recipe, int64, error)
 
 	// Update updates a recipe
 	Update(ctx context.Context, id uuid.UUID, input UpdateRecipeInput) error
@@ -56,6 +56,9 @@ type RecipeRepository interface {
 
 	// RemoveFood removes a food from a recipe
 	RemoveFood(ctx context.Context, recipeFoodID uuid.UUID) error
+
+	// ClearFoods removes all foods from a recipe
+	ClearFoods(ctx context.Context, recipeID uuid.UUID) error
 
 	// GetFoods retrieves foods in a recipe
 	GetFoods(ctx context.Context, recipeID uuid.UUID) ([]RecipeFood, error)

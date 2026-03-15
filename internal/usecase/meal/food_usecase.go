@@ -8,23 +8,30 @@ import (
 	"gym-pro-2026-ptit/internal/domain/user"
 	"gym-pro-2026-ptit/pkg/cloudinary"
 	"gym-pro-2026-ptit/pkg/errors"
+	"gym-pro-2026-ptit/pkg/validator"
 
 	"github.com/google/uuid"
 )
 
 type FoodUseCases struct {
-	foodRepo meal.FoodRepository
-	userRepo user.Repository
+	foodRepo  meal.FoodRepository
+	userRepo  user.Repository
+	validator *validator.Validator
 }
 
-func NewFoodUseCases(foodRepo meal.FoodRepository, userRepo user.Repository) *FoodUseCases {
+func NewFoodUseCases(foodRepo meal.FoodRepository, userRepo user.Repository, validator *validator.Validator) *FoodUseCases {
 	return &FoodUseCases{
-		foodRepo: foodRepo,
-		userRepo: userRepo,
+		foodRepo:  foodRepo,
+		userRepo:  userRepo,
+		validator: validator,
 	}
 }
 
 func (uc *FoodUseCases) CreateFood(ctx context.Context, userID uuid.UUID, input meal.CreateFoodInput) (*meal.Food, error) {
+	if err := uc.validator.Validate(input); err != nil {
+		return nil, errors.Validation(err.Error())
+	}
+
 	// Look up user to determine if they are an admin
 	u, err := uc.userRepo.GetByID(ctx, userID)
 	if err != nil {
@@ -124,6 +131,10 @@ func (uc *FoodUseCases) SearchFoods(ctx context.Context, userID uuid.UUID, filte
 }
 
 func (uc *FoodUseCases) UpdateFood(ctx context.Context, id uuid.UUID, userID uuid.UUID, input meal.UpdateFoodInput) (*meal.Food, error) {
+	if err := uc.validator.Validate(input); err != nil {
+		return nil, errors.Validation(err.Error())
+	}
+
 	if input.Category != nil {
 		if !meal.IsValidFoodCategory(*input.Category) {
 			return nil, errors.BadRequest("invalid category: must be one of protein, carb, vegetable, fruit, dairy, fat, snack, beverage, other")
