@@ -48,39 +48,39 @@ type RecipeFood struct {
 
 // CreateRecipeInput represents input for creating a recipe
 type CreateRecipeInput struct {
-	Name         string  `json:"name" validate:"required,min=2,max=200"`
-	Description  *string `json:"description,omitempty" validate:"omitempty,max=1000"`
-	PrepTimeMins *int    `json:"prep_time_mins,omitempty" validate:"omitempty,gte=0,lte=1440"`
-	CookTimeMins *int    `json:"cook_time_mins,omitempty" validate:"omitempty,gte=0,lte=1440"`
-	Servings     int     `json:"servings" validate:"required,gte=1,lte=100"`
-	Instructions *string `json:"instructions,omitempty" validate:"omitempty,max=5000"`
-	ImageURL     *string `json:"image_url,omitempty" validate:"omitempty,url"`
-	IsPublic     bool    `json:"is_public"`
-	Visibility   string  `json:"visibility" validate:"required,oneof=public private friends"`
+	Name         string  `json:"name" form:"name" validate:"required,min=2,max=200"`
+	Description  *string `json:"description,omitempty" form:"description" validate:"omitempty,max=1000"`
+	PrepTimeMins *int    `json:"prep_time_mins,omitempty" form:"prep_time_mins" validate:"omitempty,gte=0,lte=1440"`
+	CookTimeMins *int    `json:"cook_time_mins,omitempty" form:"cook_time_mins" validate:"omitempty,gte=0,lte=1440"`
+	Servings     int     `json:"servings" form:"servings" validate:"required,gte=1,lte=100"`
+	Instructions *string `json:"instructions,omitempty" form:"instructions" validate:"omitempty,max=5000"`
+	ImageURL     *string `json:"image_url,omitempty" form:"image_url" validate:"omitempty,url"`
+	IsPublic     bool    `json:"is_public" form:"is_public"`
+	Visibility   string  `json:"visibility" form:"visibility" validate:"omitempty,oneof=public private friends"`
+	Foods        string  `json:"foods,omitempty" form:"foods" validate:"omitempty"` // JSON string representation of []AddFoodToRecipeInput
 }
 
 // UpdateRecipeInput represents input for updating a recipe
 type UpdateRecipeInput struct {
-	Name         *string `json:"name,omitempty" validate:"omitempty,min=2,max=200"`
-	Description  *string `json:"description,omitempty" validate:"omitempty,max=1000"`
-	PrepTimeMins *int    `json:"prep_time_mins,omitempty" validate:"omitempty,gte=0,lte=1440"`
-	CookTimeMins *int    `json:"cook_time_mins,omitempty" validate:"omitempty,gte=0,lte=1440"`
-	Servings     *int    `json:"servings,omitempty" validate:"omitempty,gte=1,lte=100"`
-	Instructions *string `json:"instructions,omitempty" validate:"omitempty,max=5000"`
-	ImageURL     *string `json:"image_url,omitempty" validate:"omitempty,url"`
-	IsPublic     *bool   `json:"is_public,omitempty"`
-	Visibility   *string `json:"visibility,omitempty" validate:"omitempty,oneof=public private friends"`
+	Name         *string `json:"name,omitempty" form:"name" validate:"omitempty,min=2,max=200"`
+	Description  *string `json:"description,omitempty" form:"description" validate:"omitempty,max=1000"`
+	PrepTimeMins *int    `json:"prep_time_mins,omitempty" form:"prep_time_mins" validate:"omitempty,gte=0,lte=1440"`
+	CookTimeMins *int    `json:"cook_time_mins,omitempty" form:"cook_time_mins" validate:"omitempty,gte=0,lte=1440"`
+	Servings     *int    `json:"servings,omitempty" form:"servings" validate:"omitempty,gte=1,lte=100"`
+	Instructions *string `json:"instructions,omitempty" form:"instructions" validate:"omitempty,max=5000"`
+	ImageURL     *string `json:"image_url,omitempty" form:"image_url" validate:"omitempty,url"`
+	IsPublic     *bool   `json:"is_public,omitempty" form:"is_public"`
+	Visibility   *string `json:"visibility,omitempty" form:"visibility" validate:"omitempty,oneof=public private friends"`
+	Foods        *string `json:"foods,omitempty" form:"foods" validate:"omitempty"` // JSON string representation of []AddFoodToRecipeInput
 }
 
 // AddFoodToRecipeInput represents input for adding food to recipe
 type AddFoodToRecipeInput struct {
 	FoodID   uuid.UUID `json:"food_id" validate:"required"`
 	Quantity float64   `json:"quantity" validate:"required,gt=0"`
-	Unit     string    `json:"unit" validate:"required"`
 }
 
 // UpdateFoodInRecipeInput represents input for updating food quantity
 type UpdateFoodInRecipeInput struct {
 	Quantity *float64 `json:"quantity,omitempty" validate:"omitempty,gt=0"`
-	Unit     *string  `json:"unit,omitempty"`
 }

@@ -23,6 +23,7 @@ func New(
 	workoutHandler *handler.WorkoutHandler,
 	exerciseHandler *handler.ExerciseHandler,
 	foodHandler *handler.FoodHandler,
+	recipeHandler *handler.RecipeHandler,
 ) *Router {
 	gin.SetMode(cfg.Server.GinMode)
 
@@ -129,13 +130,13 @@ func New(
 			// Recipe routes
 			recipes := authenticated.Group("/recipes")
 			{
-				recipes.POST("", placeholderHandler("Create recipe"))
-				recipes.GET("", placeholderHandler("List recipes"))
-				recipes.GET("/:id", placeholderHandler("Get recipe"))
-				recipes.PUT("/:id", placeholderHandler("Update recipe"))
-				recipes.DELETE("/:id", placeholderHandler("Delete recipe"))
+				recipes.POST("", recipeHandler.CreateRecipe)
+				recipes.GET("", recipeHandler.ListRecipes)
+				recipes.GET("/:id", recipeHandler.GetRecipe)
+				recipes.PUT("/:id", recipeHandler.UpdateRecipe)
+				recipes.DELETE("/:id", recipeHandler.DeleteRecipe)
 
-				// Food management in recipes
+				// Food management in recipes (Foods are managed during recipe Create/Update as requested)
 				recipes.POST("/:id/foods", placeholderHandler("Add food to recipe"))
 				recipes.PUT("/:id/foods/:foodId", placeholderHandler("Update food in recipe"))
 				recipes.DELETE("/:id/foods/:foodId", placeholderHandler("Remove food from recipe"))
