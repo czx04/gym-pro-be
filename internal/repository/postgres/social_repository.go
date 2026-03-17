@@ -83,9 +83,9 @@ func NewPostRepository(db *database.DB) social.PostRepository {
 func (r *postRepository) Create(ctx context.Context, post *social.Post) error {
 	query := `
 		INSERT INTO posts (
-			id, user_id, content_type, content_id, caption,
+			id, user_id, content_type, content_id, caption, feeling, location_name, hashtags,
 			likes_count, comments_count, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 	`
 
 	_, err := r.db.Exec(ctx, query,
@@ -94,6 +94,9 @@ func (r *postRepository) Create(ctx context.Context, post *social.Post) error {
 		post.ContentType,
 		post.ContentID,
 		post.Caption,
+		post.Feeling,
+		post.LocationName,
+		post.Hashtags,
 		post.LikesCount,
 		post.CommentsCount,
 		post.CreatedAt,
@@ -115,9 +118,9 @@ func (r *postRepository) CreateWithMedia(ctx context.Context, post *social.Post,
 
 	insertPostQuery := `
 		INSERT INTO posts (
-			id, user_id, content_type, content_id, caption,
+			id, user_id, content_type, content_id, caption, feeling, location_name, hashtags,
 			likes_count, comments_count, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 	`
 
 	_, err = tx.Exec(ctx, insertPostQuery,
@@ -126,6 +129,9 @@ func (r *postRepository) CreateWithMedia(ctx context.Context, post *social.Post,
 		post.ContentType,
 		post.ContentID,
 		post.Caption,
+		post.Feeling,
+		post.LocationName,
+		post.Hashtags,
 		post.LikesCount,
 		post.CommentsCount,
 		post.CreatedAt,
@@ -183,6 +189,9 @@ func (r *postRepository) GetByID(ctx context.Context, id uuid.UUID) (*social.Pos
 			p.content_type,
 			p.content_id,
 			p.caption,
+			p.feeling,
+			p.location_name,
+			p.hashtags,
 			p.likes_count,
 			p.comments_count,
 			p.created_at,
@@ -204,6 +213,9 @@ func (r *postRepository) GetByID(ctx context.Context, id uuid.UUID) (*social.Pos
 		&post.ContentType,
 		&post.ContentID,
 		&post.Caption,
+		&post.Feeling,
+		&post.LocationName,
+		&post.Hashtags,
 		&post.LikesCount,
 		&post.CommentsCount,
 		&post.CreatedAt,
@@ -245,6 +257,9 @@ func (r *postRepository) GetByUserID(ctx context.Context, userID uuid.UUID, page
 			p.content_type,
 			p.content_id,
 			p.caption,
+			p.feeling,
+			p.location_name,
+			p.hashtags,
 			p.likes_count,
 			p.comments_count,
 			p.created_at,
@@ -276,6 +291,9 @@ func (r *postRepository) GetByUserID(ctx context.Context, userID uuid.UUID, page
 			&post.ContentType,
 			&post.ContentID,
 			&post.Caption,
+			&post.Feeling,
+			&post.LocationName,
+			&post.Hashtags,
 			&post.LikesCount,
 			&post.CommentsCount,
 			&post.CreatedAt,
@@ -321,6 +339,9 @@ func (r *postRepository) GetFeed(ctx context.Context, userID uuid.UUID, filter s
 			p.content_type,
 			p.content_id,
 			p.caption,
+			p.feeling,
+			p.location_name,
+			p.hashtags,
 			p.likes_count,
 			p.comments_count,
 			p.created_at,
@@ -356,6 +377,9 @@ func (r *postRepository) GetFeed(ctx context.Context, userID uuid.UUID, filter s
 			&item.Post.ContentType,
 			&item.Post.ContentID,
 			&item.Post.Caption,
+			&item.Post.Feeling,
+			&item.Post.LocationName,
+			&item.Post.Hashtags,
 			&item.Post.LikesCount,
 			&item.Post.CommentsCount,
 			&item.Post.CreatedAt,

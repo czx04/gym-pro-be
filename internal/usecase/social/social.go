@@ -8,10 +8,12 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/url"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"gym-pro-2026-ptit/internal/config"
 	socialdomain "gym-pro-2026-ptit/internal/domain/social"
@@ -52,8 +54,15 @@ func NewSocialUseCases(
 type CreatePostInput struct {
 	Caption     *string                             `json:"caption,omitempty" validate:"omitempty,max=2000"`
 	Media       []socialdomain.CreatePostMediaInput `json:"media,omitempty" validate:"omitempty,dive"`
-	ContentType *string                             `json:"content_type,omitempty" validate:"omitempty,oneof=workout_plan meal_log"`
+	ContentType *string                             `json:"content_type,omitempty"`
 	ContentID   *uuid.UUID                          `json:"content_id,omitempty"`
+	Feeling     *string                             `json:"feeling,omitempty" validate:"omitempty,max=100"`
+	Location    *CreatePostLocationInput            `json:"location,omitempty" validate:"omitempty"`
+	Hashtags    []string                            `json:"hashtags,omitempty" validate:"omitempty,dive,max=50"`
+}
+
+type CreatePostLocationInput struct {
+	Name string `json:"name" validate:"required,max=255"`
 }
 
 type CreateMediaSignatureInput struct {
@@ -111,16 +120,27 @@ type PostMediaOutput struct {
 type PostOutput struct {
 	ID              uuid.UUID         `json:"id"`
 	Author          AuthorOutput      `json:"author"`
+	ContentType     string            `json:"content_type"`
+	ContentID       *uuid.UUID        `json:"content_id"`
 	StreakText      string            `json:"streak_text"`
 	TimeLabel       string            `json:"time_label"`
 	Caption         string            `json:"caption"`
 	Media           []PostMediaOutput `json:"media"`
+	Feeling         *string           `json:"feeling"`
+	Location        *PostLocation     `json:"location"`
+	Hashtags        []string          `json:"hashtags"`
 	LikeCount       int               `json:"like_count"`
 	CommentCount    int               `json:"comment_count"`
 	IsLikedByMe     bool              `json:"is_liked_by_me"`
 	SharedExercises []interface{}     `json:"shared_exercises,omitempty"`
 	CreatedAt       time.Time         `json:"created_at"`
 }
+
+type PostLocation struct {
+	Name string `json:"name"`
+}
+
+var hashtagPattern = regexp.MustCompile(`(?:^|[^[:alnum:]_])#([[:alnum:]_]+)`)
 
 type UserProfileOutput struct {
 	ID             uuid.UUID `json:"id"`
@@ -329,13 +349,28 @@ func mapPost(post *socialdomain.Post, isLiked bool) PostOutput {
 		media = append(media, PostMediaOutput{Type: item.ResourceType, URL: urlValue})
 	}
 
+	hashtags := post.Hashtags
+	if hashtags == nil {
+		hashtags = []string{}
+	}
+
+	var location *PostLocation
+	if post.LocationName != nil && strings.TrimSpace(*post.LocationName) != "" {
+		location = &PostLocation{Name: *post.LocationName}
+	}
+
 	return PostOutput{
 		ID:              post.ID,
 		Author:          author,
+		ContentType:     post.ContentType,
+		ContentID:       post.ContentID,
 		StreakText:      "0 DAY STREAK",
 		TimeLabel:       humanizeTime(post.CreatedAt),
 		Caption:         caption,
 		Media:           media,
+		Feeling:         post.Feeling,
+		Location:        location,
+		Hashtags:        hashtags,
 		LikeCount:       post.LikesCount,
 		CommentCount:    post.CommentsCount,
 		IsLikedByMe:     isLiked,
@@ -477,14 +512,37 @@ func (uc *SocialUseCases) CreatePost(ctx context.Context, userID uuid.UUID, inpu
 		return nil, errors.Validation(err.Error())
 	}
 
-	contentType := "workout_plan"
-	if input.ContentType != nil {
-		contentType = *input.ContentType
+	contentType := normalizeContentType(input.ContentType)
+	if !isSupportedPostContentType(contentType) {
+		return nil, errors.Validation("content_type must be one of [general workout_plan meal_log]")
 	}
 
-	contentID := uuid.Nil
-	if input.ContentID != nil {
-		contentID = *input.ContentID
+	caption := normalizeCaption(input.Caption)
+	if caption == nil && len(input.Media) == 0 {
+		return nil, errors.Validation("caption is required when media is empty")
+	}
+
+	var contentID *uuid.UUID
+	if contentType != "general" {
+		if input.ContentID == nil {
+			return nil, errors.Validation("content_id is required when content_type is not general")
+		}
+		contentID = input.ContentID
+	}
+
+	feeling, err := normalizeOptionalText(input.Feeling, 100, "feeling")
+	if err != nil {
+		return nil, err
+	}
+
+	locationName, err := normalizeLocationName(input.Location)
+	if err != nil {
+		return nil, err
+	}
+
+	hashtags, err := normalizeHashtags(caption, input.Hashtags)
+	if err != nil {
+		return nil, err
 	}
 
 	now := time.Now()
@@ -493,7 +551,10 @@ func (uc *SocialUseCases) CreatePost(ctx context.Context, userID uuid.UUID, inpu
 		UserID:        userID,
 		ContentType:   contentType,
 		ContentID:     contentID,
-		Caption:       input.Caption,
+		Caption:       caption,
+		Feeling:       feeling,
+		LocationName:  locationName,
+		Hashtags:      hashtags,
 		LikesCount:    0,
 		CommentsCount: 0,
 		CreatedAt:     now,
@@ -502,9 +563,13 @@ func (uc *SocialUseCases) CreatePost(ctx context.Context, userID uuid.UUID, inpu
 
 	media := make([]socialdomain.PostMedia, 0, len(input.Media))
 	for idx, item := range input.Media {
+		publicID := strings.TrimSpace(item.PublicID)
+		if publicID == "" {
+			return nil, errors.Validation("public_id is required")
+		}
 		media = append(media, socialdomain.PostMedia{
 			PostID:       post.ID,
-			PublicID:     strings.TrimSpace(item.PublicID),
+			PublicID:     publicID,
 			ResourceType: item.ResourceType,
 			OrderIndex:   idx,
 		})
@@ -584,4 +649,142 @@ func stringPointerOrNil(v string) *string {
 		return nil
 	}
 	return &trimmed
+}
+
+func normalizeContentType(contentType *string) string {
+	if contentType == nil {
+		return "general"
+	}
+
+	trimmed := strings.ToLower(strings.TrimSpace(*contentType))
+	if trimmed == "" {
+		return "general"
+	}
+
+	return trimmed
+}
+
+func isSupportedPostContentType(contentType string) bool {
+	switch contentType {
+	case "general", "workout_plan", "meal_log":
+		return true
+	default:
+		return false
+	}
+}
+
+func normalizeCaption(caption *string) *string {
+	if caption == nil {
+		return nil
+	}
+
+	trimmed := strings.TrimSpace(*caption)
+	if trimmed == "" {
+		return nil
+	}
+
+	return &trimmed
+}
+
+func normalizeOptionalText(value *string, maxLen int, field string) (*string, error) {
+	if value == nil {
+		return nil, nil
+	}
+
+	trimmed := strings.TrimSpace(*value)
+	if trimmed == "" {
+		return nil, nil
+	}
+
+	if utf8.RuneCountInString(trimmed) > maxLen {
+		return nil, errors.Validation(fmt.Sprintf("%s must be at most %d characters long", field, maxLen))
+	}
+
+	return &trimmed, nil
+}
+
+func normalizeLocationName(location *CreatePostLocationInput) (*string, error) {
+	if location == nil {
+		return nil, nil
+	}
+
+	trimmed := strings.TrimSpace(location.Name)
+	if trimmed == "" {
+		return nil, errors.Validation("location.name is required when location is provided")
+	}
+
+	if utf8.RuneCountInString(trimmed) > 255 {
+		return nil, errors.Validation("location.name must be at most 255 characters long")
+	}
+
+	return &trimmed, nil
+}
+
+func normalizeHashtags(caption *string, input []string) ([]string, error) {
+	canonical := make([]string, 0)
+	seen := make(map[string]struct{})
+
+	appendTag := func(raw string) error {
+		normalized, err := normalizeHashtag(raw)
+		if err != nil {
+			return err
+		}
+		if normalized == "" {
+			return nil
+		}
+		if _, exists := seen[normalized]; exists {
+			return nil
+		}
+		seen[normalized] = struct{}{}
+		canonical = append(canonical, normalized)
+		return nil
+	}
+
+	for _, item := range input {
+		if err := appendTag(item); err != nil {
+			return nil, err
+		}
+	}
+
+	if caption != nil {
+		matches := hashtagPattern.FindAllStringSubmatch(*caption, -1)
+		for _, match := range matches {
+			if len(match) < 2 {
+				continue
+			}
+			if err := appendTag(match[1]); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return canonical, nil
+}
+
+func normalizeHashtag(raw string) (string, error) {
+	trimmed := strings.TrimSpace(strings.ToLower(raw))
+	trimmed = strings.TrimLeft(trimmed, "#")
+	if trimmed == "" {
+		return "", nil
+	}
+
+	runes := make([]rune, 0, len(trimmed))
+	for _, r := range trimmed {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' {
+			runes = append(runes, r)
+			continue
+		}
+		break
+	}
+
+	normalized := string(runes)
+	if normalized == "" {
+		return "", nil
+	}
+
+	if utf8.RuneCountInString(normalized) > 50 {
+		return "", errors.Validation("hashtags must be at most 50 characters long")
+	}
+
+	return normalized, nil
 }

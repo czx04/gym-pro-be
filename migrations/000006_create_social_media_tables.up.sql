@@ -41,3 +41,18 @@ CREATE TABLE IF NOT EXISTS post_media (
 
 CREATE INDEX IF NOT EXISTS idx_post_media_post ON post_media(post_id);
 CREATE INDEX IF NOT EXISTS idx_post_media_order ON post_media(post_id, order_index);
+
+ALTER TABLE posts
+    ALTER COLUMN content_id DROP NOT NULL,
+    ALTER COLUMN content_type SET DEFAULT 'general';
+
+ALTER TABLE posts
+    DROP CONSTRAINT IF EXISTS check_content_type;
+
+ALTER TABLE posts
+    ADD CONSTRAINT check_content_type CHECK (content_type IN ('general', 'workout_plan', 'meal_log'));
+
+ALTER TABLE posts
+    ADD COLUMN IF NOT EXISTS feeling VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS location_name VARCHAR(255),
+    ADD COLUMN IF NOT EXISTS hashtags TEXT[] NOT NULL DEFAULT '{}'::TEXT[];

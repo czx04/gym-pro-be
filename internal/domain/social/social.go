@@ -17,9 +17,12 @@ type Follow struct {
 type Post struct {
 	ID            uuid.UUID   `json:"id"`
 	UserID        uuid.UUID   `json:"user_id"`
-	ContentType   string      `json:"content_type"` // workout_plan, meal_log
-	ContentID     uuid.UUID   `json:"content_id"`   // References workout_plan_id or meal_log_id
+	ContentType   string      `json:"content_type"`
+	ContentID     *uuid.UUID  `json:"content_id,omitempty"`
 	Caption       *string     `json:"caption,omitempty"`
+	Feeling       *string     `json:"feeling,omitempty"`
+	LocationName  *string     `json:"location_name,omitempty"`
+	Hashtags      []string    `json:"hashtags,omitempty"`
 	LikesCount    int         `json:"likes_count"`
 	CommentsCount int         `json:"comments_count"`
 	CreatedAt     time.Time   `json:"created_at"`
@@ -58,6 +61,10 @@ type PostUser struct {
 	AvatarURL *string   `json:"avatar_url,omitempty"`
 }
 
+type PostLocation struct {
+	Name string `json:"name"`
+}
+
 // Like represents a like on a post
 type Like struct {
 	ID        uuid.UUID `json:"id"`
@@ -79,10 +86,17 @@ type Comment struct {
 
 // CreatePostInput represents input for creating a post
 type CreatePostInput struct {
-	ContentType string                 `json:"content_type,omitempty" validate:"omitempty,oneof=workout_plan meal_log"`
+	ContentType string                 `json:"content_type,omitempty"`
 	ContentID   *uuid.UUID             `json:"content_id,omitempty"`
 	Caption     *string                `json:"caption,omitempty" validate:"omitempty,max=2000"`
 	Media       []CreatePostMediaInput `json:"media,omitempty" validate:"omitempty,dive"`
+	Feeling     *string                `json:"feeling,omitempty" validate:"omitempty,max=100"`
+	Location    *CreatePostLocation    `json:"location,omitempty" validate:"omitempty"`
+	Hashtags    []string               `json:"hashtags,omitempty" validate:"omitempty,dive,max=50"`
+}
+
+type CreatePostLocation struct {
+	Name string `json:"name" validate:"required,max=255"`
 }
 
 type CreatePostMediaInput struct {
