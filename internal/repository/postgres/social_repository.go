@@ -4,8 +4,10 @@ import (
 	"context"
 	"gym-pro-2026-ptit/internal/domain/social"
 	"gym-pro-2026-ptit/internal/infrastructure/database"
+	"gym-pro-2026-ptit/pkg/errors"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 // FollowRepository implementation
@@ -31,8 +33,14 @@ func (r *followRepository) Unfollow(ctx context.Context, followerID, followingID
 }
 
 func (r *followRepository) IsFollowing(ctx context.Context, followerID, followingID uuid.UUID) (bool, error) {
-	// TODO: Check if follow relationship exists
-	return false, nil
+	query := `SELECT EXISTS(SELECT 1 FROM follows WHERE follower_id = $1 AND following_id = $2)`
+
+	var isFollowing bool
+	if err := r.db.QueryRow(ctx, query, followerID, followingID).Scan(&isFollowing); err != nil {
+		return false, errors.DatabaseError("check following relationship", err)
+	}
+
+	return isFollowing, nil
 }
 
 func (r *followRepository) GetFollowers(ctx context.Context, userID uuid.UUID, page, pageSize int) ([]social.PostUser, int64, error) {
@@ -50,10 +58,17 @@ func (r *followRepository) GetFollowing(ctx context.Context, userID uuid.UUID, p
 }
 
 func (r *followRepository) GetStats(ctx context.Context, userID uuid.UUID) (*social.FollowStats, error) {
-	// TODO: Count followers and following
-	// Query 1: SELECT COUNT(*) FROM follows WHERE following_id = $1 (followers)
-	// Query 2: SELECT COUNT(*) FROM follows WHERE follower_id = $1 (following)
-	return nil, nil
+	stats := &social.FollowStats{}
+
+	if err := r.db.QueryRow(ctx, `SELECT COUNT(*) FROM follows WHERE following_id = $1`, userID).Scan(&stats.FollowersCount); err != nil {
+		return nil, errors.DatabaseError("count followers", err)
+	}
+
+	if err := r.db.QueryRow(ctx, `SELECT COUNT(*) FROM follows WHERE follower_id = $1`, userID).Scan(&stats.FollowingCount); err != nil {
+		return nil, errors.DatabaseError("count following", err)
+	}
+
+	return stats, nil
 }
 
 // PostRepository implementation
@@ -65,40 +80,344 @@ func NewPostRepository(db *database.DB) social.PostRepository {
 	return &postRepository{db: db}
 }
 
-// TODO: Implement all PostRepository methods
 func (r *postRepository) Create(ctx context.Context, post *social.Post) error {
-	// TODO: Insert into posts table
-	// content_type: 'workout_plan' or 'meal_log'
-	// content_id: references workout_plan_id or meal_log_id
+	query := `
+		INSERT INTO posts (
+			id, user_id, content_type, content_id, caption,
+			likes_count, comments_count, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+	`
+
+	_, err := r.db.Exec(ctx, query,
+		post.ID,
+		post.UserID,
+		post.ContentType,
+		post.ContentID,
+		post.Caption,
+		post.LikesCount,
+		post.CommentsCount,
+		post.CreatedAt,
+		post.UpdatedAt,
+	)
+	if err != nil {
+		return errors.DatabaseError("create post", err)
+	}
+
+	return nil
+}
+
+func (r *postRepository) CreateWithMedia(ctx context.Context, post *social.Post, media []social.PostMedia) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return errors.DatabaseError("begin create post transaction", err)
+	}
+	defer tx.Rollback(ctx)
+
+	insertPostQuery := `
+		INSERT INTO posts (
+			id, user_id, content_type, content_id, caption,
+			likes_count, comments_count, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+	`
+
+	_, err = tx.Exec(ctx, insertPostQuery,
+		post.ID,
+		post.UserID,
+		post.ContentType,
+		post.ContentID,
+		post.Caption,
+		post.LikesCount,
+		post.CommentsCount,
+		post.CreatedAt,
+		post.UpdatedAt,
+	)
+	if err != nil {
+		return errors.DatabaseError("insert post", err)
+	}
+
+	for _, m := range media {
+		var resourceType string
+		attachAssetQuery := `
+			UPDATE social_media_assets
+			SET status = 'attached',
+				post_id = $3,
+				attached_at = NOW(),
+				updated_at = NOW()
+			WHERE public_id = $1
+			  AND user_id = $2
+			  AND status = 'ready'
+			RETURNING resource_type
+		`
+
+		err := tx.QueryRow(ctx, attachAssetQuery, m.PublicID, post.UserID, post.ID).Scan(&resourceType)
+		if err != nil {
+			if err == pgx.ErrNoRows {
+				return errors.Conflict("media asset not ready or not owned by current user")
+			}
+			return errors.DatabaseError("attach media asset", err)
+		}
+
+		insertPostMediaQuery := `
+			INSERT INTO post_media (post_id, public_id, resource_type, order_index)
+			VALUES ($1, $2, $3, $4)
+		`
+
+		_, err = tx.Exec(ctx, insertPostMediaQuery, post.ID, m.PublicID, resourceType, m.OrderIndex)
+		if err != nil {
+			return errors.DatabaseError("insert post media", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return errors.DatabaseError("commit create post transaction", err)
+	}
+
 	return nil
 }
 
 func (r *postRepository) GetByID(ctx context.Context, id uuid.UUID) (*social.Post, error) {
-	// TODO: Query post with user details
-	// JOIN users table
-	return nil, nil
+	query := `
+		SELECT
+			p.id,
+			p.user_id,
+			p.content_type,
+			p.content_id,
+			p.caption,
+			p.likes_count,
+			p.comments_count,
+			p.created_at,
+			p.updated_at,
+			u.id,
+			u.name,
+			u.avatar_url
+		FROM posts p
+		JOIN users u ON u.id = p.user_id
+		WHERE p.id = $1
+	`
+
+	var post social.Post
+	post.User = &social.PostUser{}
+
+	err := r.db.QueryRow(ctx, query, id).Scan(
+		&post.ID,
+		&post.UserID,
+		&post.ContentType,
+		&post.ContentID,
+		&post.Caption,
+		&post.LikesCount,
+		&post.CommentsCount,
+		&post.CreatedAt,
+		&post.UpdatedAt,
+		&post.User.ID,
+		&post.User.Name,
+		&post.User.AvatarURL,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, errors.NotFound("post")
+		}
+		return nil, errors.DatabaseError("get post by id", err)
+	}
+
+	return &post, nil
 }
 
 func (r *postRepository) GetByUserID(ctx context.Context, userID uuid.UUID, page, pageSize int) ([]social.Post, int64, error) {
-	// TODO: Query user's posts with pagination
-	// Include user details
-	return nil, 0, nil
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 20
+	}
+
+	offset := (page - 1) * pageSize
+
+	countQuery := `SELECT COUNT(*) FROM posts WHERE user_id = $1`
+	var total int64
+	if err := r.db.QueryRow(ctx, countQuery, userID).Scan(&total); err != nil {
+		return nil, 0, errors.DatabaseError("count user posts", err)
+	}
+
+	query := `
+		SELECT
+			p.id,
+			p.user_id,
+			p.content_type,
+			p.content_id,
+			p.caption,
+			p.likes_count,
+			p.comments_count,
+			p.created_at,
+			p.updated_at,
+			u.id,
+			u.name,
+			u.avatar_url
+		FROM posts p
+		JOIN users u ON u.id = p.user_id
+		WHERE p.user_id = $1
+		ORDER BY p.created_at DESC
+		LIMIT $2 OFFSET $3
+	`
+
+	rows, err := r.db.Query(ctx, query, userID, pageSize, offset)
+	if err != nil {
+		return nil, 0, errors.DatabaseError("get posts by user id", err)
+	}
+	defer rows.Close()
+
+	posts := make([]social.Post, 0)
+	for rows.Next() {
+		var post social.Post
+		post.User = &social.PostUser{}
+
+		if err := rows.Scan(
+			&post.ID,
+			&post.UserID,
+			&post.ContentType,
+			&post.ContentID,
+			&post.Caption,
+			&post.LikesCount,
+			&post.CommentsCount,
+			&post.CreatedAt,
+			&post.UpdatedAt,
+			&post.User.ID,
+			&post.User.Name,
+			&post.User.AvatarURL,
+		); err != nil {
+			return nil, 0, errors.DatabaseError("scan user posts", err)
+		}
+
+		posts = append(posts, post)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, 0, errors.DatabaseError("iterate user posts", err)
+	}
+
+	return posts, total, nil
 }
 
 func (r *postRepository) GetFeed(ctx context.Context, userID uuid.UUID, filter social.GetFeedFilter) ([]social.ActivityFeedItem, int64, error) {
-	// TODO: Get activity feed for user
-	// Query posts from users that current user follows
-	// Include:
-	// - Post details
-	// - User who posted
-	// - Whether current user has liked the post
-	// Complex query:
-	// SELECT posts.*, users.*, EXISTS(SELECT 1 FROM likes WHERE post_id = posts.id AND user_id = $1) as is_liked
-	// FROM posts
-	// JOIN users ON posts.user_id = users.id
-	// WHERE posts.user_id IN (SELECT following_id FROM follows WHERE follower_id = $1)
-	// ORDER BY posts.created_at DESC
-	return nil, 0, nil
+	if filter.Page < 1 {
+		filter.Page = 1
+	}
+	if filter.PageSize < 1 {
+		filter.PageSize = 20
+	}
+
+	offset := (filter.Page - 1) * filter.PageSize
+
+	countQuery := `SELECT COUNT(*) FROM posts`
+
+	var total int64
+	if err := r.db.QueryRow(ctx, countQuery).Scan(&total); err != nil {
+		return nil, 0, errors.DatabaseError("count feed posts", err)
+	}
+
+	query := `
+		SELECT
+			p.id,
+			p.user_id,
+			p.content_type,
+			p.content_id,
+			p.caption,
+			p.likes_count,
+			p.comments_count,
+			p.created_at,
+			p.updated_at,
+			u.id,
+			u.name,
+			u.avatar_url,
+			EXISTS(
+				SELECT 1
+				FROM likes l
+				WHERE l.post_id = p.id
+				  AND l.user_id = $1
+			) AS is_liked
+		FROM posts p
+		JOIN users u ON u.id = p.user_id
+		ORDER BY p.created_at DESC
+		LIMIT $2 OFFSET $3
+	`
+
+	rows, err := r.db.Query(ctx, query, userID, filter.PageSize, offset)
+	if err != nil {
+		return nil, 0, errors.DatabaseError("get feed", err)
+	}
+	defer rows.Close()
+
+	feed := make([]social.ActivityFeedItem, 0)
+	for rows.Next() {
+		item := social.ActivityFeedItem{Post: &social.Post{User: &social.PostUser{}}}
+
+		if err := rows.Scan(
+			&item.Post.ID,
+			&item.Post.UserID,
+			&item.Post.ContentType,
+			&item.Post.ContentID,
+			&item.Post.Caption,
+			&item.Post.LikesCount,
+			&item.Post.CommentsCount,
+			&item.Post.CreatedAt,
+			&item.Post.UpdatedAt,
+			&item.Post.User.ID,
+			&item.Post.User.Name,
+			&item.Post.User.AvatarURL,
+			&item.IsLiked,
+		); err != nil {
+			return nil, 0, errors.DatabaseError("scan feed item", err)
+		}
+
+		item.CreatedAt = item.Post.CreatedAt
+		feed = append(feed, item)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, 0, errors.DatabaseError("iterate feed", err)
+	}
+
+	return feed, total, nil
+}
+
+func (r *postRepository) GetMediaByPostIDs(ctx context.Context, postIDs []uuid.UUID) (map[uuid.UUID][]social.PostMedia, error) {
+	grouped := make(map[uuid.UUID][]social.PostMedia)
+	if len(postIDs) == 0 {
+		return grouped, nil
+	}
+
+	query := `
+		SELECT pm.post_id, pm.public_id, pm.resource_type, sma.secure_url, pm.order_index
+		FROM post_media pm
+		LEFT JOIN social_media_assets sma ON sma.public_id = pm.public_id
+		WHERE pm.post_id = $1
+		ORDER BY pm.order_index ASC, pm.created_at ASC
+	`
+
+	for _, postID := range postIDs {
+		rows, err := r.db.Query(ctx, query, postID)
+		if err != nil {
+			return nil, errors.DatabaseError("get post media", err)
+		}
+
+		items := make([]social.PostMedia, 0)
+		for rows.Next() {
+			var item social.PostMedia
+			if err := rows.Scan(&item.PostID, &item.PublicID, &item.ResourceType, &item.SecureURL, &item.OrderIndex); err != nil {
+				rows.Close()
+				return nil, errors.DatabaseError("scan post media", err)
+			}
+			items = append(items, item)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return nil, errors.DatabaseError("iterate post media", err)
+		}
+		rows.Close()
+
+		grouped[postID] = items
+	}
+
+	return grouped, nil
 }
 
 func (r *postRepository) Update(ctx context.Context, post *social.Post) error {
@@ -197,5 +516,70 @@ func (r *commentRepository) Update(ctx context.Context, comment *social.Comment)
 
 func (r *commentRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	// TODO: Delete comment
+	return nil
+}
+
+// MediaAssetRepository implementation
+type mediaAssetRepository struct {
+	db *database.DB
+}
+
+func NewMediaAssetRepository(db *database.DB) social.MediaAssetRepository {
+	return &mediaAssetRepository{db: db}
+}
+
+func (r *mediaAssetRepository) CreatePending(ctx context.Context, asset *social.SocialMediaAsset) error {
+	query := `
+		INSERT INTO social_media_assets (
+			public_id, user_id, resource_type, status, expires_at,
+			created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7)
+		ON CONFLICT (public_id)
+		DO UPDATE SET
+			user_id = EXCLUDED.user_id,
+			resource_type = EXCLUDED.resource_type,
+			status = EXCLUDED.status,
+			expires_at = EXCLUDED.expires_at,
+			updated_at = EXCLUDED.updated_at
+	`
+
+	_, err := r.db.Exec(ctx, query,
+		asset.PublicID,
+		asset.UserID,
+		asset.ResourceType,
+		asset.Status,
+		asset.ExpiresAt,
+		asset.CreatedAt,
+		asset.UpdatedAt,
+	)
+	if err != nil {
+		return errors.DatabaseError("create pending media asset", err)
+	}
+
+	return nil
+}
+
+func (r *mediaAssetRepository) Confirm(ctx context.Context, userID uuid.UUID, publicID string, secureURL *string, bytes *int64) error {
+	query := `
+		UPDATE social_media_assets
+		SET secure_url = COALESCE($3, secure_url),
+			bytes = COALESCE($4, bytes),
+			status = 'ready',
+			confirmed_at = COALESCE(confirmed_at, NOW()),
+			updated_at = NOW()
+		WHERE public_id = $1
+		  AND user_id = $2
+		  AND status IN ('uploading', 'ready')
+	`
+
+	result, err := r.db.Exec(ctx, query, publicID, userID, secureURL, bytes)
+	if err != nil {
+		return errors.DatabaseError("confirm media asset", err)
+	}
+
+	if result.RowsAffected() == 0 {
+		return errors.NotFound("media asset")
+	}
+
 	return nil
 }
