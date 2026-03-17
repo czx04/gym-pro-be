@@ -75,13 +75,16 @@ type Like struct {
 
 // Comment represents a comment on a post
 type Comment struct {
-	ID        uuid.UUID `json:"id"`
-	PostID    uuid.UUID `json:"post_id"`
-	UserID    uuid.UUID `json:"user_id"`
-	Content   string    `json:"content"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	User      *PostUser `json:"user,omitempty"`
+	ID              uuid.UUID  `json:"id"`
+	PostID          uuid.UUID  `json:"post_id"`
+	UserID          uuid.UUID  `json:"user_id"`
+	ParentCommentID *uuid.UUID `json:"parent_comment_id,omitempty"`
+	Content         string     `json:"content"`
+	ReplyCount      int        `json:"reply_count"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
+	DeletedAt       *time.Time `json:"deleted_at,omitempty"`
+	User            *PostUser  `json:"user,omitempty"`
 }
 
 // CreatePostInput represents input for creating a post
@@ -122,8 +125,9 @@ type GetFeedFilter struct {
 
 // GetCommentsFilter represents filters for getting comments
 type GetCommentsFilter struct {
-	Page     int
-	PageSize int
+	Page            int
+	PageSize        int
+	ParentCommentID *uuid.UUID
 }
 
 // ActivityFeedItem represents an item in the activity feed

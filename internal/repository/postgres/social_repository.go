@@ -455,23 +455,34 @@ func (r *postRepository) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 func (r *postRepository) IncrementLikesCount(ctx context.Context, postID uuid.UUID) error {
-	// TODO: UPDATE posts SET likes_count = likes_count + 1 WHERE id = $1
+	query := `UPDATE posts SET likes_count = likes_count + 1, updated_at = NOW() WHERE id = $1`
+	if _, err := r.db.Exec(ctx, query, postID); err != nil {
+		return errors.DatabaseError("increment likes count", err)
+	}
 	return nil
 }
 
 func (r *postRepository) DecrementLikesCount(ctx context.Context, postID uuid.UUID) error {
-	// TODO: UPDATE posts SET likes_count = likes_count - 1 WHERE id = $1
-	// Ensure likes_count doesn't go below 0
+	query := `UPDATE posts SET likes_count = GREATEST(0, likes_count - 1), updated_at = NOW() WHERE id = $1`
+	if _, err := r.db.Exec(ctx, query, postID); err != nil {
+		return errors.DatabaseError("decrement likes count", err)
+	}
 	return nil
 }
 
 func (r *postRepository) IncrementCommentsCount(ctx context.Context, postID uuid.UUID) error {
-	// TODO: UPDATE posts SET comments_count = comments_count + 1 WHERE id = $1
+	query := `UPDATE posts SET comments_count = comments_count + 1, updated_at = NOW() WHERE id = $1`
+	if _, err := r.db.Exec(ctx, query, postID); err != nil {
+		return errors.DatabaseError("increment comments count", err)
+	}
 	return nil
 }
 
 func (r *postRepository) DecrementCommentsCount(ctx context.Context, postID uuid.UUID) error {
-	// TODO: UPDATE posts SET comments_count = comments_count - 1 WHERE id = $1
+	query := `UPDATE posts SET comments_count = GREATEST(0, comments_count - 1), updated_at = NOW() WHERE id = $1`
+	if _, err := r.db.Exec(ctx, query, postID); err != nil {
+		return errors.DatabaseError("decrement comments count", err)
+	}
 	return nil
 }
 
@@ -484,26 +495,77 @@ func NewLikeRepository(db *database.DB) social.LikeRepository {
 	return &likeRepository{db: db}
 }
 
-// TODO: Implement all LikeRepository methods
 func (r *likeRepository) Create(ctx context.Context, like *social.Like) error {
-	// TODO: Insert into likes table
-	// Use ON CONFLICT to handle duplicate likes
+	query := `
+		INSERT INTO likes (id, post_id, user_id, created_at)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (post_id, user_id) DO NOTHING
+	`
+	if _, err := r.db.Exec(ctx, query, like.ID, like.PostID, like.UserID, like.CreatedAt); err != nil {
+		return errors.DatabaseError("create like", err)
+	}
 	return nil
 }
 
 func (r *likeRepository) Delete(ctx context.Context, postID, userID uuid.UUID) error {
-	// TODO: Delete from likes table
+	query := `DELETE FROM likes WHERE post_id = $1 AND user_id = $2`
+	if _, err := r.db.Exec(ctx, query, postID, userID); err != nil {
+		return errors.DatabaseError("delete like", err)
+	}
 	return nil
 }
 
 func (r *likeRepository) Exists(ctx context.Context, postID, userID uuid.UUID) (bool, error) {
-	// TODO: Check if like exists
-	return false, nil
+	query := `SELECT EXISTS(SELECT 1 FROM likes WHERE post_id = $1 AND user_id = $2)`
+	var exists bool
+	if err := r.db.QueryRow(ctx, query, postID, userID).Scan(&exists); err != nil {
+		return false, errors.DatabaseError("check like exists", err)
+	}
+	return exists, nil
 }
 
 func (r *likeRepository) GetByPostID(ctx context.Context, postID uuid.UUID, page, pageSize int) ([]social.Like, int64, error) {
-	// TODO: Query likes for a post with pagination
-	return nil, 0, nil
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 20
+	}
+
+	offset := (page - 1) * pageSize
+
+	countQuery := `SELECT COUNT(*) FROM likes WHERE post_id = $1`
+	var total int64
+	if err := r.db.QueryRow(ctx, countQuery, postID).Scan(&total); err != nil {
+		return nil, 0, errors.DatabaseError("count likes", err)
+	}
+
+	query := `
+		SELECT id, post_id, user_id, created_at
+		FROM likes
+		WHERE post_id = $1
+		ORDER BY created_at DESC
+		LIMIT $2 OFFSET $3
+	`
+	rows, err := r.db.Query(ctx, query, postID, pageSize, offset)
+	if err != nil {
+		return nil, 0, errors.DatabaseError("get likes by post", err)
+	}
+	defer rows.Close()
+
+	likes := make([]social.Like, 0)
+	for rows.Next() {
+		var like social.Like
+		if err := rows.Scan(&like.ID, &like.PostID, &like.UserID, &like.CreatedAt); err != nil {
+			return nil, 0, errors.DatabaseError("scan like", err)
+		}
+		likes = append(likes, like)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, errors.DatabaseError("iterate likes", err)
+	}
+
+	return likes, total, nil
 }
 
 // CommentRepository implementation
@@ -515,31 +577,265 @@ func NewCommentRepository(db *database.DB) social.CommentRepository {
 	return &commentRepository{db: db}
 }
 
-// TODO: Implement all CommentRepository methods
 func (r *commentRepository) Create(ctx context.Context, comment *social.Comment) error {
-	// TODO: Insert into comments table
+	query := `
+		INSERT INTO comments (id, post_id, user_id, parent_comment_id, content, reply_count, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	`
+	if _, err := r.db.Exec(ctx, query,
+		comment.ID,
+		comment.PostID,
+		comment.UserID,
+		comment.ParentCommentID,
+		comment.Content,
+		comment.ReplyCount,
+		comment.CreatedAt,
+		comment.UpdatedAt,
+	); err != nil {
+		return errors.DatabaseError("create comment", err)
+	}
 	return nil
 }
 
 func (r *commentRepository) GetByID(ctx context.Context, id uuid.UUID) (*social.Comment, error) {
-	// TODO: Query comment with user details
-	return nil, nil
+	query := `
+		SELECT
+			c.id, c.post_id, c.user_id, c.parent_comment_id, c.content, c.reply_count,
+			c.created_at, c.updated_at, c.deleted_at,
+			u.id, u.name, u.avatar_url
+		FROM comments c
+		JOIN users u ON u.id = c.user_id
+		WHERE c.id = $1
+	`
+
+	comment := &social.Comment{User: &social.PostUser{}}
+	if err := r.db.QueryRow(ctx, query, id).Scan(
+		&comment.ID,
+		&comment.PostID,
+		&comment.UserID,
+		&comment.ParentCommentID,
+		&comment.Content,
+		&comment.ReplyCount,
+		&comment.CreatedAt,
+		&comment.UpdatedAt,
+		&comment.DeletedAt,
+		&comment.User.ID,
+		&comment.User.Name,
+		&comment.User.AvatarURL,
+	); err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, errors.NotFound("comment")
+		}
+		return nil, errors.DatabaseError("get comment by id", err)
+	}
+
+	return comment, nil
 }
 
 func (r *commentRepository) GetByPostID(ctx context.Context, postID uuid.UUID, filter social.GetCommentsFilter) ([]social.Comment, int64, error) {
-	// TODO: Query comments for a post with pagination
-	// JOIN users table for user details
-	// Order by created_at DESC (newest first) or ASC (oldest first)
-	return nil, 0, nil
+	if filter.Page < 1 {
+		filter.Page = 1
+	}
+	if filter.PageSize < 1 {
+		filter.PageSize = 20
+	}
+
+	offset := (filter.Page - 1) * filter.PageSize
+
+	countQuery := `SELECT COUNT(*) FROM comments WHERE post_id = $1`
+	countArgs := []interface{}{postID}
+	if filter.ParentCommentID == nil {
+		countQuery = `SELECT COUNT(*) FROM comments WHERE post_id = $1 AND parent_comment_id IS NULL AND deleted_at IS NULL`
+	} else {
+		countQuery = `SELECT COUNT(*) FROM comments WHERE post_id = $1 AND parent_comment_id = $2 AND deleted_at IS NULL`
+		countArgs = append(countArgs, *filter.ParentCommentID)
+	}
+
+	var total int64
+	if err := r.db.QueryRow(ctx, countQuery, countArgs...).Scan(&total); err != nil {
+		return nil, 0, errors.DatabaseError("count comments", err)
+	}
+
+	baseSelect := `
+		SELECT
+			c.id, c.post_id, c.user_id, c.parent_comment_id, c.content, c.reply_count,
+			c.created_at, c.updated_at, c.deleted_at,
+			u.id, u.name, u.avatar_url
+		FROM comments c
+		JOIN users u ON u.id = c.user_id
+	`
+
+	var query string
+	var args []interface{}
+	if filter.ParentCommentID == nil {
+		query = baseSelect + `
+			WHERE c.post_id = $1
+			  AND c.parent_comment_id IS NULL
+			  AND c.deleted_at IS NULL
+			ORDER BY c.created_at DESC
+			LIMIT $2 OFFSET $3
+		`
+		args = []interface{}{postID, filter.PageSize, offset}
+	} else {
+		query = baseSelect + `
+			WHERE c.post_id = $1
+			  AND c.parent_comment_id = $2
+			  AND c.deleted_at IS NULL
+			ORDER BY c.created_at ASC
+			LIMIT $3 OFFSET $4
+		`
+		args = []interface{}{postID, *filter.ParentCommentID, filter.PageSize, offset}
+	}
+
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, 0, errors.DatabaseError("get comments by post", err)
+	}
+	defer rows.Close()
+
+	comments := make([]social.Comment, 0)
+	for rows.Next() {
+		comment := social.Comment{User: &social.PostUser{}}
+		if err := rows.Scan(
+			&comment.ID,
+			&comment.PostID,
+			&comment.UserID,
+			&comment.ParentCommentID,
+			&comment.Content,
+			&comment.ReplyCount,
+			&comment.CreatedAt,
+			&comment.UpdatedAt,
+			&comment.DeletedAt,
+			&comment.User.ID,
+			&comment.User.Name,
+			&comment.User.AvatarURL,
+		); err != nil {
+			return nil, 0, errors.DatabaseError("scan comment", err)
+		}
+		comments = append(comments, comment)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, errors.DatabaseError("iterate comments", err)
+	}
+
+	return comments, total, nil
+}
+
+func (r *commentRepository) GetLatestRepliesByParentIDs(ctx context.Context, parentCommentIDs []uuid.UUID, limitPerParent int) (map[uuid.UUID][]social.Comment, error) {
+	result := make(map[uuid.UUID][]social.Comment)
+	if len(parentCommentIDs) == 0 || limitPerParent <= 0 {
+		return result, nil
+	}
+
+	query := `
+		WITH ranked AS (
+			SELECT
+				c.id, c.post_id, c.user_id, c.parent_comment_id, c.content, c.reply_count,
+				c.created_at, c.updated_at, c.deleted_at,
+				u.id AS author_id, u.name, u.avatar_url,
+				ROW_NUMBER() OVER (PARTITION BY c.parent_comment_id ORDER BY c.created_at DESC) AS rn
+			FROM comments c
+			JOIN users u ON u.id = c.user_id
+			WHERE c.parent_comment_id = ANY($1)
+			  AND c.deleted_at IS NULL
+		)
+		SELECT
+			id, post_id, user_id, parent_comment_id, content, reply_count,
+			created_at, updated_at, deleted_at,
+			author_id, name, avatar_url
+		FROM ranked
+		WHERE rn <= $2
+		ORDER BY parent_comment_id, created_at ASC
+	`
+
+	rows, err := r.db.Query(ctx, query, parentCommentIDs, limitPerParent)
+	if err != nil {
+		return nil, errors.DatabaseError("get latest replies", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		comment := social.Comment{User: &social.PostUser{}}
+		if err := rows.Scan(
+			&comment.ID,
+			&comment.PostID,
+			&comment.UserID,
+			&comment.ParentCommentID,
+			&comment.Content,
+			&comment.ReplyCount,
+			&comment.CreatedAt,
+			&comment.UpdatedAt,
+			&comment.DeletedAt,
+			&comment.User.ID,
+			&comment.User.Name,
+			&comment.User.AvatarURL,
+		); err != nil {
+			return nil, errors.DatabaseError("scan latest reply", err)
+		}
+		if comment.ParentCommentID != nil {
+			result[*comment.ParentCommentID] = append(result[*comment.ParentCommentID], comment)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, errors.DatabaseError("iterate latest replies", err)
+	}
+
+	return result, nil
 }
 
 func (r *commentRepository) Update(ctx context.Context, comment *social.Comment) error {
-	// TODO: Update comment content
+	query := `
+		UPDATE comments
+		SET content = $2, updated_at = NOW()
+		WHERE id = $1 AND deleted_at IS NULL
+	`
+	result, err := r.db.Exec(ctx, query, comment.ID, comment.Content)
+	if err != nil {
+		return errors.DatabaseError("update comment", err)
+	}
+	if result.RowsAffected() == 0 {
+		return errors.NotFound("comment")
+	}
 	return nil
 }
 
 func (r *commentRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	// TODO: Delete comment
+	query := `
+		UPDATE comments
+		SET deleted_at = NOW(), updated_at = NOW()
+		WHERE id = $1 AND deleted_at IS NULL
+	`
+	result, err := r.db.Exec(ctx, query, id)
+	if err != nil {
+		return errors.DatabaseError("delete comment", err)
+	}
+	if result.RowsAffected() == 0 {
+		return errors.NotFound("comment")
+	}
+	return nil
+}
+
+func (r *commentRepository) IncrementReplyCount(ctx context.Context, parentCommentID uuid.UUID) error {
+	query := `UPDATE comments SET reply_count = reply_count + 1 WHERE id = $1`
+	result, err := r.db.Exec(ctx, query, parentCommentID)
+	if err != nil {
+		return errors.DatabaseError("increment reply count", err)
+	}
+	if result.RowsAffected() == 0 {
+		return errors.NotFound("comment")
+	}
+	return nil
+}
+
+func (r *commentRepository) DecrementReplyCount(ctx context.Context, parentCommentID uuid.UUID) error {
+	query := `UPDATE comments SET reply_count = GREATEST(0, reply_count - 1) WHERE id = $1`
+	result, err := r.db.Exec(ctx, query, parentCommentID)
+	if err != nil {
+		return errors.DatabaseError("decrement reply count", err)
+	}
+	if result.RowsAffected() == 0 {
+		return errors.NotFound("comment")
+	}
 	return nil
 }
 

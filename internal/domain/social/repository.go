@@ -101,9 +101,18 @@ type CommentRepository interface {
 	// GetByPostID retrieves comments for a post
 	GetByPostID(ctx context.Context, postID uuid.UUID, filter GetCommentsFilter) ([]Comment, int64, error)
 
+	// GetLatestRepliesByParentIDs retrieves latest replies for parent comments
+	GetLatestRepliesByParentIDs(ctx context.Context, parentCommentIDs []uuid.UUID, limitPerParent int) (map[uuid.UUID][]Comment, error)
+
 	// Update updates a comment
 	Update(ctx context.Context, comment *Comment) error
 
 	// Delete deletes a comment
 	Delete(ctx context.Context, id uuid.UUID) error
+
+	// IncrementReplyCount increments reply count for a parent comment
+	IncrementReplyCount(ctx context.Context, parentCommentID uuid.UUID) error
+
+	// DecrementReplyCount decrements reply count for a parent comment
+	DecrementReplyCount(ctx context.Context, parentCommentID uuid.UUID) error
 }

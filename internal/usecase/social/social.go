@@ -27,6 +27,8 @@ import (
 type SocialUseCases struct {
 	postRepo       socialdomain.PostRepository
 	followRepo     socialdomain.FollowRepository
+	likeRepo       socialdomain.LikeRepository
+	commentRepo    socialdomain.CommentRepository
 	mediaAssetRepo socialdomain.MediaAssetRepository
 	userRepo       user.Repository
 	validator      *validator.Validator
@@ -37,6 +39,8 @@ func NewSocialUseCases(
 	cfg *config.Config,
 	postRepo socialdomain.PostRepository,
 	followRepo socialdomain.FollowRepository,
+	likeRepo socialdomain.LikeRepository,
+	commentRepo socialdomain.CommentRepository,
 	mediaAssetRepo socialdomain.MediaAssetRepository,
 	userRepo user.Repository,
 	validator *validator.Validator,
@@ -44,11 +48,53 @@ func NewSocialUseCases(
 	return &SocialUseCases{
 		postRepo:       postRepo,
 		followRepo:     followRepo,
+		likeRepo:       likeRepo,
+		commentRepo:    commentRepo,
 		mediaAssetRepo: mediaAssetRepo,
 		userRepo:       userRepo,
 		validator:      validator,
 		cloudinary:     cfg.Cloudinary,
 	}
+}
+
+type LikeResponse struct {
+	LikeCount   int  `json:"like_count"`
+	IsLikedByMe bool `json:"is_liked_by_me"`
+}
+
+type CreateCommentInput struct {
+	Content  string  `json:"content" validate:"required,min=1,max=1000"`
+	ParentID *string `json:"parentId" validate:"omitempty,uuid4"`
+}
+
+type CommentAuthorOutput struct {
+	ID        uuid.UUID `json:"id"`
+	Name      string    `json:"name"`
+	AvatarURL string    `json:"avatarUrl"`
+}
+
+type CommentOutput struct {
+	ID               uuid.UUID           `json:"id"`
+	PostID           uuid.UUID           `json:"postId"`
+	ParentID         *uuid.UUID          `json:"parentId"`
+	Depth            int                 `json:"depth"`
+	Path             string              `json:"path"`
+	DirectReplyCount int                 `json:"directReplyCount"`
+	PreviewReplies   []CommentOutput     `json:"previewReplies"`
+	Author           CommentAuthorOutput `json:"author"`
+	Content          string              `json:"content"`
+	IsDeleted        bool                `json:"isDeleted"`
+	CreatedAt        time.Time           `json:"createdAt"`
+}
+
+type CommentListOutput struct {
+	Comments   []CommentOutput `json:"comments"`
+	NextCursor *string         `json:"nextCursor"`
+}
+
+type CommentRepliesOutput struct {
+	Replies    []CommentOutput `json:"replies"`
+	NextCursor *string         `json:"nextCursor"`
 }
 
 type CreatePostInput struct {
@@ -787,4 +833,304 @@ func normalizeHashtag(raw string) (string, error) {
 	}
 
 	return normalized, nil
+}
+
+func (uc *SocialUseCases) LikePost(ctx context.Context, userID uuid.UUID, postID string) (*LikeResponse, error) {
+	id, err := uuid.Parse(postID)
+	if err != nil {
+		return nil, errors.BadRequest("invalid post id")
+	}
+
+	if _, err := uc.postRepo.GetByID(ctx, id); err != nil {
+		return nil, err
+	}
+
+	exists, err := uc.likeRepo.Exists(ctx, id, userID)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		if err := uc.likeRepo.Create(ctx, &socialdomain.Like{ID: uuid.New(), PostID: id, UserID: userID, CreatedAt: time.Now()}); err != nil {
+			return nil, err
+		}
+		if err := uc.postRepo.IncrementLikesCount(ctx, id); err != nil {
+			return nil, err
+		}
+	}
+
+	post, err := uc.postRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	return &LikeResponse{LikeCount: post.LikesCount, IsLikedByMe: true}, nil
+}
+
+func (uc *SocialUseCases) UnlikePost(ctx context.Context, userID uuid.UUID, postID string) (*LikeResponse, error) {
+	id, err := uuid.Parse(postID)
+	if err != nil {
+		return nil, errors.BadRequest("invalid post id")
+	}
+
+	if _, err := uc.postRepo.GetByID(ctx, id); err != nil {
+		return nil, err
+	}
+
+	exists, err := uc.likeRepo.Exists(ctx, id, userID)
+	if err != nil {
+		return nil, err
+	}
+	if exists {
+		if err := uc.likeRepo.Delete(ctx, id, userID); err != nil {
+			return nil, err
+		}
+		if err := uc.postRepo.DecrementLikesCount(ctx, id); err != nil {
+			return nil, err
+		}
+	}
+
+	post, err := uc.postRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	return &LikeResponse{LikeCount: post.LikesCount, IsLikedByMe: false}, nil
+}
+
+func (uc *SocialUseCases) CreateComment(ctx context.Context, userID uuid.UUID, postID string, input CreateCommentInput) (*CommentOutput, error) {
+	if err := uc.validator.Validate(input); err != nil {
+		return nil, errors.Validation(err.Error())
+	}
+
+	postUUID, err := uuid.Parse(postID)
+	if err != nil {
+		return nil, errors.BadRequest("invalid post id")
+	}
+
+	if _, err := uc.postRepo.GetByID(ctx, postUUID); err != nil {
+		return nil, err
+	}
+
+	var parentCommentID *uuid.UUID
+	if input.ParentID != nil && strings.TrimSpace(*input.ParentID) != "" {
+		parsedParentID, err := uuid.Parse(strings.TrimSpace(*input.ParentID))
+		if err != nil {
+			return nil, errors.BadRequest("invalid parentId")
+		}
+		parentComment, err := uc.commentRepo.GetByID(ctx, parsedParentID)
+		if err != nil {
+			return nil, err
+		}
+		if parentComment.PostID != postUUID {
+			return nil, errors.BadRequest("parent comment does not belong to post")
+		}
+		if parentComment.DeletedAt != nil {
+			return nil, errors.Conflict("cannot reply to deleted comment")
+		}
+		parentCommentID = &parsedParentID
+	}
+
+	now := time.Now()
+	comment := &socialdomain.Comment{
+		ID:              uuid.New(),
+		PostID:          postUUID,
+		UserID:          userID,
+		ParentCommentID: parentCommentID,
+		Content:         strings.TrimSpace(input.Content),
+		ReplyCount:      0,
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	}
+
+	if err := uc.commentRepo.Create(ctx, comment); err != nil {
+		return nil, err
+	}
+	if err := uc.postRepo.IncrementCommentsCount(ctx, postUUID); err != nil {
+		return nil, err
+	}
+	if parentCommentID != nil {
+		if err := uc.commentRepo.IncrementReplyCount(ctx, *parentCommentID); err != nil {
+			return nil, err
+		}
+	}
+
+	author := CommentAuthorOutput{ID: userID}
+	if u, err := uc.userRepo.GetByID(ctx, userID); err == nil {
+		author.Name = u.Name
+		if u.AvatarURL != nil {
+			author.AvatarURL = *u.AvatarURL
+		}
+	}
+
+	depth := 0
+	if parentCommentID != nil {
+		depth = 1
+	}
+	path := buildCommentPath(parentCommentID, comment.ID)
+
+	return &CommentOutput{
+		ID:               comment.ID,
+		PostID:           comment.PostID,
+		ParentID:         comment.ParentCommentID,
+		Depth:            depth,
+		Path:             path,
+		DirectReplyCount: comment.ReplyCount,
+		PreviewReplies:   make([]CommentOutput, 0),
+		Author:           author,
+		Content:          comment.Content,
+		IsDeleted:        comment.DeletedAt != nil,
+		CreatedAt:        comment.CreatedAt,
+	}, nil
+}
+
+func (uc *SocialUseCases) GetPostComments(ctx context.Context, postID string, cursor string, limit int) (*CommentListOutput, error) {
+	postUUID, err := uuid.Parse(postID)
+	if err != nil {
+		return nil, errors.BadRequest("invalid post id")
+	}
+	if _, err := uc.postRepo.GetByID(ctx, postUUID); err != nil {
+		return nil, err
+	}
+
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 50 {
+		limit = 50
+	}
+
+	page, err := decodePageCursor(cursor)
+	if err != nil {
+		return nil, errors.BadRequest("invalid cursor")
+	}
+
+	comments, total, err := uc.commentRepo.GetByPostID(ctx, postUUID, socialdomain.GetCommentsFilter{Page: page, PageSize: limit})
+	if err != nil {
+		return nil, err
+	}
+
+	parentIDs := make([]uuid.UUID, 0, len(comments))
+	for _, comment := range comments {
+		parentIDs = append(parentIDs, comment.ID)
+	}
+	latestRepliesByParent, err := uc.commentRepo.GetLatestRepliesByParentIDs(ctx, parentIDs, 2)
+	if err != nil {
+		return nil, err
+	}
+
+	data := make([]CommentOutput, 0, len(comments))
+	for _, comment := range comments {
+		latestReplies := make([]CommentOutput, 0)
+		if replies, ok := latestRepliesByParent[comment.ID]; ok {
+			latestReplies = make([]CommentOutput, 0, len(replies))
+			for _, reply := range replies {
+				replyPath := buildCommentPath(&comment.ID, reply.ID)
+				latestReplies = append(latestReplies, mapCommentResponse(reply, 1, replyPath, make([]CommentOutput, 0)))
+			}
+		}
+
+		data = append(data, mapCommentResponse(comment, 0, buildCommentPath(nil, comment.ID), latestReplies))
+	}
+
+	hasMore := int64(page*limit) < total
+	var nextCursor *string
+	if hasMore {
+		cursorValue := encodePageCursor(page + 1)
+		nextCursor = &cursorValue
+	}
+	out := &CommentListOutput{Comments: data, NextCursor: nextCursor}
+	return out, nil
+}
+
+func (uc *SocialUseCases) GetCommentReplies(ctx context.Context, postID string, commentID string, cursor string, limit int) (*CommentRepliesOutput, error) {
+	postUUID, err := uuid.Parse(postID)
+	if err != nil {
+		return nil, errors.BadRequest("invalid post id")
+	}
+	parentUUID, err := uuid.Parse(commentID)
+	if err != nil {
+		return nil, errors.BadRequest("invalid comment id")
+	}
+
+	parentComment, err := uc.commentRepo.GetByID(ctx, parentUUID)
+	if err != nil {
+		return nil, err
+	}
+	if parentComment.PostID != postUUID {
+		return nil, errors.BadRequest("comment does not belong to post")
+	}
+
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 50 {
+		limit = 50
+	}
+
+	page, err := decodePageCursor(cursor)
+	if err != nil {
+		return nil, errors.BadRequest("invalid cursor")
+	}
+
+	comments, total, err := uc.commentRepo.GetByPostID(ctx, postUUID, socialdomain.GetCommentsFilter{
+		Page:            page,
+		PageSize:        limit,
+		ParentCommentID: &parentUUID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	data := make([]CommentOutput, 0, len(comments))
+	for _, comment := range comments {
+		data = append(data, mapCommentResponse(comment, 1, buildCommentPath(&parentUUID, comment.ID), make([]CommentOutput, 0)))
+	}
+
+	hasMore := int64(page*limit) < total
+	var nextCursor *string
+	if hasMore {
+		cursorValue := encodePageCursor(page + 1)
+		nextCursor = &cursorValue
+	}
+	out := &CommentRepliesOutput{Replies: data, NextCursor: nextCursor}
+	return out, nil
+}
+
+func mapCommentAuthor(comment socialdomain.Comment) CommentAuthorOutput {
+	author := CommentAuthorOutput{ID: comment.UserID}
+	if comment.User != nil {
+		author.ID = comment.User.ID
+		author.Name = comment.User.Name
+		if comment.User.AvatarURL != nil {
+			author.AvatarURL = *comment.User.AvatarURL
+		}
+	}
+	return author
+}
+
+func mapCommentResponse(comment socialdomain.Comment, depth int, path string, previewReplies []CommentOutput) CommentOutput {
+	if previewReplies == nil {
+		previewReplies = make([]CommentOutput, 0)
+	}
+
+	return CommentOutput{
+		ID:               comment.ID,
+		PostID:           comment.PostID,
+		ParentID:         comment.ParentCommentID,
+		Depth:            depth,
+		Path:             path,
+		DirectReplyCount: comment.ReplyCount,
+		PreviewReplies:   previewReplies,
+		Author:           mapCommentAuthor(comment),
+		Content:          comment.Content,
+		IsDeleted:        comment.DeletedAt != nil,
+		CreatedAt:        comment.CreatedAt,
+	}
+}
+
+func buildCommentPath(parentID *uuid.UUID, commentID uuid.UUID) string {
+	if parentID == nil {
+		return commentID.String()
+	}
+	return parentID.String() + "/" + commentID.String()
 }
