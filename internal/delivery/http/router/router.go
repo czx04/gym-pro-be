@@ -26,6 +26,7 @@ func New(
 	recipeHandler *handler.RecipeHandler,
 	mealLogHandler *handler.MealLogHandler,
 	userHandler *handler.UserHandler,
+	socialHandler *handler.SocialHandler,
 ) *Router {
 	gin.SetMode(cfg.Server.GinMode)
 
@@ -159,27 +160,13 @@ func New(
 			// Social routes
 			social := authenticated.Group("/social")
 			{
-				// Follow management
-				social.POST("/follow/:userId", placeholderHandler("Follow user"))
-				social.DELETE("/follow/:userId", placeholderHandler("Unfollow user"))
-				social.GET("/followers", placeholderHandler("Get followers"))
-				social.GET("/following", placeholderHandler("Get following list"))
-
-				// Post management
-				social.POST("/posts", placeholderHandler("Create post"))
-				social.GET("/posts", placeholderHandler("Get user posts"))
-				social.GET("/feed", placeholderHandler("Get activity feed"))
-				social.DELETE("/posts/:id", placeholderHandler("Delete post"))
-
-				// Likes
-				social.POST("/posts/:id/like", placeholderHandler("Like post"))
-				social.DELETE("/posts/:id/like", placeholderHandler("Unlike post"))
-
-				// Comments
-				social.POST("/posts/:id/comments", placeholderHandler("Add comment"))
-				social.GET("/posts/:id/comments", placeholderHandler("Get comments"))
-				social.PUT("/comments/:id", placeholderHandler("Update comment"))
-				social.DELETE("/comments/:id", placeholderHandler("Delete comment"))
+				social.GET("/feed", socialHandler.GetFeed)
+				social.POST("/posts", socialHandler.CreatePost)
+				social.GET("/posts/:postId", socialHandler.GetPostByID)
+				social.GET("/users/:userId/profile", socialHandler.GetUserProfile)
+				social.GET("/users/:userId/posts", socialHandler.GetUserPosts)
+				social.POST("/media/signature", socialHandler.CreateMediaSignature)
+				social.POST("/media/confirm", socialHandler.ConfirmMedia)
 			}
 		}
 	}

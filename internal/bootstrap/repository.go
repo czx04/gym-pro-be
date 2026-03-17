@@ -63,6 +63,10 @@ func ProvideCommentRepository(db *database.DB) social.CommentRepository {
 	return postgres.NewCommentRepository(db)
 }
 
+func ProvideMediaAssetRepository(db *database.DB) social.MediaAssetRepository {
+	return postgres.NewMediaAssetRepository(db)
+}
+
 // RepositoryProviders returns all repository providers
 var RepositoryProviders = fx.Options(
 	fx.Provide(
@@ -78,5 +82,6 @@ var RepositoryProviders = fx.Options(
 		ProvidePostRepository,
 		ProvideLikeRepository,
 		ProvideCommentRepository,
+		ProvideMediaAssetRepository,
 	),
 )

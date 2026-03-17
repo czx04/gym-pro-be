@@ -45,3 +45,6 @@ docker-compose.override.yml
 docs/docs.go
 docs/swagger.json
 docs/swagger.yaml
+
+rule.md
+ep.md
