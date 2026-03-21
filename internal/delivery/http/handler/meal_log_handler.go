@@ -202,3 +202,39 @@ func (h *MealLogHandler) DeleteMealLog(c *gin.Context) {
 
 	response.Success(c, nil)
 }
+
+// GetNutritionStats godoc
+// @Summary Get nutrition statistics
+// @Description Get nutrition statistics for a date period
+// @Tags meal-logs
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param start_date query string true "Start Date (YYYY-MM-DD)"
+// @Param end_date query string true "End Date (YYYY-MM-DD)"
+// @Success 200 {object} response.Response{data=meal.NutritionStats}
+// @Failure 400 {object} response.Response
+// @Failure 401 {object} response.Response
+// @Failure 500 {object} response.Response
+// @Router /meal-logs/stats [get]
+func (h *MealLogHandler) GetNutritionStats(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	var input meal.GetNutritionStatsRequest
+	if err := c.ShouldBindQuery(&input); err != nil {
+		response.Error(c, errors.BadRequest("invalid query parameters"))
+		return
+	}
+
+	result, err := h.mealLogUC.GetNutritionStats(c.Request.Context(), userID, input)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	response.Success(c, result)
+}

@@ -111,12 +111,22 @@ type DailyNutritionSummary struct {
 
 // NutritionStats represents nutrition statistics
 type NutritionStats struct {
-	Period                string  `json:"period"` // daily, weekly, monthly
-	AverageCalories       float64 `json:"average_calories"`
-	AverageProteinG       float64 `json:"average_protein_g"`
-	AverageCarbsG         float64 `json:"average_carbs_g"`
-	AverageFatG           float64 `json:"average_fat_g"`
+	Period                  string  `json:"period"` // daily, weekly, monthly
+	AverageCalories         float64 `json:"average_calories"`
+	AverageProteinG         float64 `json:"average_protein_g"`
+	AverageCarbsG           float64 `json:"average_carbs_g"`
+	AverageFatG             float64 `json:"average_fat_g"`
+	TotalCalories           float64 `json:"total_calories"`
+	TotalProteinG           float64 `json:"total_protein_g"`
+	TotalCarbsG             float64 `json:"total_carbs_g"`
+	TotalFatG               float64 `json:"total_fat_g"`
 	AverageAdherencePercent float64 `json:"average_adherence_percent"`
-	TotalMealsLogged      int     `json:"total_meals_logged"`
-	DaysTracked           int     `json:"days_tracked"`
+	TotalMealsLogged        int     `json:"total_meals_logged"`
+	DaysTracked             int     `json:"days_tracked"`
 }
+// GetNutritionStatsRequest holds the query parameters for the stats API
+type GetNutritionStatsRequest struct {
+	StartDate string `form:"start_date" binding:"required"`
+	EndDate   string `form:"end_date" binding:"required"`
+}
+
