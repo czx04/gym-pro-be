@@ -279,3 +279,47 @@ func (uc *MealLogUseCases) roundDailySummary(s *meal.DailyNutritionSummary) {
 	s.TotalFatG = utils.RoundToTwo(s.TotalFatG)
 }
 
+// GetNutritionStats fetches nutrition stats for a single date range
+func (uc *MealLogUseCases) GetNutritionStats(ctx context.Context, userID uuid.UUID, input meal.GetNutritionStatsRequest) (*meal.NutritionStats, error) {
+	if err := uc.validator.Validate(input); err != nil {
+		return nil, errors.Validation(err.Error())
+	}
+
+	start, err := time.Parse("2006-01-02", input.StartDate)
+	if err != nil {
+		return nil, errors.BadRequest("invalid start_date format, expected YYYY-MM-DD")
+	}
+	end, err := time.Parse("2006-01-02", input.EndDate)
+	if err != nil {
+		return nil, errors.BadRequest("invalid end_date format, expected YYYY-MM-DD")
+	}
+
+	if start.After(end) {
+		return nil, errors.BadRequest("start date must be before end date")
+	}
+
+	stats, err := uc.mealLogRepo.GetStats(ctx, userID, start, end, "custom_period")
+	if err != nil {
+		return nil, errors.DatabaseError("failed to get stats", err)
+	}
+
+	// Round stats
+	uc.roundNutritionStats(stats)
+
+	return stats, nil
+}
+
+func (uc *MealLogUseCases) roundNutritionStats(s *meal.NutritionStats) {
+	if s == nil {
+		return
+	}
+	s.AverageCalories = utils.RoundToTwo(s.AverageCalories)
+	s.AverageProteinG = utils.RoundToTwo(s.AverageProteinG)
+	s.AverageCarbsG = utils.RoundToTwo(s.AverageCarbsG)
+	s.AverageFatG = utils.RoundToTwo(s.AverageFatG)
+	s.TotalCalories = utils.RoundToTwo(s.TotalCalories)
+	s.TotalProteinG = utils.RoundToTwo(s.TotalProteinG)
+	s.TotalCarbsG = utils.RoundToTwo(s.TotalCarbsG)
+	s.TotalFatG = utils.RoundToTwo(s.TotalFatG)
+	s.AverageAdherencePercent = utils.RoundToTwo(s.AverageAdherencePercent)
+}

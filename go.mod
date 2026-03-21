@@ -3,6 +3,7 @@ module gym-pro-2026-ptit
 go 1.24.0
 
 require (
+	github.com/cloudinary/cloudinary-go/v2 v2.14.1
 	github.com/gin-gonic/gin v1.10.0
 	github.com/go-playground/validator/v10 v10.22.1
 	github.com/golang-jwt/jwt/v5 v5.2.1
@@ -28,7 +29,6 @@ require (
 	github.com/bytedance/sonic v1.11.6 // indirect
 	github.com/bytedance/sonic/loader v0.1.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/cloudinary/cloudinary-go/v2 v2.14.1 // indirect
 	github.com/cloudwego/base64x v0.1.4 // indirect
 	github.com/cloudwego/iasm v0.2.0 // indirect
 	github.com/creasty/defaults v1.7.0 // indirect

@@ -487,6 +487,10 @@ func (r *mealLogRepository) GetStats(ctx context.Context, userID uuid.UUID, star
 			COALESCE(AVG(daily_pro),  0),
 			COALESCE(AVG(daily_carb), 0),
 			COALESCE(AVG(daily_fat),  0),
+			COALESCE(SUM(daily_cal),  0),
+			COALESCE(SUM(daily_pro),  0),
+			COALESCE(SUM(daily_carb), 0),
+			COALESCE(SUM(daily_fat),  0),
 			COALESCE(SUM(meal_count), 0),
 			COUNT(DISTINCT log_date)
 		FROM (
@@ -510,6 +514,10 @@ func (r *mealLogRepository) GetStats(ctx context.Context, userID uuid.UUID, star
 		&stats.AverageProteinG,
 		&stats.AverageCarbsG,
 		&stats.AverageFatG,
+		&stats.TotalCalories,
+		&stats.TotalProteinG,
+		&stats.TotalCarbsG,
+		&stats.TotalFatG,
 		&stats.TotalMealsLogged,
 		&stats.DaysTracked,
 	)
