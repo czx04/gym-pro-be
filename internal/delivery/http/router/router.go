@@ -151,6 +151,7 @@ func New(
 			mealLogs := authenticated.Group("/meal-logs")
 			{
 				mealLogs.POST("", mealLogHandler.CreateMealLog)
+				mealLogs.GET("/stats", mealLogHandler.GetNutritionStats)
 				mealLogs.GET("/date/:date", mealLogHandler.GetMealLogsByDate)
 				mealLogs.GET("/:id", mealLogHandler.GetMealLog)
 				mealLogs.PUT("/:id", mealLogHandler.UpdateMealLog)
