@@ -99,6 +99,38 @@ func (h *SocialHandler) GetUserPosts(c *gin.Context) {
 	response.Success(c, result)
 }
 
+func (h *SocialHandler) FollowUser(c *gin.Context) {
+	currentUserID, err := middleware.GetUserID(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	result, err := h.socialUC.FollowUser(c.Request.Context(), currentUserID, c.Param("userId"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	response.Success(c, result)
+}
+
+func (h *SocialHandler) UnfollowUser(c *gin.Context) {
+	currentUserID, err := middleware.GetUserID(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	result, err := h.socialUC.UnfollowUser(c.Request.Context(), currentUserID, c.Param("userId"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	response.Success(c, result)
+}
+
 func (h *SocialHandler) CreatePost(c *gin.Context) {
 	userID, err := middleware.GetUserID(c)
 	if err != nil {

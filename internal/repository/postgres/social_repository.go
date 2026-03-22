@@ -19,16 +19,27 @@ func NewFollowRepository(db *database.DB) social.FollowRepository {
 	return &followRepository{db: db}
 }
 
-// TODO: Implement all FollowRepository methods
 func (r *followRepository) Follow(ctx context.Context, followerID, followingID uuid.UUID) error {
-	// TODO: Insert into follows table
-	// Handle conflict (already following) gracefully
-	// Use ON CONFLICT DO NOTHING or check first
+	query := `
+		INSERT INTO follows (follower_id, following_id)
+		VALUES ($1, $2)
+		ON CONFLICT (follower_id, following_id) DO NOTHING
+	`
+
+	if _, err := r.db.Exec(ctx, query, followerID, followingID); err != nil {
+		return errors.DatabaseError("follow user", err)
+	}
+
 	return nil
 }
 
 func (r *followRepository) Unfollow(ctx context.Context, followerID, followingID uuid.UUID) error {
-	// TODO: Delete from follows table
+	query := `DELETE FROM follows WHERE follower_id = $1 AND following_id = $2`
+
+	if _, err := r.db.Exec(ctx, query, followerID, followingID); err != nil {
+		return errors.DatabaseError("unfollow user", err)
+	}
+
 	return nil
 }
 

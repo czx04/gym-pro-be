@@ -162,6 +162,8 @@ func New(
 			social := authenticated.Group("/social")
 			{
 				social.GET("/feed", socialHandler.GetFeed)
+				social.POST("/users/:userId/follow", socialHandler.FollowUser)
+				social.DELETE("/users/:userId/follow", socialHandler.UnfollowUser)
 				social.POST("/posts", socialHandler.CreatePost)
 				social.GET("/posts/:postId", socialHandler.GetPostByID)
 				social.POST("/posts/:postId/likes", socialHandler.LikePost)

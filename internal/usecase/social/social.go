@@ -196,7 +196,15 @@ type UserProfileOutput struct {
 	StreakValue    int       `json:"streak_value"`
 	PostsCount     int64     `json:"posts_count"`
 	FollowersCount int       `json:"followers_count"`
+	FollowingCount int       `json:"following_count"`
 	IsFollowing    bool      `json:"is_following"`
+	IsMe           bool      `json:"is_me"`
+}
+
+type FollowActionOutput struct {
+	UserID         uuid.UUID `json:"userId"`
+	IsFollowing    bool      `json:"isFollowing"`
+	FollowersCount int       `json:"followersCount"`
 }
 
 func (uc *SocialUseCases) GetFeed(ctx context.Context, userID uuid.UUID, cursor string, limit int) (*FeedOutput, error) {
@@ -312,7 +320,69 @@ func (uc *SocialUseCases) GetUserProfile(ctx context.Context, currentUserID uuid
 		StreakValue:    0,
 		PostsCount:     totalPosts,
 		FollowersCount: stats.FollowersCount,
+		FollowingCount: stats.FollowingCount,
 		IsFollowing:    isFollowing,
+		IsMe:           currentUserID == targetID,
+	}, nil
+}
+
+func (uc *SocialUseCases) FollowUser(ctx context.Context, currentUserID uuid.UUID, targetUserID string) (*FollowActionOutput, error) {
+	targetID, err := uuid.Parse(targetUserID)
+	if err != nil {
+		return nil, errors.BadRequest("invalid user id")
+	}
+
+	if currentUserID == targetID {
+		return nil, errors.BadRequest("cannot follow yourself")
+	}
+
+	if _, err := uc.userRepo.GetByID(ctx, targetID); err != nil {
+		return nil, err
+	}
+
+	if err := uc.followRepo.Follow(ctx, currentUserID, targetID); err != nil {
+		return nil, err
+	}
+
+	stats, err := uc.followRepo.GetStats(ctx, targetID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &FollowActionOutput{
+		UserID:         targetID,
+		IsFollowing:    true,
+		FollowersCount: stats.FollowersCount,
+	}, nil
+}
+
+func (uc *SocialUseCases) UnfollowUser(ctx context.Context, currentUserID uuid.UUID, targetUserID string) (*FollowActionOutput, error) {
+	targetID, err := uuid.Parse(targetUserID)
+	if err != nil {
+		return nil, errors.BadRequest("invalid user id")
+	}
+
+	if currentUserID == targetID {
+		return nil, errors.BadRequest("cannot unfollow yourself")
+	}
+
+	if _, err := uc.userRepo.GetByID(ctx, targetID); err != nil {
+		return nil, err
+	}
+
+	if err := uc.followRepo.Unfollow(ctx, currentUserID, targetID); err != nil {
+		return nil, err
+	}
+
+	stats, err := uc.followRepo.GetStats(ctx, targetID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &FollowActionOutput{
+		UserID:         targetID,
+		IsFollowing:    false,
+		FollowersCount: stats.FollowersCount,
 	}, nil
 }
 
