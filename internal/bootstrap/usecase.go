@@ -2,9 +2,10 @@ package bootstrap
 
 import (
 	exerciseuc "gym-pro-2026-ptit/internal/usecase/exercise"
+	mealuc "gym-pro-2026-ptit/internal/usecase/meal"
+	socialuc "gym-pro-2026-ptit/internal/usecase/social"
 	useruc "gym-pro-2026-ptit/internal/usecase/user"
 	workoutuc "gym-pro-2026-ptit/internal/usecase/workout"
-	mealuc "gym-pro-2026-ptit/internal/usecase/meal"
 
 	"go.uber.org/fx"
 )
@@ -16,4 +17,5 @@ var UseCaseProviders = fx.Options(
 	fx.Provide(mealuc.NewFoodUseCases),
 	fx.Provide(mealuc.NewRecipeUseCases),
 	fx.Provide(mealuc.NewMealLogUseCases),
+	fx.Provide(socialuc.NewSocialUseCases),
 )

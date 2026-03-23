@@ -24,8 +24,9 @@ func ProvideRouter(
 	recipeHandler *handler.RecipeHandler,
 	mealLogHandler *handler.MealLogHandler,
 	userHandler *handler.UserHandler,
+	socialHandler *handler.SocialHandler,
 ) *router.Router {
-	return router.New(cfg, authMiddleware, authHandler, workoutHandler, exerciseHandler, foodHandler, recipeHandler, mealLogHandler, userHandler)
+	return router.New(cfg, authMiddleware, authHandler, workoutHandler, exerciseHandler, foodHandler, recipeHandler, mealLogHandler, userHandler, socialHandler)
 }
 
 // RegisterRouterHooks registers lifecycle hooks for HTTP server
