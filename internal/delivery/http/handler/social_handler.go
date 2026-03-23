@@ -25,6 +25,11 @@ type createCommentRequest struct {
 	ParentId        *string `json:"parentId"`
 }
 
+type reportPostRequest struct {
+	Reason      string  `json:"reason"`
+	Description *string `json:"description"`
+}
+
 func NewSocialHandler(socialUC *socialuc.SocialUseCases) *SocialHandler {
 	return &SocialHandler{socialUC: socialUC}
 }
@@ -153,6 +158,43 @@ func (h *SocialHandler) CreatePost(c *gin.Context) {
 	response.Created(c, result)
 }
 
+func (h *SocialHandler) EditPost(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	var input socialuc.UpdatePostInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		response.Error(c, errors.BadRequest("invalid request body"))
+		return
+	}
+
+	result, err := h.socialUC.EditPost(c.Request.Context(), userID, c.Param("postId"), input)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	response.Success(c, result)
+}
+
+func (h *SocialHandler) DeletePost(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	if err := h.socialUC.DeletePost(c.Request.Context(), userID, c.Param("postId")); err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	response.Success(c, gin.H{"deleted": true})
+}
+
 func (h *SocialHandler) CreateMediaSignature(c *gin.Context) {
 	userID, err := middleware.GetUserID(c)
 	if err != nil {
@@ -213,6 +255,62 @@ func (h *SocialHandler) LikePost(c *gin.Context) {
 	response.Success(c, result)
 }
 
+func (h *SocialHandler) MarkInterested(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	result, err := h.socialUC.MarkInterested(c.Request.Context(), userID, c.Param("postId"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
+func (h *SocialHandler) UnmarkInterested(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	result, err := h.socialUC.UnmarkInterested(c.Request.Context(), userID, c.Param("postId"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
+func (h *SocialHandler) MarkNotInterested(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	result, err := h.socialUC.MarkNotInterested(c.Request.Context(), userID, c.Param("postId"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
+func (h *SocialHandler) UnmarkNotInterested(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	result, err := h.socialUC.UnmarkNotInterested(c.Request.Context(), userID, c.Param("postId"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
 func (h *SocialHandler) UnlikePost(c *gin.Context) {
 	userID, err := middleware.GetUserID(c)
 	if err != nil {
@@ -262,6 +360,56 @@ func (h *SocialHandler) CreateComment(c *gin.Context) {
 	}
 
 	response.Created(c, result)
+}
+
+func (h *SocialHandler) ReportPost(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	var req reportPostRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, errors.BadRequest("invalid request body"))
+		return
+	}
+	result, err := h.socialUC.ReportPost(c.Request.Context(), userID, c.Param("postId"), socialuc.ReportPostInput{
+		Reason:      req.Reason,
+		Description: req.Description,
+	})
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
+func (h *SocialHandler) BlockUser(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	result, err := h.socialUC.BlockUser(c.Request.Context(), userID, c.Param("userId"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
+func (h *SocialHandler) UnblockUser(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	result, err := h.socialUC.UnblockUser(c.Request.Context(), userID, c.Param("userId"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, result)
 }
 
 func firstNonEmptyString(values ...*string) *string {

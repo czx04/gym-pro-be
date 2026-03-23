@@ -30,6 +30,9 @@ type SocialUseCases struct {
 	likeRepo       socialdomain.LikeRepository
 	commentRepo    socialdomain.CommentRepository
 	mediaAssetRepo socialdomain.MediaAssetRepository
+	preferenceRepo socialdomain.PreferenceRepository
+	reportRepo     socialdomain.ReportRepository
+	blockRepo      socialdomain.BlockRepository
 	userRepo       user.Repository
 	validator      *validator.Validator
 	cloudinary     config.CloudinaryConfig
@@ -42,6 +45,9 @@ func NewSocialUseCases(
 	likeRepo socialdomain.LikeRepository,
 	commentRepo socialdomain.CommentRepository,
 	mediaAssetRepo socialdomain.MediaAssetRepository,
+	preferenceRepo socialdomain.PreferenceRepository,
+	reportRepo socialdomain.ReportRepository,
+	blockRepo socialdomain.BlockRepository,
 	userRepo user.Repository,
 	validator *validator.Validator,
 ) *SocialUseCases {
@@ -51,6 +57,9 @@ func NewSocialUseCases(
 		likeRepo:       likeRepo,
 		commentRepo:    commentRepo,
 		mediaAssetRepo: mediaAssetRepo,
+		preferenceRepo: preferenceRepo,
+		reportRepo:     reportRepo,
+		blockRepo:      blockRepo,
 		userRepo:       userRepo,
 		validator:      validator,
 		cloudinary:     cfg.Cloudinary,
@@ -105,6 +114,13 @@ type CreatePostInput struct {
 	Feeling     *string                             `json:"feeling,omitempty" validate:"omitempty,max=100"`
 	Location    *CreatePostLocationInput            `json:"location,omitempty" validate:"omitempty"`
 	Hashtags    []string                            `json:"hashtags,omitempty" validate:"omitempty,dive,max=50"`
+}
+
+type UpdatePostInput struct {
+	Caption  *string                  `json:"caption,omitempty" validate:"omitempty,max=2000"`
+	Feeling  *string                  `json:"feeling,omitempty" validate:"omitempty,max=100"`
+	Location *CreatePostLocationInput `json:"location,omitempty" validate:"omitempty"`
+	Hashtags *[]string                `json:"hashtags,omitempty" validate:"omitempty,dive,max=50"`
 }
 
 type CreatePostLocationInput struct {
@@ -178,8 +194,12 @@ type PostOutput struct {
 	LikeCount       int               `json:"like_count"`
 	CommentCount    int               `json:"comment_count"`
 	IsLikedByMe     bool              `json:"is_liked_by_me"`
+	IsInterestedByMe bool             `json:"is_interested_by_me"`
+	IsNotInterestedByMe bool          `json:"is_not_interested_by_me"`
+	IsEdited        bool              `json:"is_edited"`
 	SharedExercises []interface{}     `json:"shared_exercises,omitempty"`
 	CreatedAt       time.Time         `json:"created_at"`
+	UpdatedAt       time.Time         `json:"updated_at"`
 }
 
 type PostLocation struct {
@@ -205,6 +225,29 @@ type FollowActionOutput struct {
 	UserID         uuid.UUID `json:"userId"`
 	IsFollowing    bool      `json:"isFollowing"`
 	FollowersCount int       `json:"followersCount"`
+}
+
+type PreferenceActionOutput struct {
+	PostID             uuid.UUID `json:"post_id"`
+	IsInterestedByMe   bool      `json:"is_interested_by_me"`
+	IsNotInterestedByMe bool     `json:"is_not_interested_by_me"`
+}
+
+type ReportPostInput struct {
+	Reason      string  `json:"reason" validate:"required,oneof=spam harassment misinformation nudity violence other"`
+	Description *string `json:"description,omitempty" validate:"omitempty,max=1000"`
+}
+
+type ReportPostOutput struct {
+	PostID      uuid.UUID `json:"post_id"`
+	Reason      string    `json:"reason"`
+	Description *string   `json:"description,omitempty"`
+	Status      string    `json:"status"`
+}
+
+type BlockActionOutput struct {
+	UserID    uuid.UUID `json:"user_id"`
+	IsBlocked bool      `json:"is_blocked"`
 }
 
 func (uc *SocialUseCases) GetFeed(ctx context.Context, userID uuid.UUID, cursor string, limit int) (*FeedOutput, error) {
@@ -242,7 +285,7 @@ func (uc *SocialUseCases) GetFeed(ctx context.Context, userID uuid.UUID, cursor 
 		if item.Post != nil {
 			item.Post.Media = mediaByPostID[item.Post.ID]
 		}
-		data = append(data, mapPost(item.Post, item.IsLiked))
+		data = append(data, mapPost(item.Post, item.IsLiked, item.IsInterested, item.IsNotInterested))
 	}
 
 	hasMore := int64(page*limit) < total
@@ -274,7 +317,7 @@ func (uc *SocialUseCases) GetPostByID(ctx context.Context, _ uuid.UUID, postID s
 	}
 	post.Media = mediaByPostID[post.ID]
 
-	out := mapPost(post, false)
+	out := mapPost(post, false, false, false)
 	return &out, nil
 }
 
@@ -336,6 +379,14 @@ func (uc *SocialUseCases) FollowUser(ctx context.Context, currentUserID uuid.UUI
 		return nil, errors.BadRequest("cannot follow yourself")
 	}
 
+	hasBlockRelation, err := uc.followRepo.HasBlockRelation(ctx, currentUserID, targetID)
+	if err != nil {
+		return nil, err
+	}
+	if hasBlockRelation {
+		return nil, errors.Forbidden("cannot follow user due to block relationship")
+	}
+
 	if _, err := uc.userRepo.GetByID(ctx, targetID); err != nil {
 		return nil, err
 	}
@@ -386,6 +437,170 @@ func (uc *SocialUseCases) UnfollowUser(ctx context.Context, currentUserID uuid.U
 	}, nil
 }
 
+func (uc *SocialUseCases) MarkInterested(ctx context.Context, userID uuid.UUID, postID string) (*PreferenceActionOutput, error) {
+	id, err := uuid.Parse(postID)
+	if err != nil {
+		return nil, errors.BadRequest("invalid post id")
+	}
+	if _, err := uc.postRepo.GetByID(ctx, id); err != nil {
+		return nil, err
+	}
+	now := time.Now()
+	if err := uc.preferenceRepo.Upsert(ctx, &socialdomain.PostPreference{
+		UserID:     userID,
+		PostID:     id,
+		Preference: "interested",
+		CreatedAt:  now,
+		UpdatedAt:  now,
+	}); err != nil {
+		return nil, err
+	}
+	return &PreferenceActionOutput{
+		PostID:              id,
+		IsInterestedByMe:    true,
+		IsNotInterestedByMe: false,
+	}, nil
+}
+
+func (uc *SocialUseCases) UnmarkInterested(ctx context.Context, userID uuid.UUID, postID string) (*PreferenceActionOutput, error) {
+	id, err := uuid.Parse(postID)
+	if err != nil {
+		return nil, errors.BadRequest("invalid post id")
+	}
+	if _, err := uc.postRepo.GetByID(ctx, id); err != nil {
+		return nil, err
+	}
+	if err := uc.preferenceRepo.Delete(ctx, userID, id, "interested"); err != nil {
+		return nil, err
+	}
+	currentPreference, err := uc.preferenceRepo.GetByPostAndUser(ctx, userID, id)
+	if err != nil {
+		return nil, err
+	}
+	isNotInterested := currentPreference != nil && currentPreference.Preference == "not_interested"
+	return &PreferenceActionOutput{
+		PostID:              id,
+		IsInterestedByMe:    false,
+		IsNotInterestedByMe: isNotInterested,
+	}, nil
+}
+
+func (uc *SocialUseCases) MarkNotInterested(ctx context.Context, userID uuid.UUID, postID string) (*PreferenceActionOutput, error) {
+	id, err := uuid.Parse(postID)
+	if err != nil {
+		return nil, errors.BadRequest("invalid post id")
+	}
+	if _, err := uc.postRepo.GetByID(ctx, id); err != nil {
+		return nil, err
+	}
+	now := time.Now()
+	if err := uc.preferenceRepo.Upsert(ctx, &socialdomain.PostPreference{
+		UserID:     userID,
+		PostID:     id,
+		Preference: "not_interested",
+		CreatedAt:  now,
+		UpdatedAt:  now,
+	}); err != nil {
+		return nil, err
+	}
+	return &PreferenceActionOutput{
+		PostID:              id,
+		IsInterestedByMe:    false,
+		IsNotInterestedByMe: true,
+	}, nil
+}
+
+func (uc *SocialUseCases) UnmarkNotInterested(ctx context.Context, userID uuid.UUID, postID string) (*PreferenceActionOutput, error) {
+	id, err := uuid.Parse(postID)
+	if err != nil {
+		return nil, errors.BadRequest("invalid post id")
+	}
+	if _, err := uc.postRepo.GetByID(ctx, id); err != nil {
+		return nil, err
+	}
+	if err := uc.preferenceRepo.Delete(ctx, userID, id, "not_interested"); err != nil {
+		return nil, err
+	}
+	currentPreference, err := uc.preferenceRepo.GetByPostAndUser(ctx, userID, id)
+	if err != nil {
+		return nil, err
+	}
+	isInterested := currentPreference != nil && currentPreference.Preference == "interested"
+	return &PreferenceActionOutput{
+		PostID:              id,
+		IsInterestedByMe:    isInterested,
+		IsNotInterestedByMe: false,
+	}, nil
+}
+
+func (uc *SocialUseCases) ReportPost(ctx context.Context, userID uuid.UUID, postID string, input ReportPostInput) (*ReportPostOutput, error) {
+	if err := uc.validator.Validate(input); err != nil {
+		return nil, errors.Validation(err.Error())
+	}
+	id, err := uuid.Parse(postID)
+	if err != nil {
+		return nil, errors.BadRequest("invalid post id")
+	}
+	if _, err := uc.postRepo.GetByID(ctx, id); err != nil {
+		return nil, err
+	}
+	description := stringPointerOrNil("")
+	if input.Description != nil {
+		description = stringPointerOrNil(*input.Description)
+	}
+	now := time.Now()
+	report := &socialdomain.PostReport{
+		ID:          uuid.New(),
+		PostID:      id,
+		ReporterID:  userID,
+		Reason:      input.Reason,
+		Description: description,
+		Status:      "pending",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if err := uc.reportRepo.Upsert(ctx, report); err != nil {
+		return nil, err
+	}
+	return &ReportPostOutput{
+		PostID:      report.PostID,
+		Reason:      report.Reason,
+		Description: report.Description,
+		Status:      report.Status,
+	}, nil
+}
+
+func (uc *SocialUseCases) BlockUser(ctx context.Context, currentUserID uuid.UUID, targetUserID string) (*BlockActionOutput, error) {
+	targetID, err := uuid.Parse(targetUserID)
+	if err != nil {
+		return nil, errors.BadRequest("invalid user id")
+	}
+	if currentUserID == targetID {
+		return nil, errors.BadRequest("cannot block yourself")
+	}
+	if _, err := uc.userRepo.GetByID(ctx, targetID); err != nil {
+		return nil, err
+	}
+	if err := uc.blockRepo.Block(ctx, currentUserID, targetID); err != nil {
+		return nil, err
+	}
+	return &BlockActionOutput{UserID: targetID, IsBlocked: true}, nil
+}
+
+func (uc *SocialUseCases) UnblockUser(ctx context.Context, currentUserID uuid.UUID, targetUserID string) (*BlockActionOutput, error) {
+	targetID, err := uuid.Parse(targetUserID)
+	if err != nil {
+		return nil, errors.BadRequest("invalid user id")
+	}
+	if currentUserID == targetID {
+		return nil, errors.BadRequest("cannot unblock yourself")
+	}
+	if err := uc.blockRepo.Unblock(ctx, currentUserID, targetID); err != nil {
+		return nil, err
+	}
+	return &BlockActionOutput{UserID: targetID, IsBlocked: false}, nil
+}
+
 func (uc *SocialUseCases) GetUserPosts(ctx context.Context, _ uuid.UUID, profileUserID, cursor string, limit int) (*FeedOutput, error) {
 	targetID, err := uuid.Parse(profileUserID)
 	if err != nil {
@@ -426,7 +641,7 @@ func (uc *SocialUseCases) GetUserPosts(ctx context.Context, _ uuid.UUID, profile
 	data := make([]PostOutput, 0, len(posts))
 	for _, post := range posts {
 		post.Media = mediaByPostID[post.ID]
-		data = append(data, mapPost(&post, false))
+		data = append(data, mapPost(&post, false, false, false))
 	}
 
 	hasMore := int64(page*limit) < total
@@ -441,7 +656,7 @@ func (uc *SocialUseCases) GetUserPosts(ctx context.Context, _ uuid.UUID, profile
 	return output, nil
 }
 
-func mapPost(post *socialdomain.Post, isLiked bool) PostOutput {
+func mapPost(post *socialdomain.Post, isLiked, isInterested, isNotInterested bool) PostOutput {
 	caption := ""
 	if post.Caption != nil {
 		caption = *post.Caption
@@ -487,11 +702,15 @@ func mapPost(post *socialdomain.Post, isLiked bool) PostOutput {
 		Feeling:         post.Feeling,
 		Location:        location,
 		Hashtags:        hashtags,
-		LikeCount:       post.LikesCount,
-		CommentCount:    post.CommentsCount,
-		IsLikedByMe:     isLiked,
+		LikeCount:         post.LikesCount,
+		CommentCount:      post.CommentsCount,
+		IsLikedByMe:       isLiked,
+		IsInterestedByMe:  isInterested,
+		IsNotInterestedByMe: isNotInterested,
+		IsEdited:        post.UpdatedAt.After(post.CreatedAt),
 		SharedExercises: []interface{}{},
 		CreatedAt:       post.CreatedAt,
+		UpdatedAt:       post.UpdatedAt,
 	}
 }
 
@@ -706,8 +925,104 @@ func (uc *SocialUseCases) CreatePost(ctx context.Context, userID uuid.UUID, inpu
 	}
 	post.Media = mediaByPostID[post.ID]
 
-	out := mapPost(post, false)
+	out := mapPost(post, false, false, false)
 	return &out, nil
+}
+
+func (uc *SocialUseCases) EditPost(ctx context.Context, userID uuid.UUID, postID string, input UpdatePostInput) (*PostOutput, error) {
+	if err := uc.validator.Validate(input); err != nil {
+		return nil, errors.Validation(err.Error())
+	}
+
+	if input.Caption == nil && input.Feeling == nil && input.Location == nil && input.Hashtags == nil {
+		return nil, errors.Validation("at least one field must be provided")
+	}
+
+	id, err := uuid.Parse(postID)
+	if err != nil {
+		return nil, errors.BadRequest("invalid post id")
+	}
+
+	post, err := uc.postRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	if post.UserID != userID {
+		return nil, errors.Forbidden("you can only edit your own post")
+	}
+
+	if input.Caption != nil {
+		post.Caption = normalizeCaption(input.Caption)
+	}
+
+	if input.Feeling != nil {
+		normalizedFeeling, normalizeErr := normalizeOptionalText(input.Feeling, 100, "feeling")
+		if normalizeErr != nil {
+			return nil, normalizeErr
+		}
+		post.Feeling = normalizedFeeling
+	}
+
+	if input.Location != nil {
+		locationName, normalizeErr := normalizeLocationName(input.Location)
+		if normalizeErr != nil {
+			return nil, normalizeErr
+		}
+		post.LocationName = locationName
+	}
+
+	if input.Hashtags != nil || input.Caption != nil {
+		hashtagInput := post.Hashtags
+		if input.Hashtags != nil {
+			hashtagInput = *input.Hashtags
+		}
+		hashtags, normalizeErr := normalizeHashtags(post.Caption, hashtagInput)
+		if normalizeErr != nil {
+			return nil, normalizeErr
+		}
+		post.Hashtags = hashtags
+	}
+
+	if post.Caption == nil && len(post.Media) == 0 {
+		return nil, errors.Validation("caption is required when media is empty")
+	}
+
+	if err := uc.postRepo.Update(ctx, post); err != nil {
+		return nil, err
+	}
+
+	updatedPost, err := uc.postRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	mediaByPostID, err := uc.postRepo.GetMediaByPostIDs(ctx, []uuid.UUID{updatedPost.ID})
+	if err != nil {
+		return nil, err
+	}
+	updatedPost.Media = mediaByPostID[updatedPost.ID]
+
+	out := mapPost(updatedPost, false, false, false)
+	return &out, nil
+}
+
+func (uc *SocialUseCases) DeletePost(ctx context.Context, userID uuid.UUID, postID string) error {
+	id, err := uuid.Parse(postID)
+	if err != nil {
+		return errors.BadRequest("invalid post id")
+	}
+
+	post, err := uc.postRepo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	if post.UserID != userID {
+		return errors.Forbidden("you can only delete your own post")
+	}
+
+	return uc.postRepo.Delete(ctx, id)
 }
 
 func parseCloudinaryURL(raw string) (cloudName, apiKey, apiSecret string, err error) {

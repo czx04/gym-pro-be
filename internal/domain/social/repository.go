@@ -25,6 +25,9 @@ type FollowRepository interface {
 
 	// GetStats retrieves follow statistics
 	GetStats(ctx context.Context, userID uuid.UUID) (*FollowStats, error)
+
+	// HasBlockRelation checks whether either side blocks the other
+	HasBlockRelation(ctx context.Context, userAID, userBID uuid.UUID) (bool, error)
 }
 
 // PostRepository defines the interface for post data access
@@ -115,4 +118,20 @@ type CommentRepository interface {
 
 	// DecrementReplyCount decrements reply count for a parent comment
 	DecrementReplyCount(ctx context.Context, parentCommentID uuid.UUID) error
+}
+
+type PreferenceRepository interface {
+	Upsert(ctx context.Context, preference *PostPreference) error
+	Delete(ctx context.Context, userID, postID uuid.UUID, preference string) error
+	GetByPostAndUser(ctx context.Context, userID, postID uuid.UUID) (*PostPreference, error)
+}
+
+type ReportRepository interface {
+	Upsert(ctx context.Context, report *PostReport) error
+}
+
+type BlockRepository interface {
+	Block(ctx context.Context, blockerID, blockedID uuid.UUID) error
+	Unblock(ctx context.Context, blockerID, blockedID uuid.UUID) error
+	IsBlocked(ctx context.Context, blockerID, blockedID uuid.UUID) (bool, error)
 }

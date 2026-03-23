@@ -27,6 +27,7 @@ type Post struct {
 	CommentsCount int         `json:"comments_count"`
 	CreatedAt     time.Time   `json:"created_at"`
 	UpdatedAt     time.Time   `json:"updated_at"`
+	DeletedAt     *time.Time  `json:"deleted_at,omitempty"`
 	User          *PostUser   `json:"user,omitempty"` // Basic user info
 	Media         []PostMedia `json:"media,omitempty"`
 }
@@ -132,13 +133,40 @@ type GetCommentsFilter struct {
 
 // ActivityFeedItem represents an item in the activity feed
 type ActivityFeedItem struct {
-	Post      *Post     `json:"post"`
-	IsLiked   bool      `json:"is_liked"`
-	CreatedAt time.Time `json:"created_at"`
+	Post            *Post     `json:"post"`
+	IsLiked         bool      `json:"is_liked"`
+	IsInterested    bool      `json:"is_interested_by_me"`
+	IsNotInterested bool      `json:"is_not_interested_by_me"`
+	CreatedAt       time.Time `json:"created_at"`
 }
 
 // FollowStats represents follow statistics
 type FollowStats struct {
 	FollowersCount int `json:"followers_count"`
 	FollowingCount int `json:"following_count"`
+}
+
+type PostPreference struct {
+	UserID     uuid.UUID `json:"user_id"`
+	PostID     uuid.UUID `json:"post_id"`
+	Preference string    `json:"preference"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+type PostReport struct {
+	ID          uuid.UUID `json:"id"`
+	PostID      uuid.UUID `json:"post_id"`
+	ReporterID  uuid.UUID `json:"reporter_id"`
+	Reason      string    `json:"reason"`
+	Description *string   `json:"description,omitempty"`
+	Status      string    `json:"status"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+type UserBlock struct {
+	BlockerID uuid.UUID `json:"blocker_id"`
+	BlockedID uuid.UUID `json:"blocked_id"`
+	CreatedAt time.Time `json:"created_at"`
 }
