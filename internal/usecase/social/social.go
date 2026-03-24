@@ -1427,6 +1427,14 @@ func (uc *SocialUseCases) CreateComment(ctx context.Context, userID uuid.UUID, p
 	if err := uc.commentRepo.CreateWithMedia(ctx, comment, media); err != nil {
 		return nil, err
 	}
+	mediaByCommentID, err := uc.commentRepo.GetMediaByCommentIDs(ctx, []uuid.UUID{comment.ID})
+	if err != nil {
+		return nil, err
+	}
+	loadedMedia := mediaByCommentID[comment.ID]
+	if loadedMedia == nil {
+		loadedMedia = []socialdomain.CommentMedia{}
+	}
 	if err := uc.postRepo.IncrementCommentsCount(ctx, postUUID); err != nil {
 		return nil, err
 	}
@@ -1460,7 +1468,7 @@ func (uc *SocialUseCases) CreateComment(ctx context.Context, userID uuid.UUID, p
 		PreviewReplies:   make([]CommentOutput, 0),
 		Author:           author,
 		Content:          comment.Content,
-		Media:            mapCommentMediaOutput(media),
+		Media:            mapCommentMediaOutput(loadedMedia),
 		IsDeleted:        comment.DeletedAt != nil,
 		CreatedAt:        comment.CreatedAt,
 	}, nil
