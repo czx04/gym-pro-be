@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"gym-pro-2026-ptit/internal/delivery/http/middleware"
+	socialdomain "gym-pro-2026-ptit/internal/domain/social"
 	socialuc "gym-pro-2026-ptit/internal/usecase/social"
 	"gym-pro-2026-ptit/pkg/errors"
 	"gym-pro-2026-ptit/pkg/response"
@@ -17,8 +18,12 @@ type SocialHandler struct {
 }
 
 type createCommentRequest struct {
-	Text            *string `json:"text"`
-	Content         *string `json:"content"`
+	Text    *string `json:"text"`
+	Content *string `json:"content"`
+	Media   []struct {
+		PublicID     string `json:"public_id"`
+		ResourceType string `json:"resource_type"`
+	} `json:"media"`
 	ParentCommentID *string `json:"parent_comment_id"`
 	ParentID        *string `json:"parent_id"`
 	ParentCommentId *string `json:"parentCommentId"`
@@ -341,16 +346,23 @@ func (h *SocialHandler) CreateComment(c *gin.Context) {
 	}
 
 	content := firstNonEmptyString(req.Content, req.Text)
-	if content == nil {
+	if content == nil && len(req.Media) == 0 {
 		response.ValidationError(c, "validation failed", map[string]interface{}{
-			"content": "content is required",
+			"content": "content or media is required",
 		})
 		return
 	}
 
 	input := socialuc.CreateCommentInput{
-		Content:  *content,
+		Content:  content,
+		Media:    make([]socialdomain.CreatePostMediaInput, 0, len(req.Media)),
 		ParentID: firstNonEmptyString(req.ParentID, req.ParentId, req.ParentCommentID, req.ParentCommentId),
+	}
+	for _, media := range req.Media {
+		input.Media = append(input.Media, socialdomain.CreatePostMediaInput{
+			PublicID:     media.PublicID,
+			ResourceType: media.ResourceType,
+		})
 	}
 
 	result, err := h.socialUC.CreateComment(c.Request.Context(), userID, c.Param("postId"), input)
@@ -360,6 +372,21 @@ func (h *SocialHandler) CreateComment(c *gin.Context) {
 	}
 
 	response.Created(c, result)
+}
+
+func (h *SocialHandler) DeleteComment(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	if err := h.socialUC.DeleteComment(c.Request.Context(), userID, c.Param("postId"), c.Param("commentId")); err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	response.Success(c, gin.H{"deleted": true})
 }
 
 func (h *SocialHandler) ReportPost(c *gin.Context) {

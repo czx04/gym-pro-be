@@ -72,8 +72,9 @@ type LikeResponse struct {
 }
 
 type CreateCommentInput struct {
-	Content  string  `json:"content" validate:"required,min=1,max=1000"`
-	ParentID *string `json:"parentId" validate:"omitempty,uuid4"`
+	Content  *string                             `json:"content,omitempty" validate:"omitempty,min=1,max=1000"`
+	Media    []socialdomain.CreatePostMediaInput `json:"media,omitempty" validate:"omitempty,dive"`
+	ParentID *string                             `json:"parentId" validate:"omitempty,uuid4"`
 }
 
 type CommentAuthorOutput struct {
@@ -92,6 +93,7 @@ type CommentOutput struct {
 	PreviewReplies   []CommentOutput     `json:"previewReplies"`
 	Author           CommentAuthorOutput `json:"author"`
 	Content          string              `json:"content"`
+	Media            []PostMediaOutput   `json:"media"`
 	IsDeleted        bool                `json:"isDeleted"`
 	CreatedAt        time.Time           `json:"createdAt"`
 }
@@ -180,26 +182,26 @@ type PostMediaOutput struct {
 }
 
 type PostOutput struct {
-	ID              uuid.UUID         `json:"id"`
-	Author          AuthorOutput      `json:"author"`
-	ContentType     string            `json:"content_type"`
-	ContentID       *uuid.UUID        `json:"content_id"`
-	StreakText      string            `json:"streak_text"`
-	TimeLabel       string            `json:"time_label"`
-	Caption         string            `json:"caption"`
-	Media           []PostMediaOutput `json:"media"`
-	Feeling         *string           `json:"feeling"`
-	Location        *PostLocation     `json:"location"`
-	Hashtags        []string          `json:"hashtags"`
-	LikeCount       int               `json:"like_count"`
-	CommentCount    int               `json:"comment_count"`
-	IsLikedByMe     bool              `json:"is_liked_by_me"`
-	IsInterestedByMe bool             `json:"is_interested_by_me"`
-	IsNotInterestedByMe bool          `json:"is_not_interested_by_me"`
-	IsEdited        bool              `json:"is_edited"`
-	SharedExercises []interface{}     `json:"shared_exercises,omitempty"`
-	CreatedAt       time.Time         `json:"created_at"`
-	UpdatedAt       time.Time         `json:"updated_at"`
+	ID                  uuid.UUID         `json:"id"`
+	Author              AuthorOutput      `json:"author"`
+	ContentType         string            `json:"content_type"`
+	ContentID           *uuid.UUID        `json:"content_id"`
+	StreakText          string            `json:"streak_text"`
+	TimeLabel           string            `json:"time_label"`
+	Caption             string            `json:"caption"`
+	Media               []PostMediaOutput `json:"media"`
+	Feeling             *string           `json:"feeling"`
+	Location            *PostLocation     `json:"location"`
+	Hashtags            []string          `json:"hashtags"`
+	LikeCount           int               `json:"like_count"`
+	CommentCount        int               `json:"comment_count"`
+	IsLikedByMe         bool              `json:"is_liked_by_me"`
+	IsInterestedByMe    bool              `json:"is_interested_by_me"`
+	IsNotInterestedByMe bool              `json:"is_not_interested_by_me"`
+	IsEdited            bool              `json:"is_edited"`
+	SharedExercises     []interface{}     `json:"shared_exercises,omitempty"`
+	CreatedAt           time.Time         `json:"created_at"`
+	UpdatedAt           time.Time         `json:"updated_at"`
 }
 
 type PostLocation struct {
@@ -228,9 +230,9 @@ type FollowActionOutput struct {
 }
 
 type PreferenceActionOutput struct {
-	PostID             uuid.UUID `json:"post_id"`
-	IsInterestedByMe   bool      `json:"is_interested_by_me"`
-	IsNotInterestedByMe bool     `json:"is_not_interested_by_me"`
+	PostID              uuid.UUID `json:"post_id"`
+	IsInterestedByMe    bool      `json:"is_interested_by_me"`
+	IsNotInterestedByMe bool      `json:"is_not_interested_by_me"`
 }
 
 type ReportPostInput struct {
@@ -300,7 +302,7 @@ func (uc *SocialUseCases) GetFeed(ctx context.Context, userID uuid.UUID, cursor 
 	return output, nil
 }
 
-func (uc *SocialUseCases) GetPostByID(ctx context.Context, _ uuid.UUID, postID string) (*PostOutput, error) {
+func (uc *SocialUseCases) GetPostByID(ctx context.Context, viewerID uuid.UUID, postID string) (*PostOutput, error) {
 	id, err := uuid.Parse(postID)
 	if err != nil {
 		return nil, errors.BadRequest("invalid post id")
@@ -311,13 +313,41 @@ func (uc *SocialUseCases) GetPostByID(ctx context.Context, _ uuid.UUID, postID s
 		return nil, err
 	}
 
+	blocked, err := uc.followRepo.HasBlockRelation(ctx, viewerID, post.UserID)
+	if err != nil {
+		return nil, err
+	}
+	if blocked {
+		return nil, errors.NotFound("post")
+	}
+
+	isLiked, err := uc.likeRepo.Exists(ctx, post.ID, viewerID)
+	if err != nil {
+		return nil, err
+	}
+
+	isInterested := false
+	isNotInterested := false
+	pref, err := uc.preferenceRepo.GetByPostAndUser(ctx, viewerID, post.ID)
+	if err != nil {
+		return nil, err
+	}
+	if pref != nil {
+		switch pref.Preference {
+		case "interested":
+			isInterested = true
+		case "not_interested":
+			isNotInterested = true
+		}
+	}
+
 	mediaByPostID, err := uc.postRepo.GetMediaByPostIDs(ctx, []uuid.UUID{post.ID})
 	if err != nil {
 		return nil, err
 	}
 	post.Media = mediaByPostID[post.ID]
 
-	out := mapPost(post, false, false, false)
+	out := mapPost(post, isLiked, isInterested, isNotInterested)
 	return &out, nil
 }
 
@@ -601,7 +631,7 @@ func (uc *SocialUseCases) UnblockUser(ctx context.Context, currentUserID uuid.UU
 	return &BlockActionOutput{UserID: targetID, IsBlocked: false}, nil
 }
 
-func (uc *SocialUseCases) GetUserPosts(ctx context.Context, _ uuid.UUID, profileUserID, cursor string, limit int) (*FeedOutput, error) {
+func (uc *SocialUseCases) GetUserPosts(ctx context.Context, viewerID uuid.UUID, profileUserID, cursor string, limit int) (*FeedOutput, error) {
 	targetID, err := uuid.Parse(profileUserID)
 	if err != nil {
 		return nil, errors.BadRequest("invalid user id")
@@ -638,10 +668,31 @@ func (uc *SocialUseCases) GetUserPosts(ctx context.Context, _ uuid.UUID, profile
 		return nil, err
 	}
 
+	likesByPost, err := uc.likeRepo.ExistsForPosts(ctx, viewerID, postIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	prefsByPost, err := uc.preferenceRepo.GetByPostsAndUser(ctx, viewerID, postIDs)
+	if err != nil {
+		return nil, err
+	}
+
 	data := make([]PostOutput, 0, len(posts))
 	for _, post := range posts {
 		post.Media = mediaByPostID[post.ID]
-		data = append(data, mapPost(&post, false, false, false))
+		isLiked := likesByPost[post.ID]
+		isInterested := false
+		isNotInterested := false
+		if pref := prefsByPost[post.ID]; pref != nil {
+			switch pref.Preference {
+			case "interested":
+				isInterested = true
+			case "not_interested":
+				isNotInterested = true
+			}
+		}
+		data = append(data, mapPost(&post, isLiked, isInterested, isNotInterested))
 	}
 
 	hasMore := int64(page*limit) < total
@@ -691,26 +742,26 @@ func mapPost(post *socialdomain.Post, isLiked, isInterested, isNotInterested boo
 	}
 
 	return PostOutput{
-		ID:              post.ID,
-		Author:          author,
-		ContentType:     post.ContentType,
-		ContentID:       post.ContentID,
-		StreakText:      "0 DAY STREAK",
-		TimeLabel:       humanizeTime(post.CreatedAt),
-		Caption:         caption,
-		Media:           media,
-		Feeling:         post.Feeling,
-		Location:        location,
-		Hashtags:        hashtags,
-		LikeCount:         post.LikesCount,
-		CommentCount:      post.CommentsCount,
-		IsLikedByMe:       isLiked,
-		IsInterestedByMe:  isInterested,
+		ID:                  post.ID,
+		Author:              author,
+		ContentType:         post.ContentType,
+		ContentID:           post.ContentID,
+		StreakText:          "0 DAY STREAK",
+		TimeLabel:           humanizeTime(post.CreatedAt),
+		Caption:             caption,
+		Media:               media,
+		Feeling:             post.Feeling,
+		Location:            location,
+		Hashtags:            hashtags,
+		LikeCount:           post.LikesCount,
+		CommentCount:        post.CommentsCount,
+		IsLikedByMe:         isLiked,
+		IsInterestedByMe:    isInterested,
 		IsNotInterestedByMe: isNotInterested,
-		IsEdited:        post.UpdatedAt.After(post.CreatedAt),
-		SharedExercises: []interface{}{},
-		CreatedAt:       post.CreatedAt,
-		UpdatedAt:       post.UpdatedAt,
+		IsEdited:            post.UpdatedAt.After(post.CreatedAt),
+		SharedExercises:     []interface{}{},
+		CreatedAt:           post.CreatedAt,
+		UpdatedAt:           post.UpdatedAt,
 	}
 }
 
@@ -750,6 +801,25 @@ func decodePageCursor(cursor string) (int, error) {
 	return page, nil
 }
 
+func isSocialMediaFolderOwnedByUser(folder string, postsPrefix string, commentsPrefix string) bool {
+	for _, p := range []string{postsPrefix, commentsPrefix} {
+		if folder == p || strings.HasPrefix(folder, p+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+func isSocialMediaPublicIDOwnedByUser(publicID string, userID uuid.UUID) bool {
+	uid := userID.String()
+	for _, p := range []string{"posts/" + uid + "/", "comments/" + uid + "/"} {
+		if strings.HasPrefix(publicID, p) {
+			return true
+		}
+	}
+	return false
+}
+
 func (uc *SocialUseCases) CreateMediaSignature(ctx context.Context, userID uuid.UUID, input CreateMediaSignatureInput) (*MediaSignatureOutput, error) {
 	if err := uc.validator.Validate(input); err != nil {
 		return nil, errors.Validation(err.Error())
@@ -759,12 +829,13 @@ func (uc *SocialUseCases) CreateMediaSignature(ctx context.Context, userID uuid.
 		return nil, errors.InternalServer("cloudinary is not configured", nil)
 	}
 
-	ownerPrefix := "posts/" + userID.String()
+	postsPrefix := "posts/" + userID.String()
+	commentsPrefix := "comments/" + userID.String()
 	folder := strings.TrimSpace(input.Folder)
 	if folder == "" {
-		folder = ownerPrefix
+		folder = postsPrefix
 	}
-	if !strings.HasPrefix(folder, ownerPrefix) {
+	if !isSocialMediaFolderOwnedByUser(folder, postsPrefix, commentsPrefix) {
 		return nil, errors.Forbidden("invalid folder for current user")
 	}
 
@@ -819,9 +890,7 @@ func (uc *SocialUseCases) ConfirmMedia(ctx context.Context, userID uuid.UUID, in
 		return nil, errors.Validation("public_id is required")
 	}
 
-	ownerPrefix := "posts/" + userID.String() + "/"
-	isOwned := strings.HasPrefix(publicID, ownerPrefix)
-	if !isOwned {
+	if !isSocialMediaPublicIDOwnedByUser(publicID, userID) {
 		return nil, errors.Forbidden("media does not belong to current user")
 	}
 
@@ -1287,6 +1356,17 @@ func (uc *SocialUseCases) CreateComment(ctx context.Context, userID uuid.UUID, p
 		return nil, errors.Validation(err.Error())
 	}
 
+	content := ""
+	if input.Content != nil {
+		content = strings.TrimSpace(*input.Content)
+	}
+	if content == "" && len(input.Media) == 0 {
+		return nil, errors.Validation("content or media is required")
+	}
+	if len(input.Media) > 1 {
+		return nil, errors.Validation("only one media item is allowed")
+	}
+
 	postUUID, err := uuid.Parse(postID)
 	if err != nil {
 		return nil, errors.BadRequest("invalid post id")
@@ -1321,13 +1401,30 @@ func (uc *SocialUseCases) CreateComment(ctx context.Context, userID uuid.UUID, p
 		PostID:          postUUID,
 		UserID:          userID,
 		ParentCommentID: parentCommentID,
-		Content:         strings.TrimSpace(input.Content),
+		Content:         content,
 		ReplyCount:      0,
 		CreatedAt:       now,
 		UpdatedAt:       now,
 	}
 
-	if err := uc.commentRepo.Create(ctx, comment); err != nil {
+	media := make([]socialdomain.CommentMedia, 0, len(input.Media))
+	for idx, item := range input.Media {
+		publicID := strings.TrimSpace(item.PublicID)
+		if publicID == "" {
+			return nil, errors.Validation("public_id is required")
+		}
+		if item.ResourceType != "image" {
+			return nil, errors.Validation("comment media only supports image")
+		}
+		media = append(media, socialdomain.CommentMedia{
+			CommentID:    comment.ID,
+			PublicID:     publicID,
+			ResourceType: item.ResourceType,
+			OrderIndex:   idx,
+		})
+	}
+
+	if err := uc.commentRepo.CreateWithMedia(ctx, comment, media); err != nil {
 		return nil, err
 	}
 	if err := uc.postRepo.IncrementCommentsCount(ctx, postUUID); err != nil {
@@ -1363,6 +1460,7 @@ func (uc *SocialUseCases) CreateComment(ctx context.Context, userID uuid.UUID, p
 		PreviewReplies:   make([]CommentOutput, 0),
 		Author:           author,
 		Content:          comment.Content,
+		Media:            mapCommentMediaOutput(media),
 		IsDeleted:        comment.DeletedAt != nil,
 		CreatedAt:        comment.CreatedAt,
 	}, nil
@@ -1402,13 +1500,28 @@ func (uc *SocialUseCases) GetPostComments(ctx context.Context, postID string, cu
 	if err != nil {
 		return nil, err
 	}
+	commentIDs := make([]uuid.UUID, 0, len(comments))
+	for _, comment := range comments {
+		commentIDs = append(commentIDs, comment.ID)
+	}
+	for _, replies := range latestRepliesByParent {
+		for _, reply := range replies {
+			commentIDs = append(commentIDs, reply.ID)
+		}
+	}
+	mediaByCommentID, err := uc.commentRepo.GetMediaByCommentIDs(ctx, commentIDs)
+	if err != nil {
+		return nil, err
+	}
 
 	data := make([]CommentOutput, 0, len(comments))
 	for _, comment := range comments {
+		comment.Media = mediaByCommentID[comment.ID]
 		latestReplies := make([]CommentOutput, 0)
 		if replies, ok := latestRepliesByParent[comment.ID]; ok {
 			latestReplies = make([]CommentOutput, 0, len(replies))
 			for _, reply := range replies {
+				reply.Media = mediaByCommentID[reply.ID]
 				replyPath := buildCommentPath(&comment.ID, reply.ID)
 				latestReplies = append(latestReplies, mapCommentResponse(reply, 1, replyPath, make([]CommentOutput, 0)))
 			}
@@ -1465,9 +1578,18 @@ func (uc *SocialUseCases) GetCommentReplies(ctx context.Context, postID string, 
 	if err != nil {
 		return nil, err
 	}
+	commentIDs := make([]uuid.UUID, 0, len(comments))
+	for _, comment := range comments {
+		commentIDs = append(commentIDs, comment.ID)
+	}
+	mediaByCommentID, err := uc.commentRepo.GetMediaByCommentIDs(ctx, commentIDs)
+	if err != nil {
+		return nil, err
+	}
 
 	data := make([]CommentOutput, 0, len(comments))
 	for _, comment := range comments {
+		comment.Media = mediaByCommentID[comment.ID]
 		data = append(data, mapCommentResponse(comment, 1, buildCommentPath(&parentUUID, comment.ID), make([]CommentOutput, 0)))
 	}
 
@@ -1479,6 +1601,44 @@ func (uc *SocialUseCases) GetCommentReplies(ctx context.Context, postID string, 
 	}
 	out := &CommentRepliesOutput{Replies: data, NextCursor: nextCursor}
 	return out, nil
+}
+
+func (uc *SocialUseCases) DeleteComment(ctx context.Context, userID uuid.UUID, postID string, commentID string) error {
+	postUUID, err := uuid.Parse(postID)
+	if err != nil {
+		return errors.BadRequest("invalid post id")
+	}
+	commentUUID, err := uuid.Parse(commentID)
+	if err != nil {
+		return errors.BadRequest("invalid comment id")
+	}
+
+	comment, err := uc.commentRepo.GetByID(ctx, commentUUID)
+	if err != nil {
+		return err
+	}
+	if comment.PostID != postUUID {
+		return errors.BadRequest("comment does not belong to post")
+	}
+	if comment.DeletedAt != nil {
+		return nil
+	}
+	if comment.UserID != userID {
+		return errors.Forbidden("you can only delete your own comment")
+	}
+
+	if err := uc.commentRepo.Delete(ctx, commentUUID); err != nil {
+		return err
+	}
+	if err := uc.postRepo.DecrementCommentsCount(ctx, postUUID); err != nil {
+		return err
+	}
+	if comment.ParentCommentID != nil {
+		if err := uc.commentRepo.DecrementReplyCount(ctx, *comment.ParentCommentID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func mapCommentAuthor(comment socialdomain.Comment) CommentAuthorOutput {
@@ -1508,9 +1668,27 @@ func mapCommentResponse(comment socialdomain.Comment, depth int, path string, pr
 		PreviewReplies:   previewReplies,
 		Author:           mapCommentAuthor(comment),
 		Content:          comment.Content,
+		Media:            mapCommentMediaOutput(comment.Media),
 		IsDeleted:        comment.DeletedAt != nil,
 		CreatedAt:        comment.CreatedAt,
 	}
+}
+
+func mapCommentMediaOutput(media []socialdomain.CommentMedia) []PostMediaOutput {
+	if len(media) == 0 {
+		return make([]PostMediaOutput, 0)
+	}
+	out := make([]PostMediaOutput, 0, len(media))
+	for _, item := range media {
+		if item.SecureURL == nil || strings.TrimSpace(*item.SecureURL) == "" {
+			continue
+		}
+		out = append(out, PostMediaOutput{
+			Type: item.ResourceType,
+			URL:  *item.SecureURL,
+		})
+	}
+	return out
 }
 
 func buildCommentPath(parentID *uuid.UUID, commentID uuid.UUID) string {

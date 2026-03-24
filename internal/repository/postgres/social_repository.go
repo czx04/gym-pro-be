@@ -2,11 +2,11 @@ package postgres
 
 import (
 	"context"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"gym-pro-2026-ptit/internal/domain/social"
 	"gym-pro-2026-ptit/internal/infrastructure/database"
 	"gym-pro-2026-ptit/pkg/errors"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 )
 
 // FollowRepository implementation
@@ -619,6 +619,36 @@ func (r *likeRepository) Exists(ctx context.Context, postID, userID uuid.UUID) (
 	return exists, nil
 }
 
+func (r *likeRepository) ExistsForPosts(ctx context.Context, userID uuid.UUID, postIDs []uuid.UUID) (map[uuid.UUID]bool, error) {
+	out := make(map[uuid.UUID]bool, len(postIDs))
+	for _, id := range postIDs {
+		out[id] = false
+	}
+	if len(postIDs) == 0 {
+		return out, nil
+	}
+
+	query := `SELECT post_id FROM likes WHERE user_id = $1 AND post_id = ANY($2)`
+	rows, err := r.db.Query(ctx, query, userID, postIDs)
+	if err != nil {
+		return nil, errors.DatabaseError("batch check likes", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var postID uuid.UUID
+		if err := rows.Scan(&postID); err != nil {
+			return nil, errors.DatabaseError("scan liked post id", err)
+		}
+		out[postID] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, errors.DatabaseError("iterate liked posts", err)
+	}
+
+	return out, nil
+}
+
 func (r *likeRepository) GetByPostID(ctx context.Context, postID uuid.UUID, page, pageSize int) ([]social.Like, int64, error) {
 	if page < 1 {
 		page = 1
@@ -689,6 +719,69 @@ func (r *commentRepository) Create(ctx context.Context, comment *social.Comment)
 	); err != nil {
 		return errors.DatabaseError("create comment", err)
 	}
+	return nil
+}
+
+func (r *commentRepository) CreateWithMedia(ctx context.Context, comment *social.Comment, media []social.CommentMedia) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return errors.DatabaseError("begin create comment transaction", err)
+	}
+	defer tx.Rollback(ctx)
+
+	insertCommentQuery := `
+		INSERT INTO comments (id, post_id, user_id, parent_comment_id, content, reply_count, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	`
+	_, err = tx.Exec(ctx, insertCommentQuery,
+		comment.ID,
+		comment.PostID,
+		comment.UserID,
+		comment.ParentCommentID,
+		comment.Content,
+		comment.ReplyCount,
+		comment.CreatedAt,
+		comment.UpdatedAt,
+	)
+	if err != nil {
+		return errors.DatabaseError("insert comment", err)
+	}
+
+	for _, m := range media {
+		var resourceType string
+		attachAssetQuery := `
+			UPDATE social_media_assets
+			SET status = 'attached',
+				attached_at = NOW(),
+				updated_at = NOW()
+			WHERE public_id = $1
+			  AND user_id = $2
+			  AND status = 'ready'
+			RETURNING resource_type
+		`
+
+		err := tx.QueryRow(ctx, attachAssetQuery, m.PublicID, comment.UserID).Scan(&resourceType)
+		if err != nil {
+			if err == pgx.ErrNoRows {
+				return errors.Conflict("media asset not ready or not owned by current user")
+			}
+			return errors.DatabaseError("attach media asset", err)
+		}
+
+		insertCommentMediaQuery := `
+			INSERT INTO comment_media (comment_id, public_id, resource_type, order_index)
+			VALUES ($1, $2, $3, $4)
+		`
+		_, err = tx.Exec(ctx, insertCommentMediaQuery, comment.ID, m.PublicID, resourceType, m.OrderIndex)
+		if err != nil {
+			return errors.DatabaseError("insert comment media", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return errors.DatabaseError("commit create comment transaction", err)
+	}
+
 	return nil
 }
 
@@ -878,6 +971,39 @@ func (r *commentRepository) GetLatestRepliesByParentIDs(ctx context.Context, par
 	return result, nil
 }
 
+func (r *commentRepository) GetMediaByCommentIDs(ctx context.Context, commentIDs []uuid.UUID) (map[uuid.UUID][]social.CommentMedia, error) {
+	grouped := make(map[uuid.UUID][]social.CommentMedia)
+	if len(commentIDs) == 0 {
+		return grouped, nil
+	}
+
+	query := `
+		SELECT cm.comment_id, cm.public_id, cm.resource_type, sma.secure_url, cm.order_index
+		FROM comment_media cm
+		LEFT JOIN social_media_assets sma ON sma.public_id = cm.public_id
+		WHERE cm.comment_id = ANY($1)
+		ORDER BY cm.comment_id, cm.order_index
+	`
+	rows, err := r.db.Query(ctx, query, commentIDs)
+	if err != nil {
+		return nil, errors.DatabaseError("get comment media", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var item social.CommentMedia
+		if err := rows.Scan(&item.CommentID, &item.PublicID, &item.ResourceType, &item.SecureURL, &item.OrderIndex); err != nil {
+			return nil, errors.DatabaseError("scan comment media", err)
+		}
+		grouped[item.CommentID] = append(grouped[item.CommentID], item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, errors.DatabaseError("iterate comment media", err)
+	}
+
+	return grouped, nil
+}
+
 func (r *commentRepository) Update(ctx context.Context, comment *social.Comment) error {
 	query := `
 		UPDATE comments
@@ -1064,6 +1190,43 @@ func (r *preferenceRepository) GetByPostAndUser(ctx context.Context, userID, pos
 		return nil, errors.DatabaseError("get post preference", err)
 	}
 	return &preference, nil
+}
+
+func (r *preferenceRepository) GetByPostsAndUser(ctx context.Context, userID uuid.UUID, postIDs []uuid.UUID) (map[uuid.UUID]*social.PostPreference, error) {
+	out := make(map[uuid.UUID]*social.PostPreference)
+	if len(postIDs) == 0 {
+		return out, nil
+	}
+
+	query := `
+		SELECT user_id, post_id, preference, created_at, updated_at
+		FROM post_preferences
+		WHERE user_id = $1 AND post_id = ANY($2)
+	`
+	rows, err := r.db.Query(ctx, query, userID, postIDs)
+	if err != nil {
+		return nil, errors.DatabaseError("batch get post preferences", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var pref social.PostPreference
+		if err := rows.Scan(
+			&pref.UserID,
+			&pref.PostID,
+			&pref.Preference,
+			&pref.CreatedAt,
+			&pref.UpdatedAt,
+		); err != nil {
+			return nil, errors.DatabaseError("scan post preference", err)
+		}
+		out[pref.PostID] = &pref
+	}
+	if err := rows.Err(); err != nil {
+		return nil, errors.DatabaseError("iterate post preferences", err)
+	}
+
+	return out, nil
 }
 
 type reportRepository struct {

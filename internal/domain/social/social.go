@@ -76,16 +76,25 @@ type Like struct {
 
 // Comment represents a comment on a post
 type Comment struct {
-	ID              uuid.UUID  `json:"id"`
-	PostID          uuid.UUID  `json:"post_id"`
-	UserID          uuid.UUID  `json:"user_id"`
-	ParentCommentID *uuid.UUID `json:"parent_comment_id,omitempty"`
-	Content         string     `json:"content"`
-	ReplyCount      int        `json:"reply_count"`
-	CreatedAt       time.Time  `json:"created_at"`
-	UpdatedAt       time.Time  `json:"updated_at"`
-	DeletedAt       *time.Time `json:"deleted_at,omitempty"`
-	User            *PostUser  `json:"user,omitempty"`
+	ID              uuid.UUID      `json:"id"`
+	PostID          uuid.UUID      `json:"post_id"`
+	UserID          uuid.UUID      `json:"user_id"`
+	ParentCommentID *uuid.UUID     `json:"parent_comment_id,omitempty"`
+	Content         string         `json:"content"`
+	Media           []CommentMedia `json:"media,omitempty"`
+	ReplyCount      int            `json:"reply_count"`
+	CreatedAt       time.Time      `json:"created_at"`
+	UpdatedAt       time.Time      `json:"updated_at"`
+	DeletedAt       *time.Time     `json:"deleted_at,omitempty"`
+	User            *PostUser      `json:"user,omitempty"`
+}
+
+type CommentMedia struct {
+	CommentID    uuid.UUID `json:"comment_id"`
+	PublicID     string    `json:"public_id"`
+	ResourceType string    `json:"resource_type"`
+	SecureURL    *string   `json:"secure_url,omitempty"`
+	OrderIndex   int       `json:"order_index"`
 }
 
 // CreatePostInput represents input for creating a post

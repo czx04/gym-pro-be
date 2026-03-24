@@ -89,6 +89,9 @@ type LikeRepository interface {
 	// Exists checks if a like exists
 	Exists(ctx context.Context, postID, userID uuid.UUID) (bool, error)
 
+	// ExistsForPosts returns whether the user liked each post (batch).
+	ExistsForPosts(ctx context.Context, userID uuid.UUID, postIDs []uuid.UUID) (map[uuid.UUID]bool, error)
+
 	// GetByPostID retrieves likes for a post
 	GetByPostID(ctx context.Context, postID uuid.UUID, page, pageSize int) ([]Like, int64, error)
 }
@@ -98,6 +101,9 @@ type CommentRepository interface {
 	// Create creates a comment
 	Create(ctx context.Context, comment *Comment) error
 
+	// CreateWithMedia creates a comment and attaches media atomically
+	CreateWithMedia(ctx context.Context, comment *Comment, media []CommentMedia) error
+
 	// GetByID retrieves a comment by ID
 	GetByID(ctx context.Context, id uuid.UUID) (*Comment, error)
 
@@ -106,6 +112,9 @@ type CommentRepository interface {
 
 	// GetLatestRepliesByParentIDs retrieves latest replies for parent comments
 	GetLatestRepliesByParentIDs(ctx context.Context, parentCommentIDs []uuid.UUID, limitPerParent int) (map[uuid.UUID][]Comment, error)
+
+	// GetMediaByCommentIDs retrieves media grouped by comment IDs
+	GetMediaByCommentIDs(ctx context.Context, commentIDs []uuid.UUID) (map[uuid.UUID][]CommentMedia, error)
 
 	// Update updates a comment
 	Update(ctx context.Context, comment *Comment) error
@@ -124,6 +133,7 @@ type PreferenceRepository interface {
 	Upsert(ctx context.Context, preference *PostPreference) error
 	Delete(ctx context.Context, userID, postID uuid.UUID, preference string) error
 	GetByPostAndUser(ctx context.Context, userID, postID uuid.UUID) (*PostPreference, error)
+	GetByPostsAndUser(ctx context.Context, userID uuid.UUID, postIDs []uuid.UUID) (map[uuid.UUID]*PostPreference, error)
 }
 
 type ReportRepository interface {
