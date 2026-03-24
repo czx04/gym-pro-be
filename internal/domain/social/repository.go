@@ -53,6 +53,9 @@ type PostRepository interface {
 	// Update updates a post
 	Update(ctx context.Context, post *Post) error
 
+	// UpdateWithMediaReplace updates post row and optionally replaces all post_media rows in one transaction.
+	UpdateWithMediaReplace(ctx context.Context, post *Post, replaceMedia bool, media []PostMedia) error
+
 	// Delete deletes a post
 	Delete(ctx context.Context, id uuid.UUID) error
 

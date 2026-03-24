@@ -531,6 +531,89 @@ func (r *postRepository) Update(ctx context.Context, post *social.Post) error {
 	return nil
 }
 
+func (r *postRepository) UpdateWithMediaReplace(ctx context.Context, post *social.Post, replaceMedia bool, media []social.PostMedia) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return errors.DatabaseError("begin update post transaction", err)
+	}
+	defer tx.Rollback(ctx)
+
+	updateQuery := `
+		UPDATE posts
+		SET caption = $2,
+			feeling = $3,
+			location_name = $4,
+			hashtags = $5,
+			updated_at = NOW()
+		WHERE id = $1
+		  AND deleted_at IS NULL
+	`
+	result, err := tx.Exec(ctx, updateQuery, post.ID, post.Caption, post.Feeling, post.LocationName, post.Hashtags)
+	if err != nil {
+		return errors.DatabaseError("update post", err)
+	}
+	if result.RowsAffected() == 0 {
+		return errors.NotFound("post")
+	}
+
+	if replaceMedia {
+		_, err = tx.Exec(ctx, `
+			UPDATE social_media_assets
+			SET status = 'ready',
+				post_id = NULL,
+				attached_at = NULL,
+				updated_at = NOW()
+			WHERE post_id = $1
+		`, post.ID)
+		if err != nil {
+			return errors.DatabaseError("detach post media assets", err)
+		}
+
+		_, err = tx.Exec(ctx, `DELETE FROM post_media WHERE post_id = $1`, post.ID)
+		if err != nil {
+			return errors.DatabaseError("delete post media", err)
+		}
+
+		for _, m := range media {
+			var resourceType string
+			attachAssetQuery := `
+				UPDATE social_media_assets
+				SET status = 'attached',
+					post_id = $3,
+					attached_at = NOW(),
+					updated_at = NOW()
+				WHERE public_id = $1
+				  AND user_id = $2
+				  AND status = 'ready'
+				RETURNING resource_type
+			`
+
+			err = tx.QueryRow(ctx, attachAssetQuery, m.PublicID, post.UserID, post.ID).Scan(&resourceType)
+			if err != nil {
+				if err == pgx.ErrNoRows {
+					return errors.Conflict("media asset not ready or not owned by current user")
+				}
+				return errors.DatabaseError("attach media asset", err)
+			}
+
+			insertPostMediaQuery := `
+				INSERT INTO post_media (post_id, public_id, resource_type, order_index)
+				VALUES ($1, $2, $3, $4)
+			`
+
+			_, err = tx.Exec(ctx, insertPostMediaQuery, post.ID, m.PublicID, resourceType, m.OrderIndex)
+			if err != nil {
+				return errors.DatabaseError("insert post media", err)
+			}
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return errors.DatabaseError("commit update post transaction", err)
+	}
+	return nil
+}
+
 func (r *postRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	query := `
 		UPDATE posts

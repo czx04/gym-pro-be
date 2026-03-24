@@ -119,10 +119,12 @@ type CreatePostInput struct {
 }
 
 type UpdatePostInput struct {
-	Caption  *string                  `json:"caption,omitempty" validate:"omitempty,max=2000"`
-	Feeling  *string                  `json:"feeling,omitempty" validate:"omitempty,max=100"`
-	Location *CreatePostLocationInput `json:"location,omitempty" validate:"omitempty"`
-	Hashtags *[]string                `json:"hashtags,omitempty" validate:"omitempty,dive,max=50"`
+	Caption       *string                             `json:"caption,omitempty" validate:"omitempty,max=2000"`
+	Feeling       *string                             `json:"feeling,omitempty" validate:"omitempty,max=100"`
+	Location      *CreatePostLocationInput            `json:"location,omitempty" validate:"omitempty"`
+	Hashtags      *[]string                           `json:"hashtags,omitempty" validate:"omitempty,dive,max=50"`
+	Media         *[]socialdomain.CreatePostMediaInput `json:"media,omitempty" validate:"omitempty,dive"`
+	ClearLocation *bool                               `json:"clear_location,omitempty"`
 }
 
 type CreatePostLocationInput struct {
@@ -177,8 +179,9 @@ type AuthorOutput struct {
 }
 
 type PostMediaOutput struct {
-	Type string `json:"type"`
-	URL  string `json:"url"`
+	Type     string `json:"type"`
+	URL      string `json:"url"`
+	PublicID string `json:"public_id,omitempty"`
 }
 
 type PostOutput struct {
@@ -728,7 +731,7 @@ func mapPost(post *socialdomain.Post, isLiked, isInterested, isNotInterested boo
 		if item.SecureURL != nil {
 			urlValue = *item.SecureURL
 		}
-		media = append(media, PostMediaOutput{Type: item.ResourceType, URL: urlValue})
+		media = append(media, PostMediaOutput{Type: item.ResourceType, URL: urlValue, PublicID: item.PublicID})
 	}
 
 	hashtags := post.Hashtags
@@ -1003,7 +1006,9 @@ func (uc *SocialUseCases) EditPost(ctx context.Context, userID uuid.UUID, postID
 		return nil, errors.Validation(err.Error())
 	}
 
-	if input.Caption == nil && input.Feeling == nil && input.Location == nil && input.Hashtags == nil {
+	clearLoc := input.ClearLocation != nil && *input.ClearLocation
+	hasMediaReplace := input.Media != nil
+	if input.Caption == nil && input.Feeling == nil && input.Location == nil && input.Hashtags == nil && !hasMediaReplace && !clearLoc {
 		return nil, errors.Validation("at least one field must be provided")
 	}
 
@@ -1021,6 +1026,12 @@ func (uc *SocialUseCases) EditPost(ctx context.Context, userID uuid.UUID, postID
 		return nil, errors.Forbidden("you can only edit your own post")
 	}
 
+	mediaByPostID, err := uc.postRepo.GetMediaByPostIDs(ctx, []uuid.UUID{post.ID})
+	if err != nil {
+		return nil, err
+	}
+	post.Media = mediaByPostID[post.ID]
+
 	if input.Caption != nil {
 		post.Caption = normalizeCaption(input.Caption)
 	}
@@ -1033,7 +1044,9 @@ func (uc *SocialUseCases) EditPost(ctx context.Context, userID uuid.UUID, postID
 		post.Feeling = normalizedFeeling
 	}
 
-	if input.Location != nil {
+	if clearLoc {
+		post.LocationName = nil
+	} else if input.Location != nil {
 		locationName, normalizeErr := normalizeLocationName(input.Location)
 		if normalizeErr != nil {
 			return nil, normalizeErr
@@ -1053,12 +1066,40 @@ func (uc *SocialUseCases) EditPost(ctx context.Context, userID uuid.UUID, postID
 		post.Hashtags = hashtags
 	}
 
+	var replaceMedia []socialdomain.PostMedia
+	if hasMediaReplace {
+		replaceMedia = make([]socialdomain.PostMedia, 0, len(*input.Media))
+		for idx, item := range *input.Media {
+			publicID := strings.TrimSpace(item.PublicID)
+			if publicID == "" {
+				return nil, errors.Validation("public_id is required")
+			}
+			rt := item.ResourceType
+			if rt != "image" && rt != "video" {
+				return nil, errors.Validation("resource_type must be one of [image video]")
+			}
+			replaceMedia = append(replaceMedia, socialdomain.PostMedia{
+				PostID:       post.ID,
+				PublicID:     publicID,
+				ResourceType: rt,
+				OrderIndex:   idx,
+			})
+		}
+		post.Media = replaceMedia
+	}
+
 	if post.Caption == nil && len(post.Media) == 0 {
 		return nil, errors.Validation("caption is required when media is empty")
 	}
 
-	if err := uc.postRepo.Update(ctx, post); err != nil {
-		return nil, err
+	if hasMediaReplace {
+		if err := uc.postRepo.UpdateWithMediaReplace(ctx, post, true, replaceMedia); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := uc.postRepo.Update(ctx, post); err != nil {
+			return nil, err
+		}
 	}
 
 	updatedPost, err := uc.postRepo.GetByID(ctx, id)
@@ -1066,11 +1107,11 @@ func (uc *SocialUseCases) EditPost(ctx context.Context, userID uuid.UUID, postID
 		return nil, err
 	}
 
-	mediaByPostID, err := uc.postRepo.GetMediaByPostIDs(ctx, []uuid.UUID{updatedPost.ID})
+	mediaOut, err := uc.postRepo.GetMediaByPostIDs(ctx, []uuid.UUID{updatedPost.ID})
 	if err != nil {
 		return nil, err
 	}
-	updatedPost.Media = mediaByPostID[updatedPost.ID]
+	updatedPost.Media = mediaOut[updatedPost.ID]
 
 	out := mapPost(updatedPost, false, false, false)
 	return &out, nil
