@@ -97,6 +97,70 @@ func (r *followRepository) HasBlockRelation(ctx context.Context, userAID, userBI
 	return hasRelation, nil
 }
 
+func (r *followRepository) SearchUsers(ctx context.Context, viewerID uuid.UUID, query string, page, pageSize int) ([]social.UserSearchRow, int64, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	offset := (page - 1) * pageSize
+	pattern := "%" + query + "%"
+
+	countQuery := `
+		SELECT COUNT(*)
+		FROM users u
+		WHERE u.id != $1
+		  AND NOT EXISTS (
+			SELECT 1
+			FROM user_blocks ub
+			WHERE (ub.blocker_id = $1 AND ub.blocked_id = u.id)
+			   OR (ub.blocker_id = u.id AND ub.blocked_id = $1)
+		  )
+		  AND u.name ILIKE $2
+	`
+
+	var total int64
+	if err := r.db.QueryRow(ctx, countQuery, viewerID, pattern).Scan(&total); err != nil {
+		return nil, 0, errors.DatabaseError("count search users", err)
+	}
+
+	listQuery := `
+		SELECT u.id, u.name, u.avatar_url, u.bio
+		FROM users u
+		WHERE u.id != $1
+		  AND NOT EXISTS (
+			SELECT 1
+			FROM user_blocks ub
+			WHERE (ub.blocker_id = $1 AND ub.blocked_id = u.id)
+			   OR (ub.blocker_id = u.id AND ub.blocked_id = $1)
+		  )
+		  AND u.name ILIKE $2
+		ORDER BY u.name ASC
+		LIMIT $3 OFFSET $4
+	`
+
+	rows, err := r.db.Query(ctx, listQuery, viewerID, pattern, pageSize, offset)
+	if err != nil {
+		return nil, 0, errors.DatabaseError("search users", err)
+	}
+	defer rows.Close()
+
+	out := make([]social.UserSearchRow, 0)
+	for rows.Next() {
+		var u social.UserSearchRow
+		if err := rows.Scan(&u.ID, &u.Name, &u.AvatarURL, &u.Bio); err != nil {
+			return nil, 0, errors.DatabaseError("scan search user", err)
+		}
+		out = append(out, u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, errors.DatabaseError("iterate search users", err)
+	}
+
+	return out, total, nil
+}
+
 // PostRepository implementation
 type postRepository struct {
 	db *database.DB
@@ -464,6 +528,151 @@ func (r *postRepository) GetFeed(ctx context.Context, userID uuid.UUID, filter s
 
 	if err := rows.Err(); err != nil {
 		return nil, 0, errors.DatabaseError("iterate feed", err)
+	}
+
+	return feed, total, nil
+}
+
+func (r *postRepository) SearchPosts(ctx context.Context, viewerID uuid.UUID, query string, filter social.GetFeedFilter) ([]social.ActivityFeedItem, int64, error) {
+	if filter.Page < 1 {
+		filter.Page = 1
+	}
+	if filter.PageSize < 1 {
+		filter.PageSize = 20
+	}
+	offset := (filter.Page - 1) * filter.PageSize
+	pattern := "%" + query + "%"
+
+	countQuery := `
+		SELECT COUNT(*)
+		FROM posts p
+		JOIN users u ON u.id = p.user_id
+		WHERE p.deleted_at IS NULL
+		  AND NOT EXISTS (
+			SELECT 1
+			FROM post_preferences pp
+			WHERE pp.user_id = $1
+			  AND pp.post_id = p.id
+			  AND pp.preference = 'not_interested'
+		  )
+		  AND NOT EXISTS (
+			SELECT 1
+			FROM user_blocks ub
+			WHERE (ub.blocker_id = $1 AND ub.blocked_id = p.user_id)
+			   OR (ub.blocker_id = p.user_id AND ub.blocked_id = $1)
+		  )
+		  AND (
+			COALESCE(p.caption, '') ILIKE $2
+			OR u.name ILIKE $2
+			OR EXISTS (
+				SELECT 1
+				FROM unnest(COALESCE(p.hashtags, ARRAY[]::text[])) AS tag
+				WHERE tag ILIKE $2
+			)
+		  )
+	`
+
+	var total int64
+	if err := r.db.QueryRow(ctx, countQuery, viewerID, pattern).Scan(&total); err != nil {
+		return nil, 0, errors.DatabaseError("count search posts", err)
+	}
+
+	querySQL := `
+		SELECT
+			p.id,
+			p.user_id,
+			p.content_type,
+			p.content_id,
+			p.caption,
+			p.feeling,
+			p.location_name,
+			p.hashtags,
+			p.likes_count,
+			p.comments_count,
+			p.created_at,
+			p.updated_at,
+			u.id,
+			u.name,
+			u.avatar_url,
+			EXISTS(
+				SELECT 1
+				FROM likes l
+				WHERE l.post_id = p.id
+				  AND l.user_id = $1
+			) AS is_liked,
+			COALESCE(pp.preference = 'interested', FALSE) AS is_interested,
+			COALESCE(pp.preference = 'not_interested', FALSE) AS is_not_interested
+		FROM posts p
+		JOIN users u ON u.id = p.user_id
+		LEFT JOIN post_preferences pp
+			ON pp.post_id = p.id
+		   AND pp.user_id = $1
+		WHERE p.deleted_at IS NULL
+		  AND NOT EXISTS (
+			SELECT 1
+			FROM post_preferences ppx
+			WHERE ppx.user_id = $1
+			  AND ppx.post_id = p.id
+			  AND ppx.preference = 'not_interested'
+		  )
+		  AND NOT EXISTS (
+			SELECT 1
+			FROM user_blocks ub
+			WHERE (ub.blocker_id = $1 AND ub.blocked_id = p.user_id)
+			   OR (ub.blocker_id = p.user_id AND ub.blocked_id = $1)
+		  )
+		  AND (
+			COALESCE(p.caption, '') ILIKE $2
+			OR u.name ILIKE $2
+			OR EXISTS (
+				SELECT 1
+				FROM unnest(COALESCE(p.hashtags, ARRAY[]::text[])) AS tag
+				WHERE tag ILIKE $2
+			)
+		  )
+		ORDER BY p.created_at DESC
+		LIMIT $3 OFFSET $4
+	`
+
+	rows, err := r.db.Query(ctx, querySQL, viewerID, pattern, filter.PageSize, offset)
+	if err != nil {
+		return nil, 0, errors.DatabaseError("search posts", err)
+	}
+	defer rows.Close()
+
+	feed := make([]social.ActivityFeedItem, 0)
+	for rows.Next() {
+		item := social.ActivityFeedItem{Post: &social.Post{User: &social.PostUser{}}}
+
+		if err := rows.Scan(
+			&item.Post.ID,
+			&item.Post.UserID,
+			&item.Post.ContentType,
+			&item.Post.ContentID,
+			&item.Post.Caption,
+			&item.Post.Feeling,
+			&item.Post.LocationName,
+			&item.Post.Hashtags,
+			&item.Post.LikesCount,
+			&item.Post.CommentsCount,
+			&item.Post.CreatedAt,
+			&item.Post.UpdatedAt,
+			&item.Post.User.ID,
+			&item.Post.User.Name,
+			&item.Post.User.AvatarURL,
+			&item.IsLiked,
+			&item.IsInterested,
+			&item.IsNotInterested,
+		); err != nil {
+			return nil, 0, errors.DatabaseError("scan search post", err)
+		}
+
+		item.CreatedAt = item.Post.CreatedAt
+		feed = append(feed, item)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, 0, errors.DatabaseError("iterate search posts", err)
 	}
 
 	return feed, total, nil

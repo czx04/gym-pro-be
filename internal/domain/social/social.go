@@ -62,6 +62,14 @@ type PostUser struct {
 	AvatarURL *string   `json:"avatar_url,omitempty"`
 }
 
+// UserSearchRow is a user row returned from social search (includes bio for subtitle).
+type UserSearchRow struct {
+	ID        uuid.UUID
+	Name      string
+	AvatarURL *string
+	Bio       *string
+}
+
 type PostLocation struct {
 	Name string `json:"name"`
 }

@@ -172,6 +172,19 @@ type FeedOutput struct {
 	Pagination FeedPagination `json:"pagination"`
 }
 
+type UserSearchHit struct {
+	ID        uuid.UUID `json:"id"`
+	Name      string    `json:"name"`
+	AvatarURL *string   `json:"avatar_url,omitempty"`
+	Subtitle  string    `json:"subtitle,omitempty"`
+}
+
+type SocialSearchOutput struct {
+	Posts      []PostOutput   `json:"posts,omitempty"`
+	Users      []UserSearchHit `json:"users,omitempty"`
+	Pagination FeedPagination `json:"pagination"`
+}
+
 type AuthorOutput struct {
 	ID        uuid.UUID `json:"id"`
 	Name      string    `json:"name"`
@@ -303,6 +316,100 @@ func (uc *SocialUseCases) GetFeed(ctx context.Context, userID uuid.UUID, cursor 
 	}
 
 	return output, nil
+}
+
+func sanitizeSocialSearchQuery(q string) string {
+	q = strings.TrimSpace(q)
+	q = strings.ReplaceAll(q, "%", "")
+	q = strings.ReplaceAll(q, "_", "")
+	if len(q) > 200 {
+		q = q[:200]
+	}
+	return q
+}
+
+func userSearchSubtitle(bio *string) string {
+	if bio == nil {
+		return ""
+	}
+	s := strings.TrimSpace(*bio)
+	if s == "" {
+		return ""
+	}
+	if len(s) > 120 {
+		return s[:120] + "…"
+	}
+	return s
+}
+
+func (uc *SocialUseCases) Search(ctx context.Context, viewerID uuid.UUID, rawQuery, typ, cursor string, limit int) (*SocialSearchOutput, error) {
+	q := sanitizeSocialSearchQuery(rawQuery)
+	if len(q) < 1 {
+		return nil, errors.BadRequest("query is required")
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 50 {
+		limit = 50
+	}
+	page, err := decodePageCursor(cursor)
+	if err != nil {
+		return nil, errors.BadRequest("invalid cursor")
+	}
+	typ = strings.ToLower(strings.TrimSpace(typ))
+	switch typ {
+	case "posts":
+		items, total, err := uc.postRepo.SearchPosts(ctx, viewerID, q, socialdomain.GetFeedFilter{Page: page, PageSize: limit})
+		if err != nil {
+			return nil, err
+		}
+		postIDs := make([]uuid.UUID, 0, len(items))
+		for _, item := range items {
+			if item.Post != nil {
+				postIDs = append(postIDs, item.Post.ID)
+			}
+		}
+		mediaByPostID, err := uc.postRepo.GetMediaByPostIDs(ctx, postIDs)
+		if err != nil {
+			return nil, err
+		}
+		data := make([]PostOutput, 0, len(items))
+		for _, item := range items {
+			if item.Post != nil {
+				item.Post.Media = mediaByPostID[item.Post.ID]
+			}
+			data = append(data, mapPost(item.Post, item.IsLiked, item.IsInterested, item.IsNotInterested))
+		}
+		hasMore := int64(page*limit) < total
+		out := &SocialSearchOutput{Posts: data, Pagination: FeedPagination{HasMore: hasMore}}
+		if hasMore {
+			out.Pagination.NextCursor = encodePageCursor(page + 1)
+		}
+		return out, nil
+	case "users":
+		rows, total, err := uc.followRepo.SearchUsers(ctx, viewerID, q, page, limit)
+		if err != nil {
+			return nil, err
+		}
+		users := make([]UserSearchHit, 0, len(rows))
+		for _, row := range rows {
+			users = append(users, UserSearchHit{
+				ID:        row.ID,
+				Name:      row.Name,
+				AvatarURL: row.AvatarURL,
+				Subtitle:  userSearchSubtitle(row.Bio),
+			})
+		}
+		hasMore := int64(page*limit) < total
+		out := &SocialSearchOutput{Users: users, Pagination: FeedPagination{HasMore: hasMore}}
+		if hasMore {
+			out.Pagination.NextCursor = encodePageCursor(page + 1)
+		}
+		return out, nil
+	default:
+		return nil, errors.BadRequest("type must be posts or users")
+	}
 }
 
 func (uc *SocialUseCases) GetPostByID(ctx context.Context, viewerID uuid.UUID, postID string) (*PostOutput, error) {

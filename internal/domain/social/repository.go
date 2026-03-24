@@ -28,6 +28,9 @@ type FollowRepository interface {
 
 	// HasBlockRelation checks whether either side blocks the other
 	HasBlockRelation(ctx context.Context, userAID, userBID uuid.UUID) (bool, error)
+
+	// SearchUsers returns users matching name (excluding self and blocked users).
+	SearchUsers(ctx context.Context, viewerID uuid.UUID, query string, page, pageSize int) ([]UserSearchRow, int64, error)
 }
 
 // PostRepository defines the interface for post data access
@@ -46,6 +49,9 @@ type PostRepository interface {
 
 	// GetFeed retrieves activity feed for a user (posts from followed users)
 	GetFeed(ctx context.Context, userID uuid.UUID, filter GetFeedFilter) ([]ActivityFeedItem, int64, error)
+
+	// SearchPosts searches posts visible in feed by caption, author name, or hashtags (ILIKE).
+	SearchPosts(ctx context.Context, viewerID uuid.UUID, query string, filter GetFeedFilter) ([]ActivityFeedItem, int64, error)
 
 	// GetMediaByPostIDs retrieves media grouped by post IDs
 	GetMediaByPostIDs(ctx context.Context, postIDs []uuid.UUID) (map[uuid.UUID][]PostMedia, error)

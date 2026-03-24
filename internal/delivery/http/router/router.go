@@ -161,6 +161,7 @@ func New(
 			// Social routes
 			social := authenticated.Group("/social")
 			{
+				social.GET("/search", socialHandler.Search)
 				social.GET("/feed", socialHandler.GetFeed)
 				social.POST("/users/:userId/follow", socialHandler.FollowUser)
 				social.DELETE("/users/:userId/follow", socialHandler.UnfollowUser)

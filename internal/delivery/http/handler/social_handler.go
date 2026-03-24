@@ -58,6 +58,27 @@ func (h *SocialHandler) GetFeed(c *gin.Context) {
 	response.Success(c, result)
 }
 
+func (h *SocialHandler) Search(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	q := strings.TrimSpace(c.Query("q"))
+	typ := strings.ToLower(strings.TrimSpace(c.DefaultQuery("type", "posts")))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	cursor := c.Query("cursor")
+
+	result, err := h.socialUC.Search(c.Request.Context(), userID, q, typ, cursor, limit)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	response.Success(c, result)
+}
+
 func (h *SocialHandler) GetPostByID(c *gin.Context) {
 	userID, err := middleware.GetUserID(c)
 	if err != nil {
