@@ -1,16 +1,24 @@
 package user
 
 import (
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
+)
+
+type Role string
+
+const (
+	RoleUser  Role = "user"
+	RoleAdmin Role = "admin"
 )
 
 type User struct {
 	ID                 uuid.UUID  `json:"id"`
 	Email              string     `json:"email"`
 	PasswordHash       string     `json:"-"`
+	Role               Role       `json:"role"`
+	IsActive           bool       `json:"is_active"`
 	OAuthProvider      *string    `json:"oauth_provider,omitempty"`
 	OAuthID            *string    `json:"oauth_id,omitempty"`
 	Name               string     `json:"name"`
@@ -26,9 +34,17 @@ type User struct {
 	ProteinTargetG     *int       `json:"protein_target_g,omitempty"`
 	CarbsTargetG       *int       `json:"carbs_target_g,omitempty"`
 	FatTargetG         *int       `json:"fat_target_g,omitempty"`
-	PrivacySettings    *string    `json:"privacy_settings,omitempty"` // JSON string
+	PrivacySettings    *string    `json:"privacy_settings,omitempty"`
 	CreatedAt          time.Time  `json:"created_at"`
 	UpdatedAt          time.Time  `json:"updated_at"`
+}
+
+func (u *User) IsAdmin() bool {
+	return u.Role == RoleAdmin
+}
+
+func (u *User) HasRole(role Role) bool {
+	return u.Role == role
 }
 
 type CreateUserInput struct {
@@ -71,8 +87,4 @@ type OAuthUserInfo struct {
 	Email     string
 	Name      string
 	AvatarURL *string
-}
-
-func (u *User) IsAdmin() bool {
-	return strings.Contains(u.Email, "@gym-pro.com")
 }

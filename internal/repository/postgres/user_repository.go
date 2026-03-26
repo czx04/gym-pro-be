@@ -14,28 +14,28 @@ type userRepository struct {
 	db *database.DB
 }
 
-// NewUserRepository creates a new user repository
 func NewUserRepository(db *database.DB) user.Repository {
 	return &userRepository{db: db}
 }
 
-// Create creates a new user
 func (r *userRepository) Create(ctx context.Context, u *user.User) error {
 	query := `
 		INSERT INTO users (
-			id, email, password_hash, oauth_provider, oauth_id,
+			id, email, password_hash, role, is_active,
+			oauth_provider, oauth_id,
 			name, bio, avatar_url, date_of_birth, gender,
 			height_cm, weight_kg, fitness_goal, activity_level,
 			daily_calorie_target, protein_target_g, carbs_target_g, fat_target_g,
 			privacy_settings, created_at, updated_at
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-			$11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+			$12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
 		)
 	`
 
 	_, err := r.db.Exec(ctx, query,
-		u.ID, u.Email, u.PasswordHash, u.OAuthProvider, u.OAuthID,
+		u.ID, u.Email, u.PasswordHash, u.Role, u.IsActive,
+		u.OAuthProvider, u.OAuthID,
 		u.Name, u.Bio, u.AvatarURL, u.DateOfBirth, u.Gender,
 		u.HeightCm, u.WeightKg, u.FitnessGoal, u.ActivityLevel,
 		u.DailyCalorieTarget, u.ProteinTargetG, u.CarbsTargetG, u.FatTargetG,
@@ -49,10 +49,10 @@ func (r *userRepository) Create(ctx context.Context, u *user.User) error {
 	return nil
 }
 
-// GetByID retrieves a user by ID
 func (r *userRepository) GetByID(ctx context.Context, id uuid.UUID) (*user.User, error) {
 	query := `
-		SELECT id, email, password_hash, oauth_provider, oauth_id,
+		SELECT id, email, password_hash, role, is_active,
+			   oauth_provider, oauth_id,
 			   name, bio, avatar_url, date_of_birth, gender,
 			   height_cm, weight_kg, fitness_goal, activity_level,
 			   daily_calorie_target, protein_target_g, carbs_target_g, fat_target_g,
@@ -63,7 +63,8 @@ func (r *userRepository) GetByID(ctx context.Context, id uuid.UUID) (*user.User,
 
 	var u user.User
 	err := r.db.QueryRow(ctx, query, id).Scan(
-		&u.ID, &u.Email, &u.PasswordHash, &u.OAuthProvider, &u.OAuthID,
+		&u.ID, &u.Email, &u.PasswordHash, &u.Role, &u.IsActive,
+		&u.OAuthProvider, &u.OAuthID,
 		&u.Name, &u.Bio, &u.AvatarURL, &u.DateOfBirth, &u.Gender,
 		&u.HeightCm, &u.WeightKg, &u.FitnessGoal, &u.ActivityLevel,
 		&u.DailyCalorieTarget, &u.ProteinTargetG, &u.CarbsTargetG, &u.FatTargetG,
@@ -80,10 +81,10 @@ func (r *userRepository) GetByID(ctx context.Context, id uuid.UUID) (*user.User,
 	return &u, nil
 }
 
-// GetByEmail retrieves a user by email
 func (r *userRepository) GetByEmail(ctx context.Context, email string) (*user.User, error) {
 	query := `
-		SELECT id, email, password_hash, oauth_provider, oauth_id,
+		SELECT id, email, password_hash, role, is_active,
+			   oauth_provider, oauth_id,
 			   name, bio, avatar_url, date_of_birth, gender,
 			   height_cm, weight_kg, fitness_goal, activity_level,
 			   daily_calorie_target, protein_target_g, carbs_target_g, fat_target_g,
@@ -94,7 +95,8 @@ func (r *userRepository) GetByEmail(ctx context.Context, email string) (*user.Us
 
 	var u user.User
 	err := r.db.QueryRow(ctx, query, email).Scan(
-		&u.ID, &u.Email, &u.PasswordHash, &u.OAuthProvider, &u.OAuthID,
+		&u.ID, &u.Email, &u.PasswordHash, &u.Role, &u.IsActive,
+		&u.OAuthProvider, &u.OAuthID,
 		&u.Name, &u.Bio, &u.AvatarURL, &u.DateOfBirth, &u.Gender,
 		&u.HeightCm, &u.WeightKg, &u.FitnessGoal, &u.ActivityLevel,
 		&u.DailyCalorieTarget, &u.ProteinTargetG, &u.CarbsTargetG, &u.FatTargetG,
@@ -111,11 +113,10 @@ func (r *userRepository) GetByEmail(ctx context.Context, email string) (*user.Us
 	return &u, nil
 }
 
-// GetByOAuth retrieves a user by OAuth provider and ID
 func (r *userRepository) GetByOAuth(ctx context.Context, provider, oauthID string) (*user.User, error) {
-	// TODO: Implement OAuth user lookup
 	query := `
-		SELECT id, email, password_hash, oauth_provider, oauth_id,
+		SELECT id, email, password_hash, role, is_active,
+			   oauth_provider, oauth_id,
 			   name, bio, avatar_url, date_of_birth, gender,
 			   height_cm, weight_kg, fitness_goal, activity_level,
 			   daily_calorie_target, protein_target_g, carbs_target_g, fat_target_g,
@@ -126,7 +127,8 @@ func (r *userRepository) GetByOAuth(ctx context.Context, provider, oauthID strin
 
 	var u user.User
 	err := r.db.QueryRow(ctx, query, provider, oauthID).Scan(
-		&u.ID, &u.Email, &u.PasswordHash, &u.OAuthProvider, &u.OAuthID,
+		&u.ID, &u.Email, &u.PasswordHash, &u.Role, &u.IsActive,
+		&u.OAuthProvider, &u.OAuthID,
 		&u.Name, &u.Bio, &u.AvatarURL, &u.DateOfBirth, &u.Gender,
 		&u.HeightCm, &u.WeightKg, &u.FitnessGoal, &u.ActivityLevel,
 		&u.DailyCalorieTarget, &u.ProteinTargetG, &u.CarbsTargetG, &u.FatTargetG,
@@ -144,7 +146,6 @@ func (r *userRepository) GetByOAuth(ctx context.Context, provider, oauthID strin
 }
 
 func (r *userRepository) Update(ctx context.Context, u *user.User) error {
-	// TODO: Implement full user update
 	query := `
 		UPDATE users SET
 			email = $2, name = $3, bio = $4, avatar_url = $5,

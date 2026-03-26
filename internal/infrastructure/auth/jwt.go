@@ -3,6 +3,7 @@ package auth
 import (
 	"fmt"
 	"gym-pro-2026-ptit/internal/config"
+	userdomain "gym-pro-2026-ptit/internal/domain/user"
 	"gym-pro-2026-ptit/pkg/errors"
 	"time"
 
@@ -18,9 +19,10 @@ const (
 )
 
 type Claims struct {
-	UserID    uuid.UUID `json:"user_id"`
-	Email     string    `json:"email"`
-	TokenType TokenType `json:"token_type"`
+	UserID    uuid.UUID       `json:"user_id"`
+	Email     string          `json:"email"`
+	Role      userdomain.Role `json:"role"`
+	TokenType TokenType       `json:"token_type"`
 	jwt.RegisteredClaims
 }
 
@@ -38,13 +40,14 @@ func NewJWTManager(cfg *config.JWTConfig) *JWTManager {
 	}
 }
 
-func (j *JWTManager) GenerateAccessToken(userID uuid.UUID, email string) (string, error) {
+func (j *JWTManager) GenerateAccessToken(userID uuid.UUID, email string, role userdomain.Role) (string, error) {
 	now := time.Now()
 	expiresAt := now.Add(j.accessTokenExpire)
 
 	claims := Claims{
 		UserID:    userID,
 		Email:     email,
+		Role:      role,
 		TokenType: AccessToken,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
@@ -63,14 +66,14 @@ func (j *JWTManager) GenerateAccessToken(userID uuid.UUID, email string) (string
 	return tokenString, nil
 }
 
-// GenerateRefreshToken generates a new refresh token
-func (j *JWTManager) GenerateRefreshToken(userID uuid.UUID, email string) (string, error) {
+func (j *JWTManager) GenerateRefreshToken(userID uuid.UUID, email string, role userdomain.Role) (string, error) {
 	now := time.Now()
 	expiresAt := now.Add(j.refreshTokenExpire)
 
 	claims := Claims{
 		UserID:    userID,
 		Email:     email,
+		Role:      role,
 		TokenType: RefreshToken,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
@@ -89,14 +92,13 @@ func (j *JWTManager) GenerateRefreshToken(userID uuid.UUID, email string) (strin
 	return tokenString, nil
 }
 
-// GenerateTokenPair generates both access and refresh tokens
-func (j *JWTManager) GenerateTokenPair(userID uuid.UUID, email string) (accessToken, refreshToken string, err error) {
-	accessToken, err = j.GenerateAccessToken(userID, email)
+func (j *JWTManager) GenerateTokenPair(userID uuid.UUID, email string, role userdomain.Role) (accessToken, refreshToken string, err error) {
+	accessToken, err = j.GenerateAccessToken(userID, email, role)
 	if err != nil {
 		return "", "", err
 	}
 
-	refreshToken, err = j.GenerateRefreshToken(userID, email)
+	refreshToken, err = j.GenerateRefreshToken(userID, email, role)
 	if err != nil {
 		return "", "", err
 	}
@@ -104,10 +106,8 @@ func (j *JWTManager) GenerateTokenPair(userID uuid.UUID, email string) (accessTo
 	return accessToken, refreshToken, nil
 }
 
-// ValidateToken validates a JWT token and returns claims
 func (j *JWTManager) ValidateToken(tokenString string) (*Claims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
-		// Verify signing method
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
@@ -123,7 +123,6 @@ func (j *JWTManager) ValidateToken(tokenString string) (*Claims, error) {
 		return nil, errors.TokenInvalid()
 	}
 
-	// Check if token is expired
 	if claims.ExpiresAt != nil && claims.ExpiresAt.Before(time.Now()) {
 		return nil, errors.TokenExpired()
 	}
@@ -131,7 +130,6 @@ func (j *JWTManager) ValidateToken(tokenString string) (*Claims, error) {
 	return claims, nil
 }
 
-// ValidateAccessToken validates an access token
 func (j *JWTManager) ValidateAccessToken(tokenString string) (*Claims, error) {
 	claims, err := j.ValidateToken(tokenString)
 	if err != nil {
@@ -145,7 +143,6 @@ func (j *JWTManager) ValidateAccessToken(tokenString string) (*Claims, error) {
 	return claims, nil
 }
 
-// ValidateRefreshToken validates a refresh token
 func (j *JWTManager) ValidateRefreshToken(tokenString string) (*Claims, error) {
 	claims, err := j.ValidateToken(tokenString)
 	if err != nil {
@@ -157,14 +154,4 @@ func (j *JWTManager) ValidateRefreshToken(tokenString string) (*Claims, error) {
 	}
 
 	return claims, nil
-}
-
-// RefreshAccessToken generates a new access token from a valid refresh token
-func (j *JWTManager) RefreshAccessToken(refreshTokenString string) (string, error) {
-	claims, err := j.ValidateRefreshToken(refreshTokenString)
-	if err != nil {
-		return "", err
-	}
-
-	return j.GenerateAccessToken(claims.UserID, claims.Email)
 }

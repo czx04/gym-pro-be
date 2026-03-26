@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"gym-pro-2026-ptit/internal/domain/admin"
 	"gym-pro-2026-ptit/internal/domain/meal"
 	"gym-pro-2026-ptit/internal/domain/social"
 	"gym-pro-2026-ptit/internal/domain/user"
@@ -63,6 +64,19 @@ func ProvideCommentRepository(db *database.DB) social.CommentRepository {
 	return postgres.NewCommentRepository(db)
 }
 
+// Admin repositories
+func ProvideAdminUserRepository(db *database.DB) admin.UserRepository {
+	return postgres.NewAdminUserRepository(db)
+}
+
+func ProvideAdminExerciseRepository(db *database.DB) admin.ExerciseRepository {
+	return postgres.NewAdminExerciseRepository(db)
+}
+
+func ProvideAdminFoodRepository(db *database.DB) admin.FoodRepository {
+	return postgres.NewAdminFoodRepository(db)
+}
+
 // RepositoryProviders returns all repository providers
 var RepositoryProviders = fx.Options(
 	fx.Provide(
@@ -78,5 +92,8 @@ var RepositoryProviders = fx.Options(
 		ProvidePostRepository,
 		ProvideLikeRepository,
 		ProvideCommentRepository,
+		ProvideAdminUserRepository,
+		ProvideAdminExerciseRepository,
+		ProvideAdminFoodRepository,
 	),
 )

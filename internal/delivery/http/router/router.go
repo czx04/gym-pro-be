@@ -26,6 +26,7 @@ func New(
 	recipeHandler *handler.RecipeHandler,
 	mealLogHandler *handler.MealLogHandler,
 	userHandler *handler.UserHandler,
+	adminHandler *handler.AdminHandler,
 ) *Router {
 	gin.SetMode(cfg.Server.GinMode)
 
@@ -63,6 +64,7 @@ func New(
 
 		authenticated := v1.Group("")
 		authenticated.Use(gin.HandlerFunc(authMiddleware))
+		authenticated.Use(middleware.RequireActiveUser())
 		{
 			// User routes
 			users := authenticated.Group("/users")
@@ -155,6 +157,43 @@ func New(
 				mealLogs.GET("/:id", mealLogHandler.GetMealLog)
 				mealLogs.PUT("/:id", mealLogHandler.UpdateMealLog)
 				mealLogs.DELETE("/:id", mealLogHandler.DeleteMealLog)
+			}
+
+			// Admin routes — requires admin role
+			adminRoutes := authenticated.Group("/admin")
+			adminRoutes.Use(middleware.RequireAdmin())
+			{
+				// Dashboard
+				adminRoutes.GET("/stats", adminHandler.GetOverviewStats)
+
+				// User management
+				adminUsers := adminRoutes.Group("/users")
+				{
+					adminUsers.GET("", adminHandler.ListUsers)
+					adminUsers.GET("/:id", adminHandler.GetUser)
+					adminUsers.PATCH("/:id/status", adminHandler.UpdateUserStatus)
+					adminUsers.DELETE("/:id", adminHandler.DeleteUser)
+				}
+
+				// Exercise management
+				adminExercises := adminRoutes.Group("/exercises")
+				{
+					adminExercises.GET("", adminHandler.ListExercises)
+					adminExercises.GET("/:id", adminHandler.GetExercise)
+					adminExercises.POST("", adminHandler.CreateExercise)
+					adminExercises.PUT("/:id", adminHandler.UpdateExercise)
+					adminExercises.DELETE("/:id", adminHandler.DeleteExercise)
+				}
+
+				// Food management
+				adminFoods := adminRoutes.Group("/foods")
+				{
+					adminFoods.GET("", adminHandler.ListFoods)
+					adminFoods.GET("/:id", adminHandler.GetFood)
+					adminFoods.POST("", adminHandler.CreateSystemFood)
+					adminFoods.PUT("/:id", adminHandler.UpdateFood)
+					adminFoods.DELETE("/:id", adminHandler.DeleteFood)
+				}
 			}
 
 			// Social routes

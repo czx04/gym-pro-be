@@ -124,6 +124,8 @@ func (uc *UserUseCases) VerifyOTP(ctx context.Context, input VerifyOTPInput) (*T
 		ID:           uuid.New(),
 		Email:        input.Email,
 		PasswordHash: passwordHash,
+		Role:         user.RoleUser,
+		IsActive:     true,
 		Name:         "User" + time.Now().Format("20060102150405"),
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
@@ -131,7 +133,7 @@ func (uc *UserUseCases) VerifyOTP(ctx context.Context, input VerifyOTPInput) (*T
 	if err := uc.userRepo.Create(ctx, newUser); err != nil {
 		return nil, err
 	}
-	accessToken, refreshToken, err := uc.jwtMgr.GenerateTokenPair(newUser.ID, newUser.Email)
+	accessToken, refreshToken, err := uc.jwtMgr.GenerateTokenPair(newUser.ID, newUser.Email, newUser.Role)
 	if err != nil {
 		return nil, errors.InternalServer("failed to generate tokens", err)
 	}
@@ -153,7 +155,10 @@ func (uc *UserUseCases) Login(ctx context.Context, input user.LoginInput) (*Toke
 	if !uc.passwordMgr.VerifyPassword(u.PasswordHash, input.Password) {
 		return nil, errors.InvalidCredentials()
 	}
-	accessToken, refreshToken, err := uc.jwtMgr.GenerateTokenPair(u.ID, u.Email)
+	if !u.IsActive {
+		return nil, errors.Forbidden("account is deactivated")
+	}
+	accessToken, refreshToken, err := uc.jwtMgr.GenerateTokenPair(u.ID, u.Email, u.Role)
 	if err != nil {
 		return nil, errors.InternalServer("failed to generate tokens", err)
 	}
@@ -168,9 +173,20 @@ func (uc *UserUseCases) RefreshToken(ctx context.Context, input RefreshTokenRequ
 	if err := uc.validator.Validate(input); err != nil {
 		return nil, errors.Validation(err.Error())
 	}
-	accessToken, err := uc.jwtMgr.RefreshAccessToken(input.RefreshToken)
+	claims, err := uc.jwtMgr.ValidateRefreshToken(input.RefreshToken)
 	if err != nil {
 		return nil, err
+	}
+	u, err := uc.userRepo.GetByID(ctx, claims.UserID)
+	if err != nil {
+		return nil, err
+	}
+	if !u.IsActive {
+		return nil, errors.Forbidden("account is deactivated")
+	}
+	accessToken, err := uc.jwtMgr.GenerateAccessToken(u.ID, u.Email, u.Role)
+	if err != nil {
+		return nil, errors.InternalServer("failed to generate access token", err)
 	}
 	return &TokenPair{
 		AccessToken:  accessToken,
