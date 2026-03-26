@@ -4,6 +4,7 @@ import (
 	"gym-pro-2026-ptit/internal/config"
 	"gym-pro-2026-ptit/internal/delivery/http/handler"
 	"gym-pro-2026-ptit/internal/delivery/http/middleware"
+	"gym-pro-2026-ptit/internal/delivery/http/websocket"
 
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
@@ -19,6 +20,7 @@ type Router struct {
 func New(
 	cfg *config.Config,
 	authMiddleware middleware.AuthMiddleware,
+	wsHub *websocket.Hub,
 	authHandler *handler.AuthHandler,
 	workoutHandler *handler.WorkoutHandler,
 	exerciseHandler *handler.ExerciseHandler,
@@ -45,6 +47,8 @@ func New(
 	v1 := engine.Group("/api/v1")
 	{
 		//v1.Use(middleware.RateLimitMiddleware(&cfg.RateLimit))
+
+		wsHub.RegisterRoutes(v1)
 
 		authRoutes := v1.Group("/auth")
 		{
