@@ -41,6 +41,7 @@ func NewApp() *fx.App {
 		// HTTP Layer (Handlers & Router)
 		HandlerProviders,
 		fx.Provide(ProvideAuthMiddleware),
+		fx.Provide(ProvideWebSocketHub),
 		fx.Provide(ProvideRouter),
 
 		// Lifecycle hooks
@@ -48,6 +49,7 @@ func NewApp() *fx.App {
 			InitGlobalLogger,
 			RegisterAutoMigrateHook,
 			RegisterInfrastructureHooks,
+			RegisterWebSocketHooks,
 			RegisterRouterHooks,
 			RegisterAppLifecycle,
 		),

@@ -7,6 +7,7 @@ import (
 	"gym-pro-2026-ptit/internal/delivery/http/handler"
 	"gym-pro-2026-ptit/internal/delivery/http/middleware"
 	"gym-pro-2026-ptit/internal/delivery/http/router"
+	"gym-pro-2026-ptit/internal/delivery/http/websocket"
 	"gym-pro-2026-ptit/internal/infrastructure/logger"
 	"net/http"
 
@@ -17,6 +18,7 @@ import (
 func ProvideRouter(
 	cfg *config.Config,
 	authMiddleware middleware.AuthMiddleware,
+	wsHub *websocket.Hub,
 	authHandler *handler.AuthHandler,
 	workoutHandler *handler.WorkoutHandler,
 	exerciseHandler *handler.ExerciseHandler,
@@ -26,7 +28,7 @@ func ProvideRouter(
 	userHandler *handler.UserHandler,
 	socialHandler *handler.SocialHandler,
 ) *router.Router {
-	return router.New(cfg, authMiddleware, authHandler, workoutHandler, exerciseHandler, foodHandler, recipeHandler, mealLogHandler, userHandler, socialHandler)
+	return router.New(cfg, authMiddleware, wsHub, authHandler, workoutHandler, exerciseHandler, foodHandler, recipeHandler, mealLogHandler, userHandler, socialHandler)
 }
 
 // RegisterRouterHooks registers lifecycle hooks for HTTP server
