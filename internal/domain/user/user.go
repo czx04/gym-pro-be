@@ -60,6 +60,15 @@ type UserNutritionTarget struct {
 	FatTargetG         *int `json:"fat_target_g,omitempty"`
 }
 
+type WeightHistory struct {
+	ID         uuid.UUID `json:"id"`
+	UserID     uuid.UUID `json:"user_id"`
+	WeightKg   float64   `json:"weight_kg"`
+	MeasuredAt time.Time `json:"measured_at"`
+	Source     string    `json:"source"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
 type LoginInput struct {
 	Email    string `json:"email" validate:"required,email"`
 	Password string `json:"password" validate:"required"`

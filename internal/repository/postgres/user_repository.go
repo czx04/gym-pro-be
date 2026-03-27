@@ -5,6 +5,8 @@ import (
 	"gym-pro-2026-ptit/internal/domain/user"
 	"gym-pro-2026-ptit/internal/infrastructure/database"
 	"gym-pro-2026-ptit/pkg/errors"
+	"math"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -187,6 +189,23 @@ func (r *userRepository) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 func (r *userRepository) UpdateProfile(ctx context.Context, id uuid.UUID, input user.UpdateProfileInput) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return errors.DatabaseError("begin update profile transaction", err)
+	}
+	defer tx.Rollback(ctx)
+
+	txRepo := &userRepository{db: tx}
+
+	var previousWeight *float64
+	err = tx.QueryRow(ctx, `SELECT weight_kg FROM users WHERE id = $1 FOR UPDATE`, id).Scan(&previousWeight)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return errors.NotFound("user")
+		}
+		return errors.DatabaseError("get current profile weight", err)
+	}
+
 	query := `
 		UPDATE users SET
 			name = COALESCE($2, name),
@@ -206,7 +225,7 @@ func (r *userRepository) UpdateProfile(ctx context.Context, id uuid.UUID, input 
 		WHERE id = $1
 	`
 
-	result, err := r.db.Exec(ctx, query,
+	result, err := tx.Exec(ctx, query,
 		id,
 		input.Name,
 		input.Bio,
@@ -231,7 +250,106 @@ func (r *userRepository) UpdateProfile(ctx context.Context, id uuid.UUID, input 
 		return errors.NotFound("user")
 	}
 
+	if input.WeightKg != nil && hasWeightChanged(previousWeight, input.WeightKg) {
+		history := &user.WeightHistory{
+			ID:         uuid.New(),
+			UserID:     id,
+			WeightKg:   *input.WeightKg,
+			MeasuredAt: time.Now(),
+			Source:     "profile_update",
+			CreatedAt:  time.Now(),
+		}
+
+		if err := txRepo.InsertWeightHistory(ctx, history); err != nil {
+			return err
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return errors.DatabaseError("commit update profile transaction", err)
+	}
+
 	return nil
+}
+
+func (r *userRepository) InsertWeightHistory(ctx context.Context, item *user.WeightHistory) error {
+	query := `
+		INSERT INTO user_weight_history (id, user_id, weight_kg, measured_at, source, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
+	`
+
+	_, err := r.db.Exec(ctx, query, item.ID, item.UserID, item.WeightKg, item.MeasuredAt, item.Source, item.CreatedAt)
+	if err != nil {
+		return errors.DatabaseError("insert user weight history", err)
+	}
+
+	return nil
+}
+
+func (r *userRepository) GetLatestWeightInRange(ctx context.Context, userID uuid.UUID, start, end time.Time) (*user.WeightHistory, error) {
+	query := `
+		SELECT id, user_id, weight_kg, measured_at, source, created_at
+		FROM user_weight_history
+		WHERE user_id = $1 AND measured_at >= $2 AND measured_at <= $3
+		ORDER BY measured_at DESC
+		LIMIT 1
+	`
+
+	var item user.WeightHistory
+	err := r.db.QueryRow(ctx, query, userID, start, end).Scan(
+		&item.ID,
+		&item.UserID,
+		&item.WeightKg,
+		&item.MeasuredAt,
+		&item.Source,
+		&item.CreatedAt,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, errors.DatabaseError("get latest weight in range", err)
+	}
+
+	return &item, nil
+}
+
+func (r *userRepository) GetLatestWeightBefore(ctx context.Context, userID uuid.UUID, before time.Time) (*user.WeightHistory, error) {
+	query := `
+		SELECT id, user_id, weight_kg, measured_at, source, created_at
+		FROM user_weight_history
+		WHERE user_id = $1 AND measured_at < $2
+		ORDER BY measured_at DESC
+		LIMIT 1
+	`
+
+	var item user.WeightHistory
+	err := r.db.QueryRow(ctx, query, userID, before).Scan(
+		&item.ID,
+		&item.UserID,
+		&item.WeightKg,
+		&item.MeasuredAt,
+		&item.Source,
+		&item.CreatedAt,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, errors.DatabaseError("get latest weight before", err)
+	}
+
+	return &item, nil
+}
+
+func hasWeightChanged(previous, next *float64) bool {
+	if next == nil {
+		return false
+	}
+	if previous == nil {
+		return true
+	}
+	return math.Abs(*previous-*next) >= 0.01
 }
 
 func (r *userRepository) UpdatePassword(ctx context.Context, id uuid.UUID, passwordHash string) error {
