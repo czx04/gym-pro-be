@@ -1,13 +1,23 @@
 package workout
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
 	"gym-pro-2026-ptit/internal/domain/user"
 	"gym-pro-2026-ptit/internal/domain/workout"
 	"gym-pro-2026-ptit/internal/infrastructure/database"
 	"gym-pro-2026-ptit/internal/infrastructure/logger"
 	"gym-pro-2026-ptit/pkg/errors"
+	"gym-pro-2026-ptit/pkg/utils"
 	"gym-pro-2026-ptit/pkg/validator"
+	"io"
+	"math"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,6 +25,7 @@ import (
 
 type WorkoutUseCases struct {
 	db              *database.DB
+	userRepo        user.Repository
 	workoutPlanRepo workout.WorkoutPlanRepository
 	sessionRepo     workout.WorkoutSessionRepository
 	validator       *validator.Validator
@@ -22,12 +33,14 @@ type WorkoutUseCases struct {
 
 func NewWorkoutUseCases(
 	db *database.DB,
+	userRepo user.Repository,
 	workoutPlanRepo workout.WorkoutPlanRepository,
 	sessionRepo workout.WorkoutSessionRepository,
 	validator *validator.Validator,
 ) *WorkoutUseCases {
 	return &WorkoutUseCases{
 		db:              db,
+		userRepo:        userRepo,
 		workoutPlanRepo: workoutPlanRepo,
 		sessionRepo:     sessionRepo,
 		validator:       validator,
@@ -349,4 +362,576 @@ func (uc *WorkoutUseCases) FinishWorkoutSession(ctx context.Context, userID uuid
 		return nil, err
 	}
 	return uc.sessionRepo.GetByID(ctx, id)
+}
+
+func (uc *WorkoutUseCases) GetWeeklySummary(ctx context.Context, userID uuid.UUID, input workout.GetWeeklySummaryRequest) (*workout.WeeklyWorkoutSummary, error) {
+	if err := uc.validator.Validate(input); err != nil {
+		return nil, errors.Validation(err.Error())
+	}
+
+	startDate, err := time.Parse("2006-01-02", input.StartDate)
+	if err != nil {
+		return nil, errors.BadRequest("invalid start_date format, expected YYYY-MM-DD")
+	}
+	endDate, err := time.Parse("2006-01-02", input.EndDate)
+	if err != nil {
+		return nil, errors.BadRequest("invalid end_date format, expected YYYY-MM-DD")
+	}
+	if startDate.After(endDate) {
+		return nil, errors.BadRequest("start date must be before end date")
+	}
+
+	currentStart := startDate
+	currentEndExclusive := endDate.AddDate(0, 0, 1)
+	days := int(currentEndExclusive.Sub(currentStart).Hours() / 24)
+	if days <= 0 {
+		return nil, errors.BadRequest("date range must contain at least 1 day")
+	}
+
+	previousEndExclusive := currentStart
+	previousStart := previousEndExclusive.AddDate(0, 0, -days)
+
+	current, err := uc.sessionRepo.GetWeeklyAggregate(ctx, userID, currentStart, currentEndExclusive)
+	if err != nil {
+		return nil, err
+	}
+	previous, err := uc.sessionRepo.GetWeeklyAggregate(ctx, userID, previousStart, previousEndExclusive)
+	if err != nil {
+		return nil, err
+	}
+
+	roundWeeklyMetrics(current)
+	roundWeeklyMetrics(previous)
+
+	summary := &workout.WeeklyWorkoutSummary{
+		StartDate:         currentStart.Format("2006-01-02"),
+		EndDate:           endDate.Format("2006-01-02"),
+		PreviousStartDate: previousStart.Format("2006-01-02"),
+		PreviousEndDate:   previousEndExclusive.AddDate(0, 0, -1).Format("2006-01-02"),
+		Current:           *current,
+		Previous:          *previous,
+		StrengthTrend:     buildTrendDelta(current.TotalVolumeKg, previous.TotalVolumeKg, 0.05),
+		RestTrend:         buildTrendDelta(current.AvgRestSecs, previous.AvgRestSecs, 0.05),
+		MoodTrend:         buildTrendDelta(current.AvgMoodScore, previous.AvgMoodScore, 0.1),
+	}
+
+	if current.RestSamples == 0 || previous.RestSamples == 0 {
+		summary.RestTrend.Trend = "insufficient_data"
+	}
+
+	currentWeight, err := uc.userRepo.GetLatestWeightInRange(ctx, userID, currentStart, currentEndExclusive)
+	if err != nil {
+		return nil, err
+	}
+	previousWeight, err := uc.userRepo.GetLatestWeightInRange(ctx, userID, previousStart, previousEndExclusive)
+	if err != nil {
+		return nil, err
+	}
+
+	if currentWeight != nil && previousWeight != nil {
+		summary.BodyWeightTrend = buildTrendDelta(currentWeight.WeightKg, previousWeight.WeightKg, 0.3)
+	} else {
+		summary.BodyWeightTrend = workout.TrendDelta{Trend: "insufficient_data"}
+	}
+
+	summary.Insights, summary.Recommendations = buildWeeklyInsightsAndRecommendations(summary)
+	summary.RecommendationSource = "rule_based"
+
+	var fitnessGoal *string
+	if u, err := uc.userRepo.GetByID(ctx, userID); err == nil {
+		fitnessGoal = u.FitnessGoal
+	} else {
+		logger.Warn("failed to load user profile for ai recommendation", "user_id", userID, "err", err)
+	}
+
+	aiInsights, aiRecommendations, aiSummary, aiModel, err := tryGeminiRecommendations(ctx, summary, fitnessGoal)
+	if err != nil {
+		logger.Warn("gemini recommendation fallback to rule-based", "user_id", userID, "err", err)
+		return summary, nil
+	}
+
+	if len(aiInsights) > 0 {
+		summary.Insights = aiInsights
+	}
+	if len(aiRecommendations) > 0 {
+		summary.Recommendations = aiRecommendations
+	}
+	summary.RecommendationSource = "gemini"
+	summary.AISummary = aiSummary
+	summary.AIModel = aiModel
+
+	return summary, nil
+}
+
+type geminiRequest struct {
+	Contents []geminiContent `json:"contents"`
+}
+
+type geminiContent struct {
+	Role  string       `json:"role,omitempty"`
+	Parts []geminiPart `json:"parts"`
+}
+
+type geminiPart struct {
+	Text string `json:"text"`
+}
+
+type geminiResponse struct {
+	Candidates []struct {
+		Content struct {
+			Parts []struct {
+				Text string `json:"text"`
+			} `json:"parts"`
+		} `json:"content"`
+	} `json:"candidates"`
+}
+
+type geminiWeeklyOutput struct {
+	Summary         string                  `json:"summary"`
+	Insights        []workout.WeeklyInsight `json:"insights"`
+	Recommendations []string                `json:"recommendations"`
+}
+
+func tryGeminiRecommendations(ctx context.Context, summary *workout.WeeklyWorkoutSummary, fitnessGoal *string) ([]workout.WeeklyInsight, []string, string, string, error) {
+	apiKey := strings.TrimSpace(os.Getenv("GEMINI_API_KEY"))
+	if apiKey == "" {
+		return nil, nil, "", "", fmt.Errorf("missing GEMINI_API_KEY")
+	}
+
+	model := strings.TrimSpace(os.Getenv("GEMINI_MODEL"))
+	if model == "" {
+		model = "gemini-1.5-flash"
+	}
+
+	timeoutSeconds := 8
+	if rawTimeout := strings.TrimSpace(os.Getenv("GEMINI_TIMEOUT_SECONDS")); rawTimeout != "" {
+		if t, err := strconv.Atoi(rawTimeout); err == nil && t > 0 {
+			timeoutSeconds = t
+		}
+	}
+
+	inputPayload := map[string]interface{}{
+		"period": map[string]string{
+			"start_date":          summary.StartDate,
+			"end_date":            summary.EndDate,
+			"previous_start_date": summary.PreviousStartDate,
+			"previous_end_date":   summary.PreviousEndDate,
+		},
+		"current":                  summary.Current,
+		"previous":                 summary.Previous,
+		"strength_trend":           summary.StrengthTrend,
+		"rest_trend":               summary.RestTrend,
+		"mood_trend":               summary.MoodTrend,
+		"body_weight_trend":        summary.BodyWeightTrend,
+		"fallback_insights":        summary.Insights,
+		"fallback_recommendations": summary.Recommendations,
+	}
+	if fitnessGoal != nil {
+		inputPayload["fitness_goal"] = *fitnessGoal
+	}
+
+	metricsJSON, err := json.Marshal(inputPayload)
+	if err != nil {
+		return nil, nil, "", "", fmt.Errorf("marshal gemini metrics payload: %w", err)
+	}
+
+	prompt := "You are a professional but safe fitness coach. Analyze weekly workout metrics and return concise Vietnamese recommendations. " +
+		"Do not provide medical diagnosis. Focus on practical next-week actions. " +
+		"Return ONLY valid JSON with this schema: {\"summary\": string, \"insights\": [{\"code\": string, \"severity\": \"positive\"|\"warning\"|\"neutral\", \"message\": string, \"evidence\": string, \"metric_key\": string}], \"recommendations\": [string]}. " +
+		"Input metrics JSON: " + string(metricsJSON)
+
+	reqBody := geminiRequest{
+		Contents: []geminiContent{{
+			Parts: []geminiPart{{Text: prompt}},
+		}},
+	}
+
+	bodyBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, nil, "", "", fmt.Errorf("marshal gemini request: %w", err)
+	}
+
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", model, apiKey)
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(bodyBytes))
+	if err != nil {
+		return nil, nil, "", "", fmt.Errorf("create gemini request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: time.Duration(timeoutSeconds) * time.Second}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return nil, nil, "", "", fmt.Errorf("call gemini: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, nil, "", "", fmt.Errorf("read gemini response: %w", err)
+	}
+
+	if resp.StatusCode >= http.StatusBadRequest {
+		return nil, nil, "", "", fmt.Errorf("gemini returned status %d: %s", resp.StatusCode, string(respBytes))
+	}
+
+	var gResp geminiResponse
+	if err := json.Unmarshal(respBytes, &gResp); err != nil {
+		return nil, nil, "", "", fmt.Errorf("unmarshal gemini response wrapper: %w", err)
+	}
+	if len(gResp.Candidates) == 0 || len(gResp.Candidates[0].Content.Parts) == 0 {
+		return nil, nil, "", "", fmt.Errorf("empty gemini candidates")
+	}
+
+	rawText := strings.TrimSpace(gResp.Candidates[0].Content.Parts[0].Text)
+	jsonText := extractJSONBody(rawText)
+
+	var output geminiWeeklyOutput
+	if err := json.Unmarshal([]byte(jsonText), &output); err != nil {
+		return nil, nil, "", "", fmt.Errorf("unmarshal gemini content json: %w", err)
+	}
+
+	if len(output.Recommendations) == 0 {
+		return nil, nil, "", "", fmt.Errorf("gemini output has empty recommendations")
+	}
+
+	cleanedInsights := make([]workout.WeeklyInsight, 0, len(output.Insights))
+	for _, item := range output.Insights {
+		if item.Code == "" || item.Message == "" {
+			continue
+		}
+		if item.Severity == "" {
+			item.Severity = "neutral"
+		}
+		cleanedInsights = append(cleanedInsights, item)
+	}
+
+	cleanedRecommendations := make([]string, 0, len(output.Recommendations))
+	for _, rec := range output.Recommendations {
+		rec = strings.TrimSpace(rec)
+		if rec != "" {
+			cleanedRecommendations = append(cleanedRecommendations, rec)
+		}
+	}
+	if len(cleanedRecommendations) == 0 {
+		return nil, nil, "", "", fmt.Errorf("gemini output has no valid recommendations")
+	}
+
+	return cleanedInsights, cleanedRecommendations, strings.TrimSpace(output.Summary), model, nil
+}
+
+func extractJSONBody(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if strings.HasPrefix(raw, "```") {
+		raw = strings.TrimPrefix(raw, "```json")
+		raw = strings.TrimPrefix(raw, "```")
+		raw = strings.TrimSuffix(raw, "```")
+		raw = strings.TrimSpace(raw)
+	}
+
+	start := strings.Index(raw, "{")
+	end := strings.LastIndex(raw, "}")
+	if start >= 0 && end > start {
+		return raw[start : end+1]
+	}
+	return raw
+}
+
+func roundWeeklyMetrics(m *workout.WeeklyWorkoutMetrics) {
+	if m == nil {
+		return
+	}
+	m.TotalVolumeKg = utils.RoundToTwo(m.TotalVolumeKg)
+	m.AvgWeightKg = utils.RoundToTwo(m.AvgWeightKg)
+	m.AvgRestSecs = utils.RoundToTwo(m.AvgRestSecs)
+	m.AvgMoodScore = utils.RoundToTwo(m.AvgMoodScore)
+	m.AvgDifficulty = utils.RoundToTwo(m.AvgDifficulty)
+	m.CompletionRate = utils.RoundToTwo(m.CompletionRate * 100)
+}
+
+func buildTrendDelta(current, previous, stableThreshold float64) workout.TrendDelta {
+	delta := current - previous
+	trend := "stable"
+	threshold := stableThreshold
+	if threshold > 0 && math.Abs(previous) > 0 {
+		threshold = math.Abs(previous) * stableThreshold
+	}
+	if math.Abs(delta) <= threshold {
+		trend = "stable"
+	} else if delta > 0 {
+		trend = "up"
+	} else {
+		trend = "down"
+	}
+
+	return workout.TrendDelta{
+		Current:  utils.RoundToTwo(current),
+		Previous: utils.RoundToTwo(previous),
+		Delta:    utils.RoundToTwo(delta),
+		Trend:    trend,
+	}
+}
+
+func buildWeeklyInsightsAndRecommendations(summary *workout.WeeklyWorkoutSummary) ([]workout.WeeklyInsight, []string) {
+	insights := make([]workout.WeeklyInsight, 0, 8)
+	recommendations := make([]string, 0, 6)
+	seenRecommendations := map[string]struct{}{}
+
+	for _, rule := range defaultWeeklyRecommendationRules() {
+		if !matchesRule(summary, rule) {
+			continue
+		}
+
+		insight := workout.WeeklyInsight{
+			Code:      rule.Code,
+			Severity:  rule.Severity,
+			MetricKey: rule.MetricKey,
+			Message:   rule.Message,
+			Evidence:  buildEvidenceFromRule(summary, rule),
+		}
+		insights = append(insights, insight)
+
+		if rule.Recommendation != "" {
+			if _, exists := seenRecommendations[rule.Recommendation]; !exists {
+				recommendations = append(recommendations, rule.Recommendation)
+				seenRecommendations[rule.Recommendation] = struct{}{}
+			}
+		}
+	}
+
+	if len(recommendations) == 0 {
+		recommendations = append(recommendations, "Duy tri lich tap hien tai va tiep tuc theo doi trend tai, mood va thoi gian nghi moi tuan.")
+	}
+
+	return insights, recommendations
+}
+
+type weeklyRecommendationRule struct {
+	Code           string
+	Severity       string
+	MetricKey      string
+	Message        string
+	EvidenceLabel  string
+	EvidenceValue  string
+	EvidenceUnit   string
+	Recommendation string
+	Conditions     []ruleCondition
+	ConditionMode  string // all|any
+}
+
+type ruleCondition struct {
+	Metric   string
+	Operator string // eq|neq|gt|gte|lt|lte|abs_gte|abs_lte
+	NumValue float64
+	StrValue string
+}
+
+func defaultWeeklyRecommendationRules() []weeklyRecommendationRule {
+	return []weeklyRecommendationRule{
+		{
+			Code:          "strength_progress",
+			Severity:      "positive",
+			MetricKey:     "total_volume_kg",
+			Message:       "Tong khoi luong ta cua ban dang tang tuan qua tuan.",
+			EvidenceLabel: "Delta volume",
+			EvidenceValue: "strength_delta",
+			EvidenceUnit:  "kg",
+			Conditions: []ruleCondition{{
+				Metric:   "strength_trend",
+				Operator: "eq",
+				StrValue: "up",
+			}},
+		},
+		{
+			Code:           "strength_drop",
+			Severity:       "warning",
+			MetricKey:      "total_volume_kg",
+			Message:        "Tong khoi luong ta giam so voi tuan truoc.",
+			EvidenceLabel:  "Delta volume",
+			EvidenceValue:  "strength_delta",
+			EvidenceUnit:   "kg",
+			Recommendation: "Giam tai nhe 1 tuan hoac tang thoi gian phuc hoi neu ban cam thay met moi.",
+			Conditions: []ruleCondition{{
+				Metric:   "strength_trend",
+				Operator: "eq",
+				StrValue: "down",
+			}},
+		},
+		{
+			Code:           "mood_drop",
+			Severity:       "warning",
+			MetricKey:      "avg_mood_score",
+			Message:        "Mood tap luyen co xu huong giam.",
+			EvidenceLabel:  "Mood delta",
+			EvidenceValue:  "mood_delta",
+			Recommendation: "Can nhac giam khoi luong 5-10% va uu tien ngu de cai thien recovery.",
+			Conditions: []ruleCondition{{
+				Metric:   "mood_trend",
+				Operator: "eq",
+				StrValue: "down",
+			}},
+		},
+		{
+			Code:          "rest_increase",
+			Severity:      "neutral",
+			MetricKey:     "avg_rest_secs",
+			Message:       "Thoi gian nghi trung binh giua cac set dang tang.",
+			EvidenceLabel: "Rest delta",
+			EvidenceValue: "rest_delta",
+			EvidenceUnit:  "sec",
+			Conditions: []ruleCondition{
+				{Metric: "rest_trend", Operator: "eq", StrValue: "up"},
+				{Metric: "rest_trend", Operator: "neq", StrValue: "insufficient_data"},
+			},
+			ConditionMode: "all",
+		},
+		{
+			Code:          "body_weight_change",
+			Severity:      "neutral",
+			MetricKey:     "body_weight",
+			Message:       "Can nang co thay doi so voi tuan truoc.",
+			EvidenceLabel: "Weight delta",
+			EvidenceValue: "body_weight_delta",
+			EvidenceUnit:  "kg",
+			Conditions: []ruleCondition{
+				{Metric: "body_weight_trend", Operator: "eq", StrValue: "up"},
+				{Metric: "body_weight_trend", Operator: "eq", StrValue: "down"},
+			},
+			ConditionMode: "any",
+		},
+		{
+			Code:           "body_weight_insufficient_data",
+			Severity:       "neutral",
+			MetricKey:      "body_weight",
+			Message:        "Chua du du lieu can nang de so sanh voi tuan truoc.",
+			Recommendation: "Cap nhat can nang deu dan trong profile de theo doi xu huong chinh xac hon.",
+			Conditions: []ruleCondition{{
+				Metric:   "body_weight_trend",
+				Operator: "eq",
+				StrValue: "insufficient_data",
+			}},
+		},
+		{
+			Code:           "no_completed_workouts",
+			Severity:       "warning",
+			MetricKey:      "total_workouts",
+			Message:        "Tuan nay ban chua hoan thanh buoi tap nao.",
+			Recommendation: "Hay dat muc tieu toi thieu 2-3 buoi tap cho tuan toi va theo doi muc do hoan thanh.",
+			Conditions: []ruleCondition{{
+				Metric:   "current_total_workouts",
+				Operator: "eq",
+				NumValue: 0,
+			}},
+		},
+	}
+}
+
+func matchesRule(summary *workout.WeeklyWorkoutSummary, rule weeklyRecommendationRule) bool {
+	if len(rule.Conditions) == 0 {
+		return true
+	}
+
+	modeAny := rule.ConditionMode == "any"
+	if modeAny {
+		for _, cond := range rule.Conditions {
+			if evaluateCondition(summary, cond) {
+				return true
+			}
+		}
+		return false
+	}
+
+	for _, cond := range rule.Conditions {
+		if !evaluateCondition(summary, cond) {
+			return false
+		}
+	}
+	return true
+}
+
+func evaluateCondition(summary *workout.WeeklyWorkoutSummary, cond ruleCondition) bool {
+	if num, ok := getNumericMetric(summary, cond.Metric); ok {
+		switch cond.Operator {
+		case "eq":
+			return math.Abs(num-cond.NumValue) < 1e-9
+		case "neq":
+			return math.Abs(num-cond.NumValue) >= 1e-9
+		case "gt":
+			return num > cond.NumValue
+		case "gte":
+			return num >= cond.NumValue
+		case "lt":
+			return num < cond.NumValue
+		case "lte":
+			return num <= cond.NumValue
+		case "abs_gte":
+			return math.Abs(num) >= cond.NumValue
+		case "abs_lte":
+			return math.Abs(num) <= cond.NumValue
+		default:
+			return false
+		}
+	}
+
+	if str, ok := getStringMetric(summary, cond.Metric); ok {
+		switch cond.Operator {
+		case "eq":
+			return str == cond.StrValue
+		case "neq":
+			return str != cond.StrValue
+		default:
+			return false
+		}
+	}
+
+	return false
+}
+
+func buildEvidenceFromRule(summary *workout.WeeklyWorkoutSummary, rule weeklyRecommendationRule) string {
+	if rule.EvidenceLabel == "" || rule.EvidenceValue == "" {
+		return ""
+	}
+	v, ok := getNumericMetric(summary, rule.EvidenceValue)
+	if !ok {
+		return ""
+	}
+	if rule.EvidenceUnit != "" {
+		return rule.EvidenceLabel + ": " + formatFloat(v) + " " + rule.EvidenceUnit
+	}
+	return rule.EvidenceLabel + ": " + formatFloat(v)
+}
+
+func getNumericMetric(summary *workout.WeeklyWorkoutSummary, key string) (float64, bool) {
+	switch key {
+	case "strength_delta":
+		return summary.StrengthTrend.Delta, true
+	case "rest_delta":
+		return summary.RestTrend.Delta, true
+	case "mood_delta":
+		return summary.MoodTrend.Delta, true
+	case "body_weight_delta":
+		return summary.BodyWeightTrend.Delta, true
+	case "current_total_workouts":
+		return float64(summary.Current.TotalWorkouts), true
+	default:
+		return 0, false
+	}
+}
+
+func getStringMetric(summary *workout.WeeklyWorkoutSummary, key string) (string, bool) {
+	switch key {
+	case "strength_trend":
+		return summary.StrengthTrend.Trend, true
+	case "rest_trend":
+		return summary.RestTrend.Trend, true
+	case "mood_trend":
+		return summary.MoodTrend.Trend, true
+	case "body_weight_trend":
+		return summary.BodyWeightTrend.Trend, true
+	default:
+		return "", false
+	}
+}
+
+func formatFloat(v float64) string {
+	return strconv.FormatFloat(utils.RoundToTwo(v), 'f', 2, 64)
 }

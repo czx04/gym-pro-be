@@ -117,6 +117,7 @@ func New(
 			workoutSessions := authenticated.Group("/workout-sessions")
 			{
 				workoutSessions.GET("/scheduled-dates", workoutHandler.GetScheduledDates)
+				workoutSessions.GET("/weekly-summary", workoutHandler.GetWeeklyWorkoutSummary)
 				workoutSessions.GET("", workoutHandler.GetSessionsByDate)
 				workoutSessions.GET("/:id", workoutHandler.GetSessionByID)
 				workoutSessions.POST("", workoutHandler.CreateWorkoutSession)

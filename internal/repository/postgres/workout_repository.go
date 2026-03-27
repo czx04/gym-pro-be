@@ -435,7 +435,7 @@ func (r *workoutSessionRepository) getSessionExercisesWithSets(ctx context.Conte
 }
 
 func (r *workoutSessionRepository) getSessionSets(ctx context.Context, sessionExerciseID uuid.UUID) ([]workout.WorkoutSessionSet, error) {
-	rows, err := r.db.Query(ctx, `SELECT id, workout_session_exercise_id, set_index, reps, weight_kg, completed, completed_at, created_at, updated_at FROM workout_session_sets WHERE workout_session_exercise_id = $1 ORDER BY set_index`, sessionExerciseID)
+	rows, err := r.db.Query(ctx, `SELECT id, workout_session_exercise_id, set_index, reps, weight_kg, rest_secs, completed, completed_at, created_at, updated_at FROM workout_session_sets WHERE workout_session_exercise_id = $1 ORDER BY set_index`, sessionExerciseID)
 	if err != nil {
 		return nil, errors.DatabaseError("get session sets", err)
 	}
@@ -443,7 +443,7 @@ func (r *workoutSessionRepository) getSessionSets(ctx context.Context, sessionEx
 	var list []workout.WorkoutSessionSet
 	for rows.Next() {
 		var s workout.WorkoutSessionSet
-		err := rows.Scan(&s.ID, &s.WorkoutSessionExerciseID, &s.SetIndex, &s.Reps, &s.WeightKg, &s.Completed, &s.CompletedAt, &s.CreatedAt, &s.UpdatedAt)
+		err := rows.Scan(&s.ID, &s.WorkoutSessionExerciseID, &s.SetIndex, &s.Reps, &s.WeightKg, &s.RestSecs, &s.Completed, &s.CompletedAt, &s.CreatedAt, &s.UpdatedAt)
 		if err != nil {
 			return nil, errors.DatabaseError("scan session set", err)
 		}
@@ -548,19 +548,76 @@ func (r *workoutSessionRepository) Complete(ctx context.Context, id uuid.UUID, i
 }
 
 func (r *workoutSessionRepository) UpdateSet(ctx context.Context, setID uuid.UUID, input workout.UpdateSessionSetInput) error {
-	// PATCH: reps/weight_kg/completed; weight_kg nullable (client có thể gửi null để xóa)
-	q := `UPDATE workout_session_sets SET reps = COALESCE($2, reps), weight_kg = $3, completed = COALESCE($4, completed), completed_at = CASE WHEN $4 = true THEN COALESCE(completed_at, NOW()) WHEN $4 = false THEN NULL ELSE completed_at END, updated_at = NOW() WHERE id = $1`
+	q := `UPDATE workout_session_sets SET reps = COALESCE($2, reps), weight_kg = $3, rest_secs = COALESCE($4, rest_secs), completed = COALESCE($5, completed), completed_at = CASE WHEN $5 = true THEN COALESCE(completed_at, NOW()) WHEN $5 = false THEN NULL ELSE completed_at END, updated_at = NOW() WHERE id = $1`
 	var reps interface{} = input.Reps
 	var weightKg interface{} = input.WeightKg
+	var restSecs interface{} = input.RestSecs
 	var completed interface{}
 	if input.Completed != nil {
 		completed = *input.Completed
 	}
-	_, err := r.db.Exec(ctx, q, setID, reps, weightKg, completed)
+	_, err := r.db.Exec(ctx, q, setID, reps, weightKg, restSecs, completed)
 	if err != nil {
 		return errors.DatabaseError("update session set", err)
 	}
 	return nil
+}
+
+func (r *workoutSessionRepository) GetWeeklyAggregate(ctx context.Context, userID uuid.UUID, start, end time.Time) (*workout.WeeklyWorkoutMetrics, error) {
+	q := `
+		SELECT
+			COALESCE(COUNT(DISTINCT ws.id), 0) AS total_workouts,
+			COALESCE(COUNT(DISTINCT ws.id) FILTER (WHERE ws.status = 'completed'), 0) AS completed_workouts,
+			COALESCE(SUM(ws.duration_mins), 0) AS total_duration_mins,
+			COALESCE(SUM(ws.total_calories_burned), 0) AS total_calories_burned,
+			COALESCE(COUNT(wss.id) FILTER (WHERE wss.completed), 0) AS total_sets_completed,
+			COALESCE(SUM(wss.reps) FILTER (WHERE wss.completed), 0) AS total_reps_completed,
+			COALESCE(SUM((COALESCE(wss.reps, 0)::numeric * COALESCE(wss.weight_kg, 0))) FILTER (WHERE wss.completed), 0) AS total_volume_kg,
+			COALESCE(AVG(wss.weight_kg) FILTER (WHERE wss.completed AND wss.weight_kg IS NOT NULL), 0) AS avg_weight_kg,
+			COALESCE(AVG(wss.rest_secs) FILTER (WHERE wss.completed AND wss.rest_secs IS NOT NULL), 0) AS avg_rest_secs,
+			COALESCE(COUNT(wss.rest_secs) FILTER (WHERE wss.completed AND wss.rest_secs IS NOT NULL), 0) AS rest_samples,
+			COALESCE(AVG(
+				CASE ws.mood
+					WHEN 'tired' THEN 1
+					WHEN 'neutral' THEN 2
+					WHEN 'happy' THEN 3
+					WHEN 'energetic' THEN 4
+					ELSE NULL
+				END
+			), 0) AS avg_mood_score,
+			COALESCE(AVG(ws.difficulty_rating::numeric), 0) AS avg_difficulty
+		FROM workout_sessions ws
+		LEFT JOIN workout_session_exercises wse ON wse.workout_session_id = ws.id
+		LEFT JOIN workout_session_sets wss ON wss.workout_session_exercise_id = wse.id
+		WHERE ws.user_id = $1
+			AND COALESCE(ws.started_at, ws.completed_at, ws.scheduled_date::timestamp, ws.created_at) >= $2
+			AND COALESCE(ws.started_at, ws.completed_at, ws.scheduled_date::timestamp, ws.created_at) < $3
+	`
+
+	stats := &workout.WeeklyWorkoutMetrics{}
+	err := r.db.QueryRow(ctx, q, userID, start, end).Scan(
+		&stats.TotalWorkouts,
+		&stats.CompletedWorkouts,
+		&stats.TotalDurationMins,
+		&stats.TotalCaloriesBurned,
+		&stats.TotalSetsCompleted,
+		&stats.TotalRepsCompleted,
+		&stats.TotalVolumeKg,
+		&stats.AvgWeightKg,
+		&stats.AvgRestSecs,
+		&stats.RestSamples,
+		&stats.AvgMoodScore,
+		&stats.AvgDifficulty,
+	)
+	if err != nil {
+		return nil, errors.DatabaseError("get weekly aggregate", err)
+	}
+
+	if stats.TotalWorkouts > 0 {
+		stats.CompletionRate = float64(stats.CompletedWorkouts) / float64(stats.TotalWorkouts)
+	}
+
+	return stats, nil
 }
 
 func (r *workoutSessionRepository) AddExerciseLog(ctx context.Context, sessionID uuid.UUID, exercise *workout.WorkoutSessionExercise) error {
