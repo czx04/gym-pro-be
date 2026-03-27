@@ -423,13 +423,6 @@ func (r *postRepository) GetFeed(ctx context.Context, userID uuid.UUID, filter s
 		WHERE p.deleted_at IS NULL
 		  AND NOT EXISTS (
 			SELECT 1
-			FROM post_preferences pp
-			WHERE pp.user_id = $1
-			  AND pp.post_id = p.id
-			  AND pp.preference = 'not_interested'
-		  )
-		  AND NOT EXISTS (
-			SELECT 1
 			FROM user_blocks ub
 			WHERE (ub.blocker_id = $1 AND ub.blocked_id = p.user_id)
 			   OR (ub.blocker_id = p.user_id AND ub.blocked_id = $1)
@@ -474,18 +467,13 @@ func (r *postRepository) GetFeed(ctx context.Context, userID uuid.UUID, filter s
 		WHERE p.deleted_at IS NULL
 		  AND NOT EXISTS (
 			SELECT 1
-			FROM post_preferences ppx
-			WHERE ppx.user_id = $1
-			  AND ppx.post_id = p.id
-			  AND ppx.preference = 'not_interested'
-		  )
-		  AND NOT EXISTS (
-			SELECT 1
 			FROM user_blocks ub
 			WHERE (ub.blocker_id = $1 AND ub.blocked_id = p.user_id)
 			   OR (ub.blocker_id = p.user_id AND ub.blocked_id = $1)
 		  )
-		ORDER BY p.created_at DESC
+		ORDER BY
+			CASE WHEN COALESCE(pp.preference = 'not_interested', FALSE) THEN 1 ELSE 0 END,
+			p.created_at DESC
 		LIMIT $2 OFFSET $3
 	`
 
@@ -550,13 +538,6 @@ func (r *postRepository) SearchPosts(ctx context.Context, viewerID uuid.UUID, qu
 		WHERE p.deleted_at IS NULL
 		  AND NOT EXISTS (
 			SELECT 1
-			FROM post_preferences pp
-			WHERE pp.user_id = $1
-			  AND pp.post_id = p.id
-			  AND pp.preference = 'not_interested'
-		  )
-		  AND NOT EXISTS (
-			SELECT 1
 			FROM user_blocks ub
 			WHERE (ub.blocker_id = $1 AND ub.blocked_id = p.user_id)
 			   OR (ub.blocker_id = p.user_id AND ub.blocked_id = $1)
@@ -610,13 +591,6 @@ func (r *postRepository) SearchPosts(ctx context.Context, viewerID uuid.UUID, qu
 		WHERE p.deleted_at IS NULL
 		  AND NOT EXISTS (
 			SELECT 1
-			FROM post_preferences ppx
-			WHERE ppx.user_id = $1
-			  AND ppx.post_id = p.id
-			  AND ppx.preference = 'not_interested'
-		  )
-		  AND NOT EXISTS (
-			SELECT 1
 			FROM user_blocks ub
 			WHERE (ub.blocker_id = $1 AND ub.blocked_id = p.user_id)
 			   OR (ub.blocker_id = p.user_id AND ub.blocked_id = $1)
@@ -630,7 +604,9 @@ func (r *postRepository) SearchPosts(ctx context.Context, viewerID uuid.UUID, qu
 				WHERE tag ILIKE $2
 			)
 		  )
-		ORDER BY p.created_at DESC
+		ORDER BY
+			CASE WHEN COALESCE(pp.preference = 'not_interested', FALSE) THEN 1 ELSE 0 END,
+			p.created_at DESC
 		LIMIT $3 OFFSET $4
 	`
 

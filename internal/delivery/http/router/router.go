@@ -163,18 +163,15 @@ func New(
 			{
 				social.GET("/search", socialHandler.Search)
 				social.GET("/feed", socialHandler.GetFeed)
-				social.POST("/users/:userId/follow", socialHandler.FollowUser)
-				social.DELETE("/users/:userId/follow", socialHandler.UnfollowUser)
+
+				social.PUT("/posts/:postId", socialHandler.UpdatePost)
+				social.PUT("/posts/:postId/preference", socialHandler.SetPostPreference)
+				social.PUT("/users/:userId/follow", socialHandler.SetFollowState)
+				social.PUT("/users/:userId/block", socialHandler.SetBlockState)
+
 				social.POST("/posts", socialHandler.CreatePost)
-				social.PATCH("/posts/:postId", socialHandler.EditPost)
 				social.DELETE("/posts/:postId", socialHandler.DeletePost)
 				social.GET("/posts/:postId", socialHandler.GetPostByID)
-				social.POST("/posts/:postId/likes", socialHandler.LikePost)
-				social.DELETE("/posts/:postId/likes", socialHandler.UnlikePost)
-				social.POST("/posts/:postId/interested", socialHandler.MarkInterested)
-				social.DELETE("/posts/:postId/interested", socialHandler.UnmarkInterested)
-				social.POST("/posts/:postId/not-interested", socialHandler.MarkNotInterested)
-				social.DELETE("/posts/:postId/not-interested", socialHandler.UnmarkNotInterested)
 				social.POST("/posts/:postId/reports", socialHandler.ReportPost)
 				social.GET("/posts/:postId/comments", socialHandler.GetPostComments)
 				social.GET("/posts/:postId/comments/:commentId/replies", socialHandler.GetCommentReplies)
@@ -182,8 +179,6 @@ func New(
 				social.DELETE("/posts/:postId/comments/:commentId", socialHandler.DeleteComment)
 				social.GET("/users/:userId/profile", socialHandler.GetUserProfile)
 				social.GET("/users/:userId/posts", socialHandler.GetUserPosts)
-				social.POST("/users/:userId/block", socialHandler.BlockUser)
-				social.DELETE("/users/:userId/block", socialHandler.UnblockUser)
 				social.POST("/media/signature", socialHandler.CreateMediaSignature)
 				social.POST("/media/confirm", socialHandler.ConfirmMedia)
 			}

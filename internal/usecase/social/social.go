@@ -1514,6 +1514,11 @@ func (uc *SocialUseCases) CreateComment(ctx context.Context, userID uuid.UUID, p
 	if len(input.Media) > 1 {
 		return nil, errors.Validation("only one media item is allowed")
 	}
+	// Backward compatibility with existing DB constraint on comments.content:
+	// media-only comments are stored with a single space as placeholder content.
+	if content == "" && len(input.Media) > 0 {
+		content = " "
+	}
 
 	postUUID, err := uuid.Parse(postID)
 	if err != nil {

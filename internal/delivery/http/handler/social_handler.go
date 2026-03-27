@@ -21,8 +21,10 @@ type createCommentRequest struct {
 	Text    *string `json:"text"`
 	Content *string `json:"content"`
 	Media   []struct {
-		PublicID     string `json:"public_id"`
-		ResourceType string `json:"resource_type"`
+		PublicID      string `json:"public_id"`
+		PublicId      string `json:"publicId"`
+		ResourceType  string `json:"resource_type"`
+		ResourceType2 string `json:"resourceType"`
 	} `json:"media"`
 	ParentCommentID *string `json:"parent_comment_id"`
 	ParentID        *string `json:"parent_id"`
@@ -30,9 +32,41 @@ type createCommentRequest struct {
 	ParentId        *string `json:"parentId"`
 }
 
+type createMediaSignatureRequest struct {
+	ResourceType  string `json:"resource_type"`
+	ResourceType2 string `json:"resourceType"`
+	Folder        string `json:"folder"`
+}
+
+type confirmMediaRequest struct {
+	PublicID      string `json:"public_id"`
+	PublicId      string `json:"publicId"`
+	SecureURL     string `json:"secure_url"`
+	SecureUrl     string `json:"secureUrl"`
+	ResourceType  string `json:"resource_type"`
+	ResourceType2 string `json:"resourceType"`
+	Bytes         int64  `json:"bytes"`
+}
+
 type reportPostRequest struct {
 	Reason      string  `json:"reason"`
 	Description *string `json:"description"`
+}
+
+type setFollowStateRequest struct {
+	Following *bool `json:"following"`
+}
+
+type setBlockStateRequest struct {
+	Blocked *bool `json:"blocked"`
+}
+
+type setPostPreferenceRequest struct {
+	Like          *bool `json:"like"`
+	Interested    *bool `json:"interested"`
+	NotInterested *bool `json:"notInterested"`
+	NotCare       *bool `json:"notCare"`
+	NotCare2      *bool `json:"not_care"`
 }
 
 func NewSocialHandler(socialUC *socialuc.SocialUseCases) *SocialHandler {
@@ -130,38 +164,6 @@ func (h *SocialHandler) GetUserPosts(c *gin.Context) {
 	response.Success(c, result)
 }
 
-func (h *SocialHandler) FollowUser(c *gin.Context) {
-	currentUserID, err := middleware.GetUserID(c)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-
-	result, err := h.socialUC.FollowUser(c.Request.Context(), currentUserID, c.Param("userId"))
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-
-	response.Success(c, result)
-}
-
-func (h *SocialHandler) UnfollowUser(c *gin.Context) {
-	currentUserID, err := middleware.GetUserID(c)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-
-	result, err := h.socialUC.UnfollowUser(c.Request.Context(), currentUserID, c.Param("userId"))
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-
-	response.Success(c, result)
-}
-
 func (h *SocialHandler) CreatePost(c *gin.Context) {
 	userID, err := middleware.GetUserID(c)
 	if err != nil {
@@ -184,7 +186,8 @@ func (h *SocialHandler) CreatePost(c *gin.Context) {
 	response.Created(c, result)
 }
 
-func (h *SocialHandler) EditPost(c *gin.Context) {
+// UpdatePost is the normalized v2 endpoint that replaces PATCH EditPost with PUT.
+func (h *SocialHandler) UpdatePost(c *gin.Context) {
 	userID, err := middleware.GetUserID(c)
 	if err != nil {
 		response.Error(c, err)
@@ -228,10 +231,14 @@ func (h *SocialHandler) CreateMediaSignature(c *gin.Context) {
 		return
 	}
 
-	var input socialuc.CreateMediaSignatureInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	var req createMediaSignatureRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, errors.BadRequest("invalid request body"))
 		return
+	}
+	input := socialuc.CreateMediaSignatureInput{
+		ResourceType: strings.TrimSpace(firstNonEmpty(req.ResourceType, req.ResourceType2)),
+		Folder:       strings.TrimSpace(req.Folder),
 	}
 
 	result, err := h.socialUC.CreateMediaSignature(c.Request.Context(), userID, input)
@@ -250,101 +257,19 @@ func (h *SocialHandler) ConfirmMedia(c *gin.Context) {
 		return
 	}
 
-	var input socialuc.ConfirmMediaInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	var req confirmMediaRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, errors.BadRequest("invalid request body"))
 		return
 	}
+	input := socialuc.ConfirmMediaInput{
+		PublicID:     strings.TrimSpace(firstNonEmpty(req.PublicID, req.PublicId)),
+		SecureURL:    strings.TrimSpace(firstNonEmpty(req.SecureURL, req.SecureUrl)),
+		ResourceType: strings.TrimSpace(firstNonEmpty(req.ResourceType, req.ResourceType2)),
+		Bytes:        req.Bytes,
+	}
 
 	result, err := h.socialUC.ConfirmMedia(c.Request.Context(), userID, input)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-
-	response.Success(c, result)
-}
-
-func (h *SocialHandler) LikePost(c *gin.Context) {
-	userID, err := middleware.GetUserID(c)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-
-	result, err := h.socialUC.LikePost(c.Request.Context(), userID, c.Param("postId"))
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-
-	response.Success(c, result)
-}
-
-func (h *SocialHandler) MarkInterested(c *gin.Context) {
-	userID, err := middleware.GetUserID(c)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-	result, err := h.socialUC.MarkInterested(c.Request.Context(), userID, c.Param("postId"))
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-	response.Success(c, result)
-}
-
-func (h *SocialHandler) UnmarkInterested(c *gin.Context) {
-	userID, err := middleware.GetUserID(c)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-	result, err := h.socialUC.UnmarkInterested(c.Request.Context(), userID, c.Param("postId"))
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-	response.Success(c, result)
-}
-
-func (h *SocialHandler) MarkNotInterested(c *gin.Context) {
-	userID, err := middleware.GetUserID(c)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-	result, err := h.socialUC.MarkNotInterested(c.Request.Context(), userID, c.Param("postId"))
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-	response.Success(c, result)
-}
-
-func (h *SocialHandler) UnmarkNotInterested(c *gin.Context) {
-	userID, err := middleware.GetUserID(c)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-	result, err := h.socialUC.UnmarkNotInterested(c.Request.Context(), userID, c.Param("postId"))
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-	response.Success(c, result)
-}
-
-func (h *SocialHandler) UnlikePost(c *gin.Context) {
-	userID, err := middleware.GetUserID(c)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-
-	result, err := h.socialUC.UnlikePost(c.Request.Context(), userID, c.Param("postId"))
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -381,8 +306,8 @@ func (h *SocialHandler) CreateComment(c *gin.Context) {
 	}
 	for _, media := range req.Media {
 		input.Media = append(input.Media, socialdomain.CreatePostMediaInput{
-			PublicID:     media.PublicID,
-			ResourceType: media.ResourceType,
+			PublicID:     strings.TrimSpace(firstNonEmpty(media.PublicID, media.PublicId)),
+			ResourceType: strings.TrimSpace(firstNonEmpty(media.ResourceType, media.ResourceType2)),
 		})
 	}
 
@@ -432,13 +357,30 @@ func (h *SocialHandler) ReportPost(c *gin.Context) {
 	response.Success(c, result)
 }
 
-func (h *SocialHandler) BlockUser(c *gin.Context) {
-	userID, err := middleware.GetUserID(c)
+func (h *SocialHandler) SetFollowState(c *gin.Context) {
+	currentUserID, err := middleware.GetUserID(c)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
-	result, err := h.socialUC.BlockUser(c.Request.Context(), userID, c.Param("userId"))
+
+	var req setFollowStateRequest
+	if err := c.ShouldBindJSON(&req); err != nil || req.Following == nil {
+		response.Error(c, errors.BadRequest("invalid request body"))
+		return
+	}
+
+	if *req.Following {
+		result, err := h.socialUC.FollowUser(c.Request.Context(), currentUserID, c.Param("userId"))
+		if err != nil {
+			response.Error(c, err)
+			return
+		}
+		response.Success(c, result)
+		return
+	}
+
+	result, err := h.socialUC.UnfollowUser(c.Request.Context(), currentUserID, c.Param("userId"))
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -446,18 +388,140 @@ func (h *SocialHandler) BlockUser(c *gin.Context) {
 	response.Success(c, result)
 }
 
-func (h *SocialHandler) UnblockUser(c *gin.Context) {
-	userID, err := middleware.GetUserID(c)
+func (h *SocialHandler) SetBlockState(c *gin.Context) {
+	currentUserID, err := middleware.GetUserID(c)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
-	result, err := h.socialUC.UnblockUser(c.Request.Context(), userID, c.Param("userId"))
+
+	var req setBlockStateRequest
+	if err := c.ShouldBindJSON(&req); err != nil || req.Blocked == nil {
+		response.Error(c, errors.BadRequest("invalid request body"))
+		return
+	}
+
+	if *req.Blocked {
+		result, err := h.socialUC.BlockUser(c.Request.Context(), currentUserID, c.Param("userId"))
+		if err != nil {
+			response.Error(c, err)
+			return
+		}
+		response.Success(c, result)
+		return
+	}
+
+	result, err := h.socialUC.UnblockUser(c.Request.Context(), currentUserID, c.Param("userId"))
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
 	response.Success(c, result)
+}
+
+func (h *SocialHandler) SetPostPreference(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	var req setPostPreferenceRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, errors.BadRequest("invalid request body"))
+		return
+	}
+
+	notInterested := req.NotInterested
+	if notInterested == nil {
+		notInterested = firstNonNilBool(req.NotCare, req.NotCare2)
+	}
+
+	// validate mutually exclusive preferences
+	if req.Interested != nil && notInterested != nil && *req.Interested && *notInterested {
+		response.Error(c, errors.Validation("interested and notInterested/notCare cannot both be true"))
+		return
+	}
+
+	// Require at least one field
+	if req.Like == nil && req.Interested == nil && notInterested == nil {
+		response.Error(c, errors.Validation("at least one preference field must be provided"))
+		return
+	}
+
+	type preferenceResponse struct {
+		PostID              string `json:"post_id"`
+		IsLikedByMe         *bool  `json:"is_liked_by_me,omitempty"`
+		LikeCount           *int   `json:"like_count,omitempty"`
+		IsInterestedByMe    *bool  `json:"is_interested_by_me,omitempty"`
+		IsNotInterestedByMe *bool  `json:"is_not_interested_by_me,omitempty"`
+	}
+
+	out := preferenceResponse{PostID: c.Param("postId")}
+
+	// Like state
+	if req.Like != nil {
+		if *req.Like {
+			likeRes, err := h.socialUC.LikePost(c.Request.Context(), userID, c.Param("postId"))
+			if err != nil {
+				response.Error(c, err)
+				return
+			}
+			out.IsLikedByMe = &likeRes.IsLikedByMe
+			out.LikeCount = &likeRes.LikeCount
+		} else {
+			likeRes, err := h.socialUC.UnlikePost(c.Request.Context(), userID, c.Param("postId"))
+			if err != nil {
+				response.Error(c, err)
+				return
+			}
+			out.IsLikedByMe = &likeRes.IsLikedByMe
+			out.LikeCount = &likeRes.LikeCount
+		}
+	}
+
+	// Interested / Not interested
+	if req.Interested != nil {
+		if *req.Interested {
+			prefRes, err := h.socialUC.MarkInterested(c.Request.Context(), userID, c.Param("postId"))
+			if err != nil {
+				response.Error(c, err)
+				return
+			}
+			out.IsInterestedByMe = &prefRes.IsInterestedByMe
+			out.IsNotInterestedByMe = &prefRes.IsNotInterestedByMe
+		} else {
+			prefRes, err := h.socialUC.UnmarkInterested(c.Request.Context(), userID, c.Param("postId"))
+			if err != nil {
+				response.Error(c, err)
+				return
+			}
+			out.IsInterestedByMe = &prefRes.IsInterestedByMe
+			out.IsNotInterestedByMe = &prefRes.IsNotInterestedByMe
+		}
+	}
+
+	if notInterested != nil {
+		if *notInterested {
+			prefRes, err := h.socialUC.MarkNotInterested(c.Request.Context(), userID, c.Param("postId"))
+			if err != nil {
+				response.Error(c, err)
+				return
+			}
+			out.IsInterestedByMe = &prefRes.IsInterestedByMe
+			out.IsNotInterestedByMe = &prefRes.IsNotInterestedByMe
+		} else {
+			prefRes, err := h.socialUC.UnmarkNotInterested(c.Request.Context(), userID, c.Param("postId"))
+			if err != nil {
+				response.Error(c, err)
+				return
+			}
+			out.IsInterestedByMe = &prefRes.IsInterestedByMe
+			out.IsNotInterestedByMe = &prefRes.IsNotInterestedByMe
+		}
+	}
+
+	response.Success(c, out)
 }
 
 func firstNonEmptyString(values ...*string) *string {
@@ -470,6 +534,25 @@ func firstNonEmptyString(values ...*string) *string {
 			continue
 		}
 		return &trimmed
+	}
+	return nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func firstNonNilBool(values ...*bool) *bool {
+	for _, value := range values {
+		if value != nil {
+			return value
+		}
 	}
 	return nil
 }
