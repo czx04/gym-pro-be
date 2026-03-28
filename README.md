@@ -312,3 +312,7 @@ MIT
 ## Contact
 
 For questions or support, contact the development team.
+
+Cloudflared
+
+cloudflared-windows-amd64.exe tunnel --url http://localhost:8080

@@ -17,5 +17,6 @@ var UseCaseProviders = fx.Options(
 	fx.Provide(mealuc.NewFoodUseCases),
 	fx.Provide(mealuc.NewRecipeUseCases),
 	fx.Provide(mealuc.NewMealLogUseCases),
+	fx.Provide(mealuc.NewMealDailyUseCases),
 	fx.Provide(socialuc.NewSocialUseCases),
 )
