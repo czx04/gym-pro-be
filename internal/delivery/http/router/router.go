@@ -74,6 +74,7 @@ func New(
 			{
 				users.GET("/me", authHandler.GetMe)
 				users.PUT("/me", authHandler.UpdateMe)
+				users.GET("/me/weight-history", userHandler.GetMyWeightHistory)
 				users.GET("/:id", placeholderHandler("Get user by ID"))
 				users.GET("/nutrition-target", userHandler.GetUserNutritionTarget)
 				users.PUT("/nutrition-target", userHandler.UpdateUserNutritionTarget)

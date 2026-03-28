@@ -266,6 +266,30 @@ func (uc *UserUseCases) GetUserNutritionTarget(ctx context.Context, userID uuid.
 	}, nil
 }
 
+const maxWeightHistoryQueryRange = 732 * 24 * time.Hour // 2 years
+
+// ListMyWeightHistory returns chart points: latest measurement per calendar bucket in the given IANA timezone.
+func (uc *UserUseCases) ListMyWeightHistory(ctx context.Context, userID uuid.UUID, from, to time.Time, tz string, granularity user.WeightHistoryGranularity) ([]user.WeightHistoryPoint, error) {
+	if to.Before(from) {
+		return nil, errors.BadRequest("to must be on or after from")
+	}
+	if to.Sub(from) > maxWeightHistoryQueryRange {
+		return nil, errors.BadRequest("date range too large (max 2 years)")
+	}
+	switch granularity {
+	case user.WeightHistoryGranularityDay, user.WeightHistoryGranularityWeek, user.WeightHistoryGranularityMonth:
+	default:
+		return nil, errors.BadRequest("granularity must be day, week, or month")
+	}
+	if tz == "" {
+		tz = "UTC"
+	}
+	if _, err := time.LoadLocation(tz); err != nil {
+		return nil, errors.BadRequest("invalid timezone")
+	}
+	return uc.userRepo.ListWeightHistoryByGranularity(ctx, userID, from, to, tz, granularity)
+}
+
 func (uc *UserUseCases) UpdateUserNutritionTarget(ctx context.Context, userID uuid.UUID, input UpdateUserNutritionTargetInput) (*user.UserNutritionTarget, error) {
 	if err := uc.validator.Validate(input); err != nil {
 		return nil, errors.Validation(err.Error())

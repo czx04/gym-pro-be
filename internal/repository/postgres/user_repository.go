@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"fmt"
 	"gym-pro-2026-ptit/internal/domain/user"
 	"gym-pro-2026-ptit/internal/infrastructure/database"
 	"gym-pro-2026-ptit/pkg/errors"
@@ -340,6 +341,69 @@ func (r *userRepository) GetLatestWeightBefore(ctx context.Context, userID uuid.
 	}
 
 	return &item, nil
+}
+
+func truncUnitForGranularity(g user.WeightHistoryGranularity) (string, error) {
+	switch g {
+	case user.WeightHistoryGranularityDay:
+		return "day", nil
+	case user.WeightHistoryGranularityWeek:
+		return "week", nil
+	case user.WeightHistoryGranularityMonth:
+		return "month", nil
+	default:
+		return "", fmt.Errorf("invalid granularity")
+	}
+}
+
+func (r *userRepository) ListWeightHistoryByGranularity(ctx context.Context, userID uuid.UUID, from, to time.Time, tz string, granularity user.WeightHistoryGranularity) ([]user.WeightHistoryPoint, error) {
+	unit, err := truncUnitForGranularity(granularity)
+	if err != nil {
+		return nil, err
+	}
+
+	query := fmt.Sprintf(`
+		SELECT
+			(sub.period_local AT TIME ZONE $3)::timestamptz AS period_start,
+			sub.weight_kg,
+			sub.measured_at
+		FROM (
+			SELECT
+				date_trunc('%s', measured_at AT TIME ZONE $3) AS period_local,
+				weight_kg,
+				measured_at,
+				ROW_NUMBER() OVER (
+					PARTITION BY date_trunc('%s', measured_at AT TIME ZONE $3)
+					ORDER BY measured_at DESC
+				) AS rn
+			FROM user_weight_history
+			WHERE user_id = $1 AND measured_at >= $2 AND measured_at <= $4
+		) sub
+		WHERE sub.rn = 1
+		ORDER BY period_start ASC
+	`, unit, unit)
+
+	rows, err := r.db.Query(ctx, query, userID, from, tz, to)
+	if err != nil {
+		return nil, errors.DatabaseError("list weight history by granularity", err)
+	}
+	defer rows.Close()
+
+	var out []user.WeightHistoryPoint
+	for rows.Next() {
+		var p user.WeightHistoryPoint
+		if err := rows.Scan(&p.PeriodStart, &p.WeightKg, &p.MeasuredAt); err != nil {
+			return nil, errors.DatabaseError("scan weight history point", err)
+		}
+		out = append(out, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, errors.DatabaseError("iterate weight history", err)
+	}
+	if out == nil {
+		out = []user.WeightHistoryPoint{}
+	}
+	return out, nil
 }
 
 func hasWeightChanged(previous, next *float64) bool {
