@@ -27,6 +27,7 @@ func New(
 	foodHandler *handler.FoodHandler,
 	recipeHandler *handler.RecipeHandler,
 	mealLogHandler *handler.MealLogHandler,
+	mealDailyHandler *handler.MealDailyHandler,
 	userHandler *handler.UserHandler,
 	socialHandler *handler.SocialHandler,
 ) *Router {
@@ -161,6 +162,12 @@ func New(
 				mealLogs.GET("/:id", mealLogHandler.GetMealLog)
 				mealLogs.PUT("/:id", mealLogHandler.UpdateMealLog)
 				mealLogs.DELETE("/:id", mealLogHandler.DeleteMealLog)
+			}
+
+			// Meal Daily routes
+			mealDaily := authenticated.Group("/meal-daily")
+			{
+				mealDaily.GET("/date/:date", mealDailyHandler.GetMealDailyTargetByDate)
 			}
 
 			// Social routes
