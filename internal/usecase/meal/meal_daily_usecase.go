@@ -67,6 +67,47 @@ func (uc *MealDailyUseCases) InsertOrUpdateByUserAndDate(ctx context.Context, us
 	return nil
 }
 
+// UpsertTargetsFromUserForDate writes the user's current nutrition targets to meal_daily for the given calendar day (insert or update on conflict).
+func (uc *MealDailyUseCases) UpsertTargetsFromUserForDate(ctx context.Context, userID uuid.UUID, date time.Time) error {
+	currentUser, err := uc.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return errors.DatabaseError("failed to get user", err)
+	}
+
+	reqDate := date.UTC().Truncate(24 * time.Hour)
+
+	var targetCalories float64
+	if currentUser.DailyCalorieTarget != nil {
+		targetCalories = float64(*currentUser.DailyCalorieTarget)
+	}
+	var targetProteinG float64
+	if currentUser.ProteinTargetG != nil {
+		targetProteinG = float64(*currentUser.ProteinTargetG)
+	}
+	var targetCarbsG float64
+	if currentUser.CarbsTargetG != nil {
+		targetCarbsG = float64(*currentUser.CarbsTargetG)
+	}
+	var targetFatG float64
+	if currentUser.FatTargetG != nil {
+		targetFatG = float64(*currentUser.FatTargetG)
+	}
+
+	now := time.Now()
+	md := &meal.MealDaily{
+		ID:             uuid.New(),
+		UserID:         userID,
+		Date:           reqDate,
+		TargetCalories: targetCalories,
+		TargetProteinG: targetProteinG,
+		TargetCarbsG:   targetCarbsG,
+		TargetFatG:     targetFatG,
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}
+	return uc.mealDailyRepo.UpsertTargets(ctx, md)
+}
+
 // GetMealDailyByDate retrieves a user's daily meal target for a specific date.
 // Logic:
 // 1. Check if there is an exact match for the requested date.

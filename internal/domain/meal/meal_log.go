@@ -132,3 +132,9 @@ type GetNutritionStatsRequest struct {
 	EndDate   string `form:"end_date" binding:"required"`
 }
 
+// ListLoggedDatesQuery holds query params for days that have at least one meal log
+type ListLoggedDatesQuery struct {
+	StartDate string `form:"start_date" binding:"required"`
+	EndDate   string `form:"end_date" binding:"required"`
+}
+

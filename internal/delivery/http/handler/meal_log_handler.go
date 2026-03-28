@@ -126,6 +126,40 @@ func (h *MealLogHandler) GetMealLogsByDate(c *gin.Context) {
 	response.Success(c, result)
 }
 
+// ListLoggedDates godoc
+// @Summary List dates with meal logs
+// @Description Returns distinct YYYY-MM-DD values in the range that have at least one meal log
+// @Tags meal-logs
+// @Produce json
+// @Security BearerAuth
+// @Param start_date query string true "Start Date (YYYY-MM-DD)"
+// @Param end_date query string true "End Date (YYYY-MM-DD)"
+// @Success 200 {object} response.Response
+// @Failure 400 {object} response.Response
+// @Failure 401 {object} response.Response
+// @Router /meal-logs/logged-dates [get]
+func (h *MealLogHandler) ListLoggedDates(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	var q meal.ListLoggedDatesQuery
+	if err := c.ShouldBindQuery(&q); err != nil {
+		response.Error(c, errors.BadRequest("start_date and end_date query parameters are required (YYYY-MM-DD)"))
+		return
+	}
+
+	dates, err := h.mealLogUC.ListLoggedDates(c.Request.Context(), userID, q)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	response.Success(c, gin.H{"dates": dates})
+}
+
 // UpdateMealLog godoc
 // @Summary Update a meal log
 // @Description Update notes, mood, energy level and/or replace all items of a meal log

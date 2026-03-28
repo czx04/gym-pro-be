@@ -2,14 +2,16 @@ package user
 
 import (
 	"context"
+	"time"
+
 	"gym-pro-2026-ptit/internal/domain/user"
 	"gym-pro-2026-ptit/internal/helper"
 	"gym-pro-2026-ptit/internal/infrastructure/auth"
 	"gym-pro-2026-ptit/internal/infrastructure/email"
 	"gym-pro-2026-ptit/internal/infrastructure/otp"
+	mealuc "gym-pro-2026-ptit/internal/usecase/meal"
 	"gym-pro-2026-ptit/pkg/errors"
 	"gym-pro-2026-ptit/pkg/validator"
-	"time"
 
 	"github.com/google/uuid"
 )
@@ -45,26 +47,29 @@ type (
 		RefreshToken string `json:"refresh_token" validate:"required"`
 	}
 	UpdateUserNutritionTargetInput struct {
-		DailyCalorieTarget *int `json:"daily_calorie_target,omitempty" validate:"omitempty,gte=500,lte=10000"`
-		ProteinTargetG     *int `json:"protein_target_g,omitempty" validate:"omitempty,gte=0,lte=500"`
-		CarbsTargetG       *int `json:"carbs_target_g,omitempty" validate:"omitempty,gte=0,lte=1000"`
-		FatTargetG         *int `json:"fat_target_g,omitempty" validate:"omitempty,gte=0,lte=300"`
+		DailyCalorieTarget *int    `json:"daily_calorie_target,omitempty" validate:"omitempty,gte=500,lte=10000"`
+		ProteinTargetG     *int    `json:"protein_target_g,omitempty" validate:"omitempty,gte=0,lte=500"`
+		CarbsTargetG       *int    `json:"carbs_target_g,omitempty" validate:"omitempty,gte=0,lte=1000"`
+		FatTargetG         *int    `json:"fat_target_g,omitempty" validate:"omitempty,gte=0,lte=300"`
+		EffectiveDate      *string `json:"effective_date,omitempty"`
 	}
 )
 
 // UserUseCases groups all user/auth use cases with a single dependency set.
 type UserUseCases struct {
-	userRepo     user.Repository
-	otpService   otp.Service
-	emailService email.Service
-	passwordMgr  *auth.PasswordManager
-	jwtMgr       *auth.JWTManager
-	validator    *validator.Validator
+	userRepo      user.Repository
+	mealDailyUC   *mealuc.MealDailyUseCases
+	otpService    otp.Service
+	emailService  email.Service
+	passwordMgr   *auth.PasswordManager
+	jwtMgr        *auth.JWTManager
+	validator     *validator.Validator
 }
 
 // NewUserUseCases creates the user use cases container.
 func NewUserUseCases(
 	userRepo user.Repository,
+	mealDailyUC *mealuc.MealDailyUseCases,
 	otpService otp.Service,
 	emailService email.Service,
 	passwordMgr *auth.PasswordManager,
@@ -73,6 +78,7 @@ func NewUserUseCases(
 ) *UserUseCases {
 	return &UserUseCases{
 		userRepo:     userRepo,
+		mealDailyUC:  mealDailyUC,
 		otpService:   otpService,
 		emailService: emailService,
 		passwordMgr:  passwordMgr,
@@ -306,6 +312,19 @@ func (uc *UserUseCases) UpdateUserNutritionTarget(ctx context.Context, userID uu
 	if err := uc.userRepo.Update(ctx, u); err != nil {
 		return nil, errors.InternalServer("Failed to update user", err)
 	}
+
+	effectiveDay := time.Now().UTC().Truncate(24 * time.Hour)
+	if input.EffectiveDate != nil && *input.EffectiveDate != "" {
+		d, err := time.Parse("2006-01-02", *input.EffectiveDate)
+		if err != nil {
+			return nil, errors.BadRequest("invalid effective_date, expected YYYY-MM-DD")
+		}
+		effectiveDay = d.UTC().Truncate(24 * time.Hour)
+	}
+	if err := uc.mealDailyUC.UpsertTargetsFromUserForDate(ctx, userID, effectiveDay); err != nil {
+		return nil, errors.InternalServer("Failed to sync meal daily targets", err)
+	}
+
 	return &user.UserNutritionTarget{
 		DailyCalorieTarget: u.DailyCalorieTarget,
 		ProteinTargetG:     u.ProteinTargetG,

@@ -32,6 +32,25 @@ func (r *mealDailyRepository) InsertOrUpdate(ctx context.Context, md *meal.MealD
 	return err
 }
 
+// UpsertTargets inserts a row or updates target columns on (user_id, date) conflict.
+func (r *mealDailyRepository) UpsertTargets(ctx context.Context, md *meal.MealDaily) error {
+	query := `
+		INSERT INTO meal_daily (
+			id, user_id, date, target_calories, target_protein_g, target_carbs_g, target_fat_g, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		ON CONFLICT (user_id, date) DO UPDATE SET
+			target_calories = EXCLUDED.target_calories,
+			target_protein_g = EXCLUDED.target_protein_g,
+			target_carbs_g = EXCLUDED.target_carbs_g,
+			target_fat_g = EXCLUDED.target_fat_g,
+			updated_at = EXCLUDED.updated_at
+	`
+	_, err := r.db.Exec(ctx, query,
+		md.ID, md.UserID, md.Date, md.TargetCalories, md.TargetProteinG, md.TargetCarbsG, md.TargetFatG, md.CreatedAt, md.UpdatedAt,
+	)
+	return err
+}
+
 // GetByDate retrieves a meal daily log for a user on a given exact date.
 func (r *mealDailyRepository) GetByDate(ctx context.Context, userID uuid.UUID, date time.Time) (*meal.MealDaily, error) {
 	query := `

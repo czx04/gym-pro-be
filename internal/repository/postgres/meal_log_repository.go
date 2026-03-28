@@ -168,6 +168,31 @@ func (r *mealLogRepository) GetByDate(ctx context.Context, userID uuid.UUID, dat
 	return logs, nil
 }
 
+// ListDistinctLogDates returns each calendar day in [from, to] that has at least one meal log.
+func (r *mealLogRepository) ListDistinctLogDates(ctx context.Context, userID uuid.UUID, from, to time.Time) ([]time.Time, error) {
+	query := `
+		SELECT DISTINCT log_date
+		FROM meal_logs
+		WHERE user_id = $1 AND log_date >= $2::date AND log_date <= $3::date
+		ORDER BY log_date
+	`
+	rows, err := r.db.Query(ctx, query, userID, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var dates []time.Time
+	for rows.Next() {
+		var d time.Time
+		if err := rows.Scan(&d); err != nil {
+			return nil, err
+		}
+		dates = append(dates, d.UTC().Truncate(24*time.Hour))
+	}
+	return dates, rows.Err()
+}
+
 // Update applies partial updates (notes, mood, energy_level) to a meal log.
 func (r *mealLogRepository) Update(ctx context.Context, id uuid.UUID, input meal.UpdateMealLogInput) error {
 	setClauses := []string{"updated_at = CURRENT_TIMESTAMP"}
