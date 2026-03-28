@@ -2,6 +2,7 @@ package meal
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"gym-pro-2026-ptit/internal/domain/meal"
@@ -14,23 +15,26 @@ import (
 
 // MealLogUseCases encapsulates all meal-log business logic.
 type MealLogUseCases struct {
-	mealLogRepo meal.MealLogRepository
-	foodRepo    meal.FoodRepository
-	recipeRepo  meal.RecipeRepository
-	validator   *validator.Validator
+	mealLogRepo   meal.MealLogRepository
+	foodRepo      meal.FoodRepository
+	recipeRepo    meal.RecipeRepository
+	mealDailyUC   *MealDailyUseCases
+	validator     *validator.Validator
 }
 
 func NewMealLogUseCases(
 	mealLogRepo meal.MealLogRepository,
 	foodRepo meal.FoodRepository,
 	recipeRepo meal.RecipeRepository,
+	mealDailyUC *MealDailyUseCases,
 	validator *validator.Validator,
 ) *MealLogUseCases {
 	return &MealLogUseCases{
-		mealLogRepo: mealLogRepo,
-		foodRepo:    foodRepo,
-		recipeRepo:  recipeRepo,
-		validator:   validator,
+		mealLogRepo:   mealLogRepo,
+		foodRepo:      foodRepo,
+		recipeRepo:    recipeRepo,
+		mealDailyUC:   mealDailyUC,
+		validator:     validator,
 	}
 }
 
@@ -38,6 +42,17 @@ func NewMealLogUseCases(
 func (uc *MealLogUseCases) CreateMealLog(ctx context.Context, userID uuid.UUID, input meal.CreateMealLogInput) (*meal.MealLog, error) {
 	if err := uc.validator.Validate(input); err != nil {
 		return nil, errors.Validation(err.Error())
+	}
+
+	existingLogs, err := uc.mealLogRepo.GetByDate(ctx, userID, input.LogDate)
+	if err != nil {
+		return nil, errors.DatabaseError("failed to check existing meal logs", err)
+	}
+	for _, l := range existingLogs {
+		fmt.Println(l.MealTime, input.MealTime)
+		if l.MealTime == input.MealTime {
+			return nil, errors.Conflict(fmt.Sprintf("meal log for %s already exists on this date", input.MealTime))
+		}
 	}
 
 	now := time.Now()
@@ -59,6 +74,9 @@ func (uc *MealLogUseCases) CreateMealLog(ctx context.Context, userID uuid.UUID, 
 		return nil, errors.DatabaseError("failed to create meal log", err)
 	}
 
+	// Persist target to meal_daily for history tracking
+	_ = uc.mealDailyUC.InsertOrUpdateByUserAndDate(ctx, userID, input.LogDate)
+
 	// Add initial items if provided.
 	for _, itemInput := range input.Items {
 		if err := uc.addItemToLog(ctx, log.ID, itemInput); err != nil {
@@ -66,7 +84,7 @@ func (uc *MealLogUseCases) CreateMealLog(ctx context.Context, userID uuid.UUID, 
 		}
 	}
 
-	log, err := uc.mealLogRepo.GetByID(ctx, log.ID)
+	log, err = uc.mealLogRepo.GetByID(ctx, log.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -126,6 +144,30 @@ func (uc *MealLogUseCases) UpdateMealLog(ctx context.Context, id, userID uuid.UU
 	}
 	if existing.UserID != userID {
 		return nil, errors.Forbidden("you do not have permission to edit this meal log")
+	}
+
+	newLogDate := existing.LogDate
+	if input.LogDate != nil {
+		newLogDate = *input.LogDate
+	}
+	newMealTime := existing.MealTime
+	if input.MealTime != nil {
+		newMealTime = *input.MealTime
+	}
+
+	if input.LogDate != nil || input.MealTime != nil {
+		// Only check if it changed to avoid conflict with itself
+		if !newLogDate.Equal(existing.LogDate) || newMealTime != existing.MealTime {
+			existingLogs, err := uc.mealLogRepo.GetByDate(ctx, userID, newLogDate)
+			if err != nil {
+				return nil, errors.DatabaseError("failed to check existing meal logs", err)
+			}
+			for _, l := range existingLogs {
+				if l.MealTime == newMealTime && l.ID != id {
+					return nil, errors.Conflict(fmt.Sprintf("meal log for %s already exists on this date", newMealTime))
+				}
+			}
+		}
 	}
 
 	if err := uc.mealLogRepo.Update(ctx, id, input); err != nil {

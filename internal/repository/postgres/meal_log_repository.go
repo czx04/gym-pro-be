@@ -174,6 +174,16 @@ func (r *mealLogRepository) Update(ctx context.Context, id uuid.UUID, input meal
 	args := []interface{}{id}
 	argID := 2
 
+	if input.LogDate != nil {
+		setClauses = append(setClauses, fmt.Sprintf("log_date = $%d", argID))
+		args = append(args, *input.LogDate)
+		argID++
+	}
+	if input.MealTime != nil {
+		setClauses = append(setClauses, fmt.Sprintf("meal_time = $%d", argID))
+		args = append(args, *input.MealTime)
+		argID++
+	}
 	if input.Notes != nil {
 		setClauses = append(setClauses, fmt.Sprintf("notes = $%d", argID))
 		args = append(args, *input.Notes)

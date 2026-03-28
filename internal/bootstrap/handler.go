@@ -14,6 +14,7 @@ var HandlerProviders = fx.Options(
 		handler.NewFoodHandler,
 		handler.NewRecipeHandler,
 		handler.NewMealLogHandler,
+		handler.NewMealDailyHandler,
 		handler.NewUserHandler,
 		handler.NewSocialHandler,
 	),
