@@ -1,5 +1,5 @@
 CREATE TABLE meal_daily (
-    id UUID PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL,
     date DATE NOT NULL,
     target_calories DECIMAL(10, 2) NOT NULL DEFAULT 0,

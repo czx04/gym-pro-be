@@ -107,12 +107,18 @@ type MealLogRepository interface {
 
 	// GetStats retrieves nutrition statistics for a period
 	GetStats(ctx context.Context, userID uuid.UUID, startDate, endDate time.Time, period string) (*NutritionStats, error)
+
+	// ListDistinctLogDates returns calendar dates (UTC midnight) that have at least one meal log in [from, to].
+	ListDistinctLogDates(ctx context.Context, userID uuid.UUID, from, to time.Time) ([]time.Time, error)
 }
 
 // MealDailyRepository defines the interface for meal daily targets data access
 type MealDailyRepository interface {
 	// InsertOrUpdate creates or updates a meal daily target (ON CONFLICT DO NOTHING)
 	InsertOrUpdate(ctx context.Context, mealDaily *MealDaily) error
+
+	// UpsertTargets inserts or updates target columns for (user_id, date).
+	UpsertTargets(ctx context.Context, mealDaily *MealDaily) error
 
 	// GetByDate retrieves a meal daily target by exact date
 	GetByDate(ctx context.Context, userID uuid.UUID, date time.Time) (*MealDaily, error)

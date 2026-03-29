@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"time"
+
 	"gym-pro-2026-ptit/internal/delivery/http/middleware"
 	domainuser "gym-pro-2026-ptit/internal/domain/user"
 	useruc "gym-pro-2026-ptit/internal/usecase/user"
@@ -12,6 +14,9 @@ import (
 
 // Keeps domainuser in scope for swag (@Success domainuser.UserNutritionTarget).
 var _ = domainuser.UserNutritionTarget{}
+
+// Keeps domainuser.WeightHistoryPoint in scope for swag.
+var _ = domainuser.WeightHistoryPoint{}
 
 type UserHandler struct {
 	userUC *useruc.UserUseCases
@@ -33,6 +38,60 @@ func NewUserHandler(userUC *useruc.UserUseCases) *UserHandler {
 // @Failure 401 {object} response.Response
 // @Failure 404 {object} response.Response
 // @Router /users/nutrition-target [get]
+// GetMyWeightHistory godoc
+// @Summary List weight history for chart
+// @Description Latest weight per day/week/month bucket in the given timezone
+// @Tags users
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param from query string true "Start (RFC3339)"
+// @Param to query string true "End (RFC3339)"
+// @Param granularity query string true "day, week, or month"
+// @Param timezone query string false "IANA timezone (default UTC)"
+// @Success 200 {object} response.Response
+// @Failure 400 {object} response.Response
+// @Failure 401 {object} response.Response
+// @Router /users/me/weight-history [get]
+func (h *UserHandler) GetMyWeightHistory(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	fromStr := c.Query("from")
+	toStr := c.Query("to")
+	if fromStr == "" || toStr == "" {
+		response.Error(c, errors.BadRequest("from and to query parameters are required (RFC3339)"))
+		return
+	}
+	from, err := time.Parse(time.RFC3339, fromStr)
+	if err != nil {
+		response.Error(c, errors.BadRequest("invalid from datetime"))
+		return
+	}
+	to, err := time.Parse(time.RFC3339, toStr)
+	if err != nil {
+		response.Error(c, errors.BadRequest("invalid to datetime"))
+		return
+	}
+
+	tz := c.Query("timezone")
+	granularity := domainuser.WeightHistoryGranularity(c.Query("granularity"))
+	if granularity == "" {
+		response.Error(c, errors.BadRequest("granularity is required (day, week, month)"))
+		return
+	}
+
+	points, err := h.userUC.ListMyWeightHistory(c.Request.Context(), userID, from, to, tz, granularity)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"points": points})
+}
+
 func (h *UserHandler) GetUserNutritionTarget(c *gin.Context) {
 	userID, err := middleware.GetUserID(c)
 	if err != nil {

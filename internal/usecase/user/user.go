@@ -2,14 +2,16 @@ package user
 
 import (
 	"context"
+	"time"
+
 	"gym-pro-2026-ptit/internal/domain/user"
 	"gym-pro-2026-ptit/internal/helper"
 	"gym-pro-2026-ptit/internal/infrastructure/auth"
 	"gym-pro-2026-ptit/internal/infrastructure/email"
 	"gym-pro-2026-ptit/internal/infrastructure/otp"
+	mealuc "gym-pro-2026-ptit/internal/usecase/meal"
 	"gym-pro-2026-ptit/pkg/errors"
 	"gym-pro-2026-ptit/pkg/validator"
-	"time"
 
 	"github.com/google/uuid"
 )
@@ -45,26 +47,29 @@ type (
 		RefreshToken string `json:"refresh_token" validate:"required"`
 	}
 	UpdateUserNutritionTargetInput struct {
-		DailyCalorieTarget *int `json:"daily_calorie_target,omitempty" validate:"omitempty,gte=500,lte=10000"`
-		ProteinTargetG     *int `json:"protein_target_g,omitempty" validate:"omitempty,gte=0,lte=500"`
-		CarbsTargetG       *int `json:"carbs_target_g,omitempty" validate:"omitempty,gte=0,lte=1000"`
-		FatTargetG         *int `json:"fat_target_g,omitempty" validate:"omitempty,gte=0,lte=300"`
+		DailyCalorieTarget *int    `json:"daily_calorie_target,omitempty" validate:"omitempty,gte=500,lte=10000"`
+		ProteinTargetG     *int    `json:"protein_target_g,omitempty" validate:"omitempty,gte=0,lte=500"`
+		CarbsTargetG       *int    `json:"carbs_target_g,omitempty" validate:"omitempty,gte=0,lte=1000"`
+		FatTargetG         *int    `json:"fat_target_g,omitempty" validate:"omitempty,gte=0,lte=300"`
+		EffectiveDate      *string `json:"effective_date,omitempty"`
 	}
 )
 
 // UserUseCases groups all user/auth use cases with a single dependency set.
 type UserUseCases struct {
-	userRepo     user.Repository
-	otpService   otp.Service
-	emailService email.Service
-	passwordMgr  *auth.PasswordManager
-	jwtMgr       *auth.JWTManager
-	validator    *validator.Validator
+	userRepo      user.Repository
+	mealDailyUC   *mealuc.MealDailyUseCases
+	otpService    otp.Service
+	emailService  email.Service
+	passwordMgr   *auth.PasswordManager
+	jwtMgr        *auth.JWTManager
+	validator     *validator.Validator
 }
 
 // NewUserUseCases creates the user use cases container.
 func NewUserUseCases(
 	userRepo user.Repository,
+	mealDailyUC *mealuc.MealDailyUseCases,
 	otpService otp.Service,
 	emailService email.Service,
 	passwordMgr *auth.PasswordManager,
@@ -73,6 +78,7 @@ func NewUserUseCases(
 ) *UserUseCases {
 	return &UserUseCases{
 		userRepo:     userRepo,
+		mealDailyUC:  mealDailyUC,
 		otpService:   otpService,
 		emailService: emailService,
 		passwordMgr:  passwordMgr,
@@ -266,6 +272,30 @@ func (uc *UserUseCases) GetUserNutritionTarget(ctx context.Context, userID uuid.
 	}, nil
 }
 
+const maxWeightHistoryQueryRange = 732 * 24 * time.Hour // 2 years
+
+// ListMyWeightHistory returns chart points: latest measurement per calendar bucket in the given IANA timezone.
+func (uc *UserUseCases) ListMyWeightHistory(ctx context.Context, userID uuid.UUID, from, to time.Time, tz string, granularity user.WeightHistoryGranularity) ([]user.WeightHistoryPoint, error) {
+	if to.Before(from) {
+		return nil, errors.BadRequest("to must be on or after from")
+	}
+	if to.Sub(from) > maxWeightHistoryQueryRange {
+		return nil, errors.BadRequest("date range too large (max 2 years)")
+	}
+	switch granularity {
+	case user.WeightHistoryGranularityDay, user.WeightHistoryGranularityWeek, user.WeightHistoryGranularityMonth:
+	default:
+		return nil, errors.BadRequest("granularity must be day, week, or month")
+	}
+	if tz == "" {
+		tz = "UTC"
+	}
+	if _, err := time.LoadLocation(tz); err != nil {
+		return nil, errors.BadRequest("invalid timezone")
+	}
+	return uc.userRepo.ListWeightHistoryByGranularity(ctx, userID, from, to, tz, granularity)
+}
+
 func (uc *UserUseCases) UpdateUserNutritionTarget(ctx context.Context, userID uuid.UUID, input UpdateUserNutritionTargetInput) (*user.UserNutritionTarget, error) {
 	if err := uc.validator.Validate(input); err != nil {
 		return nil, errors.Validation(err.Error())
@@ -282,6 +312,19 @@ func (uc *UserUseCases) UpdateUserNutritionTarget(ctx context.Context, userID uu
 	if err := uc.userRepo.Update(ctx, u); err != nil {
 		return nil, errors.InternalServer("Failed to update user", err)
 	}
+
+	effectiveDay := time.Now().UTC().Truncate(24 * time.Hour)
+	if input.EffectiveDate != nil && *input.EffectiveDate != "" {
+		d, err := time.Parse("2006-01-02", *input.EffectiveDate)
+		if err != nil {
+			return nil, errors.BadRequest("invalid effective_date, expected YYYY-MM-DD")
+		}
+		effectiveDay = d.UTC().Truncate(24 * time.Hour)
+	}
+	if err := uc.mealDailyUC.UpsertTargetsFromUserForDate(ctx, userID, effectiveDay); err != nil {
+		return nil, errors.InternalServer("Failed to sync meal daily targets", err)
+	}
+
 	return &user.UserNutritionTarget{
 		DailyCalorieTarget: u.DailyCalorieTarget,
 		ProteinTargetG:     u.ProteinTargetG,

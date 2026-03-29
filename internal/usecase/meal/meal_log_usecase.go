@@ -351,6 +351,41 @@ func (uc *MealLogUseCases) GetNutritionStats(ctx context.Context, userID uuid.UU
 	return stats, nil
 }
 
+const maxLoggedDatesRangeDays = 400
+
+// ListLoggedDates returns YYYY-MM-DD strings for each day in the range that has at least one meal log.
+func (uc *MealLogUseCases) ListLoggedDates(ctx context.Context, userID uuid.UUID, input meal.ListLoggedDatesQuery) ([]string, error) {
+	if err := uc.validator.Validate(input); err != nil {
+		return nil, errors.Validation(err.Error())
+	}
+
+	start, err := time.Parse("2006-01-02", input.StartDate)
+	if err != nil {
+		return nil, errors.BadRequest("invalid start_date format, expected YYYY-MM-DD")
+	}
+	end, err := time.Parse("2006-01-02", input.EndDate)
+	if err != nil {
+		return nil, errors.BadRequest("invalid end_date format, expected YYYY-MM-DD")
+	}
+	if start.After(end) {
+		return nil, errors.BadRequest("start date must be on or before end date")
+	}
+	if end.Sub(start) > maxLoggedDatesRangeDays*24*time.Hour {
+		return nil, errors.BadRequest("date range too large (max 400 days)")
+	}
+
+	dates, err := uc.mealLogRepo.ListDistinctLogDates(ctx, userID, start, end)
+	if err != nil {
+		return nil, errors.DatabaseError("failed to list logged dates", err)
+	}
+
+	out := make([]string, 0, len(dates))
+	for _, d := range dates {
+		out = append(out, d.UTC().Format("2006-01-02"))
+	}
+	return out, nil
+}
+
 func (uc *MealLogUseCases) roundNutritionStats(s *meal.NutritionStats) {
 	if s == nil {
 		return

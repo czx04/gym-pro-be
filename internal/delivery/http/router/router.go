@@ -75,6 +75,7 @@ func New(
 			{
 				users.GET("/me", authHandler.GetMe)
 				users.PUT("/me", authHandler.UpdateMe)
+				users.GET("/me/weight-history", userHandler.GetMyWeightHistory)
 				users.GET("/:id", placeholderHandler("Get user by ID"))
 				users.GET("/nutrition-target", userHandler.GetUserNutritionTarget)
 				users.PUT("/nutrition-target", userHandler.UpdateUserNutritionTarget)
@@ -158,6 +159,7 @@ func New(
 			{
 				mealLogs.POST("", mealLogHandler.CreateMealLog)
 				mealLogs.GET("/stats", mealLogHandler.GetNutritionStats)
+				mealLogs.GET("/logged-dates", mealLogHandler.ListLoggedDates)
 				mealLogs.GET("/date/:date", mealLogHandler.GetMealLogsByDate)
 				mealLogs.GET("/:id", mealLogHandler.GetMealLog)
 				mealLogs.PUT("/:id", mealLogHandler.UpdateMealLog)

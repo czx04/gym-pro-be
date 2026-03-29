@@ -44,4 +44,7 @@ type Repository interface {
 
 	// GetLatestWeightBefore gets the latest weight entry before a given timestamp
 	GetLatestWeightBefore(ctx context.Context, userID uuid.UUID, before time.Time) (*WeightHistory, error)
+
+	// ListWeightHistoryByGranularity returns one point per bucket (latest measured_at in that bucket).
+	ListWeightHistoryByGranularity(ctx context.Context, userID uuid.UUID, from, to time.Time, tz string, granularity WeightHistoryGranularity) ([]WeightHistoryPoint, error)
 }
