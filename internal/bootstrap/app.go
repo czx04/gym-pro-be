@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"gym-pro-2026-ptit/internal/delivery/ws"
 	"gym-pro-2026-ptit/internal/infrastructure/database"
 	"gym-pro-2026-ptit/internal/infrastructure/logger"
 	"gym-pro-2026-ptit/pkg/validator"
@@ -41,6 +42,9 @@ func NewApp() *fx.App {
 		// HTTP Layer (Handlers & Router)
 		HandlerProviders,
 		fx.Provide(ProvideAuthMiddleware),
+		fx.Provide(ws.NewHub),
+		fx.Provide(ProvideSocialBroadcaster),
+		fx.Provide(ws.NewHandler),
 		fx.Provide(ProvideRouter),
 
 		// Lifecycle hooks
@@ -49,6 +53,7 @@ func NewApp() *fx.App {
 			RegisterAutoMigrateHook,
 			RegisterInfrastructureHooks,
 			RegisterRouterHooks,
+			RegisterSocialWebSocketHook,
 			RegisterAppLifecycle,
 		),
 	)

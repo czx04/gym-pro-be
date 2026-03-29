@@ -16,26 +16,71 @@ import (
 	"unicode/utf8"
 
 	"gym-pro-2026-ptit/internal/config"
+	mealdomain "gym-pro-2026-ptit/internal/domain/meal"
 	socialdomain "gym-pro-2026-ptit/internal/domain/social"
 	"gym-pro-2026-ptit/internal/domain/user"
+	workoutdomain "gym-pro-2026-ptit/internal/domain/workout"
+	"gym-pro-2026-ptit/internal/port/socialnotify"
 	"gym-pro-2026-ptit/pkg/errors"
+	"gym-pro-2026-ptit/pkg/utils"
 	"gym-pro-2026-ptit/pkg/validator"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
+const maxCommentPreviewRepliesPerParent = 100
+
+func roundMealLogForShare(log *mealdomain.MealLog) {
+	if log == nil {
+		return
+	}
+	log.TotalCalories = utils.RoundToTwo(log.TotalCalories)
+	log.TotalProteinG = utils.RoundToTwo(log.TotalProteinG)
+	log.TotalCarbsG = utils.RoundToTwo(log.TotalCarbsG)
+	log.TotalFatG = utils.RoundToTwo(log.TotalFatG)
+	for i := range log.Items {
+		item := &log.Items[i]
+		item.Calories = utils.RoundToTwo(item.Calories)
+		item.ProteinG = utils.RoundToTwo(item.ProteinG)
+		item.CarbsG = utils.RoundToTwo(item.CarbsG)
+		item.FatG = utils.RoundToTwo(item.FatG)
+		if item.Food != nil {
+			item.Food.Calories = utils.RoundToTwo(item.Food.Calories)
+			item.Food.ProteinG = utils.RoundToTwo(item.Food.ProteinG)
+			item.Food.CarbsG = utils.RoundToTwo(item.Food.CarbsG)
+			item.Food.FatG = utils.RoundToTwo(item.Food.FatG)
+		}
+		if item.Recipe != nil {
+			item.Recipe.TotalCalories = utils.RoundToTwo(item.Recipe.TotalCalories)
+			item.Recipe.TotalProteinG = utils.RoundToTwo(item.Recipe.TotalProteinG)
+			item.Recipe.TotalCarbsG = utils.RoundToTwo(item.Recipe.TotalCarbsG)
+			item.Recipe.TotalFatG = utils.RoundToTwo(item.Recipe.TotalFatG)
+			item.Recipe.PerServingCalories = utils.RoundToTwo(item.Recipe.PerServingCalories)
+			item.Recipe.PerServingProteinG = utils.RoundToTwo(item.Recipe.PerServingProteinG)
+			item.Recipe.PerServingCarbsG = utils.RoundToTwo(item.Recipe.PerServingCarbsG)
+			item.Recipe.PerServingFatG = utils.RoundToTwo(item.Recipe.PerServingFatG)
+		}
+	}
+}
+
 type SocialUseCases struct {
-	postRepo       socialdomain.PostRepository
-	followRepo     socialdomain.FollowRepository
-	likeRepo       socialdomain.LikeRepository
-	commentRepo    socialdomain.CommentRepository
-	mediaAssetRepo socialdomain.MediaAssetRepository
-	preferenceRepo socialdomain.PreferenceRepository
-	reportRepo     socialdomain.ReportRepository
-	blockRepo      socialdomain.BlockRepository
-	userRepo       user.Repository
-	validator      *validator.Validator
-	cloudinary     config.CloudinaryConfig
+	postRepo             socialdomain.PostRepository
+	followRepo           socialdomain.FollowRepository
+	likeRepo             socialdomain.LikeRepository
+	commentRepo          socialdomain.CommentRepository
+	mediaAssetRepo       socialdomain.MediaAssetRepository
+	preferenceRepo       socialdomain.PreferenceRepository
+	reportRepo           socialdomain.ReportRepository
+	blockRepo            socialdomain.BlockRepository
+	notifRepo            socialdomain.InAppNotificationRepository
+	userRepo             user.Repository
+	mealLogRepo          mealdomain.MealLogRepository
+	workoutSessionRepo   workoutdomain.WorkoutSessionRepository
+	workoutPlanRepo      workoutdomain.WorkoutPlanRepository
+	validator            *validator.Validator
+	cloudinary           config.CloudinaryConfig
+	notify               socialnotify.Broadcaster
 }
 
 func NewSocialUseCases(
@@ -48,21 +93,31 @@ func NewSocialUseCases(
 	preferenceRepo socialdomain.PreferenceRepository,
 	reportRepo socialdomain.ReportRepository,
 	blockRepo socialdomain.BlockRepository,
+	notifRepo socialdomain.InAppNotificationRepository,
 	userRepo user.Repository,
+	mealLogRepo mealdomain.MealLogRepository,
+	workoutSessionRepo workoutdomain.WorkoutSessionRepository,
+	workoutPlanRepo workoutdomain.WorkoutPlanRepository,
 	validator *validator.Validator,
+	notify socialnotify.Broadcaster,
 ) *SocialUseCases {
 	return &SocialUseCases{
-		postRepo:       postRepo,
-		followRepo:     followRepo,
-		likeRepo:       likeRepo,
-		commentRepo:    commentRepo,
-		mediaAssetRepo: mediaAssetRepo,
-		preferenceRepo: preferenceRepo,
-		reportRepo:     reportRepo,
-		blockRepo:      blockRepo,
-		userRepo:       userRepo,
-		validator:      validator,
-		cloudinary:     cfg.Cloudinary,
+		postRepo:           postRepo,
+		followRepo:         followRepo,
+		likeRepo:           likeRepo,
+		commentRepo:        commentRepo,
+		mediaAssetRepo:     mediaAssetRepo,
+		preferenceRepo:     preferenceRepo,
+		reportRepo:         reportRepo,
+		blockRepo:          blockRepo,
+		notifRepo:          notifRepo,
+		userRepo:           userRepo,
+		mealLogRepo:        mealLogRepo,
+		workoutSessionRepo: workoutSessionRepo,
+		workoutPlanRepo:    workoutPlanRepo,
+		validator:          validator,
+		cloudinary:         cfg.Cloudinary,
+		notify:             notify,
 	}
 }
 
@@ -109,13 +164,15 @@ type CommentRepliesOutput struct {
 }
 
 type CreatePostInput struct {
-	Caption     *string                             `json:"caption,omitempty" validate:"omitempty,max=2000"`
-	Media       []socialdomain.CreatePostMediaInput `json:"media,omitempty" validate:"omitempty,dive"`
-	ContentType *string                             `json:"content_type,omitempty"`
-	ContentID   *uuid.UUID                          `json:"content_id,omitempty"`
-	Feeling     *string                             `json:"feeling,omitempty" validate:"omitempty,max=100"`
-	Location    *CreatePostLocationInput            `json:"location,omitempty" validate:"omitempty"`
-	Hashtags    []string                            `json:"hashtags,omitempty" validate:"omitempty,dive,max=50"`
+	Caption          *string                             `json:"caption,omitempty" validate:"omitempty,max=2000"`
+	Media            []socialdomain.CreatePostMediaInput `json:"media,omitempty" validate:"omitempty,dive"`
+	ContentType      *string                             `json:"content_type,omitempty"`
+	ContentTypeAlt   *string                             `json:"contentType,omitempty"`
+	ContentID        *string                             `json:"content_id,omitempty"`
+	ContentIDAlt     *string                             `json:"contentId,omitempty"`
+	Feeling          *string                             `json:"feeling,omitempty" validate:"omitempty,max=100"`
+	Location         *CreatePostLocationInput            `json:"location,omitempty" validate:"omitempty"`
+	Hashtags         []string                            `json:"hashtags,omitempty" validate:"omitempty,dive,max=50"`
 }
 
 type UpdatePostInput struct {
@@ -172,6 +229,34 @@ type FeedOutput struct {
 	Pagination FeedPagination `json:"pagination"`
 }
 
+type NotificationRowOutput struct {
+	ID        uuid.UUID `json:"id"`
+	Type      string    `json:"type"`
+	Title     string    `json:"title"`
+	Meta      string    `json:"meta"`
+	DayGroup  string    `json:"dayGroup"`
+	IsRead    bool      `json:"isRead"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+type notificationsListPagination struct {
+	NextCursor *string `json:"nextCursor"`
+	HasMore    bool    `json:"hasMore"`
+}
+
+type NotificationsListPayload struct {
+	Data       []NotificationRowOutput       `json:"data"`
+	Pagination notificationsListPagination `json:"pagination"`
+}
+
+type UnreadNotificationsCountPayload struct {
+	Unread int64 `json:"unread"`
+}
+
+type MarkNotificationsReadPayload struct {
+	Updated int64 `json:"updated"`
+}
+
 type UserSearchHit struct {
 	ID        uuid.UUID `json:"id"`
 	Name      string    `json:"name"`
@@ -197,27 +282,50 @@ type PostMediaOutput struct {
 	PublicID string `json:"public_id,omitempty"`
 }
 
+type MealSummaryOutput struct {
+	MealLogID     uuid.UUID `json:"meal_log_id"`
+	LogDate       string    `json:"log_date"`
+	MealTime      string    `json:"meal_time"`
+	TotalCalories float64   `json:"total_calories"`
+	TotalProteinG float64   `json:"total_protein_g"`
+	TotalCarbsG   float64   `json:"total_carbs_g"`
+	TotalFatG     float64   `json:"total_fat_g"`
+	ItemCount     int       `json:"item_count"`
+}
+
+type WorkoutSessionSummaryOutput struct {
+	SessionID           uuid.UUID  `json:"session_id"`
+	PlanTitle           string     `json:"plan_title"`
+	ScheduledDate       *string    `json:"scheduled_date,omitempty"`
+	Status              string     `json:"status"`
+	DurationMins        *int       `json:"duration_mins,omitempty"`
+	TotalCaloriesBurned *int       `json:"total_calories_burned,omitempty"`
+	CompletedAt         *time.Time `json:"completed_at,omitempty"`
+}
+
 type PostOutput struct {
-	ID                  uuid.UUID         `json:"id"`
-	Author              AuthorOutput      `json:"author"`
-	ContentType         string            `json:"content_type"`
-	ContentID           *uuid.UUID        `json:"content_id"`
-	StreakText          string            `json:"streak_text"`
-	TimeLabel           string            `json:"time_label"`
-	Caption             string            `json:"caption"`
-	Media               []PostMediaOutput `json:"media"`
-	Feeling             *string           `json:"feeling"`
-	Location            *PostLocation     `json:"location"`
-	Hashtags            []string          `json:"hashtags"`
-	LikeCount           int               `json:"like_count"`
-	CommentCount        int               `json:"comment_count"`
-	IsLikedByMe         bool              `json:"is_liked_by_me"`
-	IsInterestedByMe    bool              `json:"is_interested_by_me"`
-	IsNotInterestedByMe bool              `json:"is_not_interested_by_me"`
-	IsEdited            bool              `json:"is_edited"`
-	SharedExercises     []interface{}     `json:"shared_exercises,omitempty"`
-	CreatedAt           time.Time         `json:"created_at"`
-	UpdatedAt           time.Time         `json:"updated_at"`
+	ID                    uuid.UUID                    `json:"id"`
+	Author                AuthorOutput                 `json:"author"`
+	ContentType           string                       `json:"content_type"`
+	ContentID             *uuid.UUID                   `json:"content_id"`
+	StreakText            string                       `json:"streak_text"`
+	TimeLabel             string                       `json:"time_label"`
+	Caption               string                       `json:"caption"`
+	Media                 []PostMediaOutput            `json:"media"`
+	Feeling               *string                      `json:"feeling"`
+	Location              *PostLocation                `json:"location"`
+	Hashtags              []string                     `json:"hashtags"`
+	LikeCount             int                          `json:"like_count"`
+	CommentCount          int                          `json:"comment_count"`
+	IsLikedByMe           bool                         `json:"is_liked_by_me"`
+	IsInterestedByMe      bool                         `json:"is_interested_by_me"`
+	IsNotInterestedByMe   bool                         `json:"is_not_interested_by_me"`
+	IsEdited              bool                         `json:"is_edited"`
+	SharedExercises       []interface{}                `json:"shared_exercises,omitempty"`
+	MealSummary           *MealSummaryOutput           `json:"meal_summary,omitempty"`
+	WorkoutSessionSummary *WorkoutSessionSummaryOutput `json:"workout_session_summary,omitempty"`
+	CreatedAt             time.Time                    `json:"created_at"`
+	UpdatedAt             time.Time                    `json:"updated_at"`
 }
 
 type PostLocation struct {
@@ -303,7 +411,7 @@ func (uc *SocialUseCases) GetFeed(ctx context.Context, userID uuid.UUID, cursor 
 		if item.Post != nil {
 			item.Post.Media = mediaByPostID[item.Post.ID]
 		}
-		data = append(data, mapPost(item.Post, item.IsLiked, item.IsInterested, item.IsNotInterested))
+		data = append(data, uc.postOutputFrom(ctx, item.Post, item.IsLiked, item.IsInterested, item.IsNotInterested))
 	}
 
 	hasMore := int64(page*limit) < total
@@ -379,7 +487,7 @@ func (uc *SocialUseCases) Search(ctx context.Context, viewerID uuid.UUID, rawQue
 			if item.Post != nil {
 				item.Post.Media = mediaByPostID[item.Post.ID]
 			}
-			data = append(data, mapPost(item.Post, item.IsLiked, item.IsInterested, item.IsNotInterested))
+			data = append(data, uc.postOutputFrom(ctx, item.Post, item.IsLiked, item.IsInterested, item.IsNotInterested))
 		}
 		hasMore := int64(page*limit) < total
 		out := &SocialSearchOutput{Posts: data, Pagination: FeedPagination{HasMore: hasMore}}
@@ -423,14 +531,6 @@ func (uc *SocialUseCases) GetPostByID(ctx context.Context, viewerID uuid.UUID, p
 		return nil, err
 	}
 
-	blocked, err := uc.followRepo.HasBlockRelation(ctx, viewerID, post.UserID)
-	if err != nil {
-		return nil, err
-	}
-	if blocked {
-		return nil, errors.NotFound("post")
-	}
-
 	isLiked, err := uc.likeRepo.Exists(ctx, post.ID, viewerID)
 	if err != nil {
 		return nil, err
@@ -457,8 +557,62 @@ func (uc *SocialUseCases) GetPostByID(ctx context.Context, viewerID uuid.UUID, p
 	}
 	post.Media = mediaByPostID[post.ID]
 
-	out := mapPost(post, isLiked, isInterested, isNotInterested)
+	out := uc.postOutputFrom(ctx, post, isLiked, isInterested, isNotInterested)
 	return &out, nil
+}
+
+func (uc *SocialUseCases) loadPostByIDString(ctx context.Context, postID string) (*socialdomain.Post, error) {
+	id, err := uuid.Parse(postID)
+	if err != nil {
+		return nil, errors.BadRequest("invalid post id")
+	}
+	post, err := uc.postRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return post, nil
+}
+
+func (uc *SocialUseCases) GetPostAttachedMealLog(ctx context.Context, viewerID uuid.UUID, postID string) (*mealdomain.MealLog, error) {
+	post, err := uc.loadPostByIDString(ctx, postID)
+	if err != nil {
+		return nil, err
+	}
+	ct := strings.TrimSpace(strings.ToLower(post.ContentType))
+	if ct != "meal_log" || post.ContentID == nil {
+		return nil, errors.NotFound("attached meal")
+	}
+	log, err := uc.mealLogRepo.GetByID(ctx, *post.ContentID)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, errors.NotFound("meal log")
+		}
+		return nil, errors.DatabaseError("get meal log", err)
+	}
+	if log.UserID != post.UserID {
+		return nil, errors.NotFound("attached meal")
+	}
+	roundMealLogForShare(log)
+	return log, nil
+}
+
+func (uc *SocialUseCases) GetPostAttachedWorkoutSession(ctx context.Context, viewerID uuid.UUID, postID string) (*workoutdomain.WorkoutSession, error) {
+	post, err := uc.loadPostByIDString(ctx, postID)
+	if err != nil {
+		return nil, err
+	}
+	ct := strings.TrimSpace(strings.ToLower(post.ContentType))
+	if ct != "workout_session" || post.ContentID == nil {
+		return nil, errors.NotFound("attached workout")
+	}
+	s, err := uc.workoutSessionRepo.GetByID(ctx, *post.ContentID)
+	if err != nil {
+		return nil, err
+	}
+	if s.UserID != post.UserID {
+		return nil, errors.NotFound("attached workout")
+	}
+	return s, nil
 }
 
 func (uc *SocialUseCases) GetUserProfile(ctx context.Context, currentUserID uuid.UUID, profileUserID string) (*UserProfileOutput, error) {
@@ -531,8 +685,15 @@ func (uc *SocialUseCases) FollowUser(ctx context.Context, currentUserID uuid.UUI
 		return nil, err
 	}
 
+	wasFollowing, err := uc.followRepo.IsFollowing(ctx, currentUserID, targetID)
+	if err != nil {
+		return nil, err
+	}
 	if err := uc.followRepo.Follow(ctx, currentUserID, targetID); err != nil {
 		return nil, err
+	}
+	if !wasFollowing {
+		uc.tryCreateFollowNotification(ctx, currentUserID, targetID)
 	}
 
 	stats, err := uc.followRepo.GetStats(ctx, targetID)
@@ -802,7 +963,7 @@ func (uc *SocialUseCases) GetUserPosts(ctx context.Context, viewerID uuid.UUID, 
 				isNotInterested = true
 			}
 		}
-		data = append(data, mapPost(&post, isLiked, isInterested, isNotInterested))
+		data = append(data, uc.postOutputFrom(ctx, &post, isLiked, isInterested, isNotInterested))
 	}
 
 	hasMore := int64(page*limit) < total
@@ -1026,22 +1187,31 @@ func (uc *SocialUseCases) CreatePost(ctx context.Context, userID uuid.UUID, inpu
 		return nil, errors.Validation(err.Error())
 	}
 
-	contentType := normalizeContentType(input.ContentType)
+	contentType := normalizeContentType(pickNonEmptyStringPtr(input.ContentType, input.ContentTypeAlt))
 	if !isSupportedPostContentType(contentType) {
-		return nil, errors.Validation("content_type must be one of [general workout_plan meal_log]")
-	}
-
-	caption := normalizeCaption(input.Caption)
-	if caption == nil && len(input.Media) == 0 {
-		return nil, errors.Validation("caption is required when media is empty")
+		return nil, errors.Validation("content_type must be one of [general workout_plan meal_log workout_session]")
 	}
 
 	var contentID *uuid.UUID
 	if contentType != "general" {
-		if input.ContentID == nil {
+		idStr := pickNonEmptyString(input.ContentID, input.ContentIDAlt)
+		if idStr == "" {
 			return nil, errors.Validation("content_id is required when content_type is not general")
 		}
-		contentID = input.ContentID
+		parsed, err := uuid.Parse(idStr)
+		if err != nil {
+			return nil, errors.Validation("content_id must be a valid UUID")
+		}
+		contentID = &parsed
+		if err := uc.validatePostContentRef(ctx, userID, contentType, parsed); err != nil {
+			return nil, err
+		}
+	}
+
+	caption := normalizeCaption(input.Caption)
+	hasAttachment := contentType != "general"
+	if caption == nil && len(input.Media) == 0 && !hasAttachment {
+		return nil, errors.Validation("caption is required when media is empty")
 	}
 
 	feeling, err := normalizeOptionalText(input.Feeling, 100, "feeling")
@@ -1104,7 +1274,7 @@ func (uc *SocialUseCases) CreatePost(ctx context.Context, userID uuid.UUID, inpu
 	}
 	post.Media = mediaByPostID[post.ID]
 
-	out := mapPost(post, false, false, false)
+	out := uc.postOutputFrom(ctx, post, false, false, false)
 	return &out, nil
 }
 
@@ -1195,7 +1365,8 @@ func (uc *SocialUseCases) EditPost(ctx context.Context, userID uuid.UUID, postID
 		post.Media = replaceMedia
 	}
 
-	if post.Caption == nil && len(post.Media) == 0 {
+	hasAttachmentEdit := post.ContentType != "general"
+	if post.Caption == nil && len(post.Media) == 0 && !hasAttachmentEdit {
 		return nil, errors.Validation("caption is required when media is empty")
 	}
 
@@ -1220,7 +1391,7 @@ func (uc *SocialUseCases) EditPost(ctx context.Context, userID uuid.UUID, postID
 	}
 	updatedPost.Media = mediaOut[updatedPost.ID]
 
-	out := mapPost(updatedPost, false, false, false)
+	out := uc.postOutputFrom(ctx, updatedPost, false, false, false)
 	return &out, nil
 }
 
@@ -1263,6 +1434,22 @@ func parseCloudinaryURL(raw string) (cloudName, apiKey, apiSecret string, err er
 	return cloudName, apiKey, apiSecret, nil
 }
 
+func cloudinaryImageDeliveryURL(cloudinaryRawURL, publicID string) string {
+	publicID = strings.TrimSpace(publicID)
+	if publicID == "" {
+		return ""
+	}
+	cloudName, _, _, err := parseCloudinaryURL(strings.TrimSpace(cloudinaryRawURL))
+	if err != nil || cloudName == "" {
+		return ""
+	}
+	parts := strings.Split(publicID, "/")
+	for i, p := range parts {
+		parts[i] = url.PathEscape(p)
+	}
+	return fmt.Sprintf("https://res.cloudinary.com/%s/image/upload/%s", cloudName, strings.Join(parts, "/"))
+}
+
 func cloudinarySignature(params map[string]string, apiSecret string) string {
 	keys := make([]string, 0, len(params))
 	for k := range params {
@@ -1299,6 +1486,27 @@ func stringPointerOrNil(v string) *string {
 	return &trimmed
 }
 
+func pickNonEmptyString(a, b *string) string {
+	if a != nil {
+		s := strings.TrimSpace(*a)
+		if s != "" {
+			return s
+		}
+	}
+	if b != nil {
+		return strings.TrimSpace(*b)
+	}
+	return ""
+}
+
+func pickNonEmptyStringPtr(a, b *string) *string {
+	s := pickNonEmptyString(a, b)
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
 func normalizeContentType(contentType *string) string {
 	if contentType == nil {
 		return "general"
@@ -1314,11 +1522,86 @@ func normalizeContentType(contentType *string) string {
 
 func isSupportedPostContentType(contentType string) bool {
 	switch contentType {
-	case "general", "workout_plan", "meal_log":
+	case "general", "workout_plan", "meal_log", "workout_session":
 		return true
 	default:
 		return false
 	}
+}
+
+func (uc *SocialUseCases) validatePostContentRef(ctx context.Context, userID uuid.UUID, contentType string, contentID uuid.UUID) error {
+	switch contentType {
+	case "meal_log":
+		log, err := uc.mealLogRepo.GetByID(ctx, contentID)
+		if err != nil {
+			if err == pgx.ErrNoRows {
+				return errors.NotFound("meal log")
+			}
+			return errors.DatabaseError("get meal log", err)
+		}
+		if log.UserID != userID {
+			return errors.Forbidden("meal log does not belong to you")
+		}
+	case "workout_plan":
+		plan, err := uc.workoutPlanRepo.GetByID(ctx, contentID)
+		if err != nil {
+			return err
+		}
+		if plan.UserID != userID {
+			return errors.Forbidden("workout plan does not belong to you")
+		}
+	case "workout_session":
+		sess, err := uc.workoutSessionRepo.GetByID(ctx, contentID)
+		if err != nil {
+			return err
+		}
+		if sess.UserID != userID {
+			return errors.Forbidden("workout session does not belong to you")
+		}
+		if sess.Status != workoutdomain.SessionStatusCompleted {
+			return errors.Validation("only completed workout sessions can be shared")
+		}
+	}
+	return nil
+}
+
+func (uc *SocialUseCases) postOutputFrom(ctx context.Context, post *socialdomain.Post, isLiked, isInterested, isNotInterested bool) PostOutput {
+	out := mapPost(post, isLiked, isInterested, isNotInterested)
+	if post == nil || post.ContentID == nil {
+		return out
+	}
+	switch post.ContentType {
+	case "meal_log":
+		ml, err := uc.mealLogRepo.GetByID(ctx, *post.ContentID)
+		if err != nil || ml.UserID != post.UserID {
+			return out
+		}
+		out.MealSummary = &MealSummaryOutput{
+			MealLogID:     ml.ID,
+			LogDate:       ml.LogDate.Format("2006-01-02"),
+			MealTime:      ml.MealTime,
+			TotalCalories: ml.TotalCalories,
+			TotalProteinG: ml.TotalProteinG,
+			TotalCarbsG:   ml.TotalCarbsG,
+			TotalFatG:     ml.TotalFatG,
+			ItemCount:     len(ml.Items),
+		}
+	case "workout_session":
+		s, err := uc.workoutSessionRepo.GetByID(ctx, *post.ContentID)
+		if err != nil || s.UserID != post.UserID {
+			return out
+		}
+		out.WorkoutSessionSummary = &WorkoutSessionSummaryOutput{
+			SessionID:           s.ID,
+			PlanTitle:           s.Title,
+			ScheduledDate:       s.ScheduledDate,
+			Status:              s.Status,
+			DurationMins:        s.DurationMins,
+			TotalCaloriesBurned: s.TotalCaloriesBurned,
+			CompletedAt:         s.CompletedAt,
+		}
+	}
+	return out
 }
 
 func normalizeCaption(caption *string) *string {
@@ -1443,7 +1726,8 @@ func (uc *SocialUseCases) LikePost(ctx context.Context, userID uuid.UUID, postID
 		return nil, errors.BadRequest("invalid post id")
 	}
 
-	if _, err := uc.postRepo.GetByID(ctx, id); err != nil {
+	post, err := uc.postRepo.GetByID(ctx, id)
+	if err != nil {
 		return nil, err
 	}
 
@@ -1458,9 +1742,12 @@ func (uc *SocialUseCases) LikePost(ctx context.Context, userID uuid.UUID, postID
 		if err := uc.postRepo.IncrementLikesCount(ctx, id); err != nil {
 			return nil, err
 		}
+		if post.UserID != userID {
+			uc.tryCreateLikeNotification(ctx, userID, post)
+		}
 	}
 
-	post, err := uc.postRepo.GetByID(ctx, id)
+	post, err = uc.postRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -1525,7 +1812,8 @@ func (uc *SocialUseCases) CreateComment(ctx context.Context, userID uuid.UUID, p
 		return nil, errors.BadRequest("invalid post id")
 	}
 
-	if _, err := uc.postRepo.GetByID(ctx, postUUID); err != nil {
+	post, err := uc.postRepo.GetByID(ctx, postUUID)
+	if err != nil {
 		return nil, err
 	}
 
@@ -1597,6 +1885,10 @@ func (uc *SocialUseCases) CreateComment(ctx context.Context, userID uuid.UUID, p
 		}
 	}
 
+	if post.UserID != userID {
+		uc.tryCreateCommentNotification(ctx, userID, post)
+	}
+
 	author := CommentAuthorOutput{ID: userID}
 	if u, err := uc.userRepo.GetByID(ctx, userID); err == nil {
 		author.Name = u.Name
@@ -1611,7 +1903,7 @@ func (uc *SocialUseCases) CreateComment(ctx context.Context, userID uuid.UUID, p
 	}
 	path := buildCommentPath(parentCommentID, comment.ID)
 
-	return &CommentOutput{
+	out := &CommentOutput{
 		ID:               comment.ID,
 		PostID:           comment.PostID,
 		ParentID:         comment.ParentCommentID,
@@ -1621,10 +1913,38 @@ func (uc *SocialUseCases) CreateComment(ctx context.Context, userID uuid.UUID, p
 		PreviewReplies:   make([]CommentOutput, 0),
 		Author:           author,
 		Content:          comment.Content,
-		Media:            mapCommentMediaOutput(loadedMedia),
+		Media:            mapCommentMediaOutput(uc.cloudinary.URL, loadedMedia),
 		IsDeleted:        comment.DeletedAt != nil,
 		CreatedAt:        comment.CreatedAt,
-	}, nil
+	}
+
+	uc.notify.PublishCommentCreated(socialnotify.CommentCreatedPayload{
+		PostID:  postUUID.String(),
+		Comment: commentOutputToRealtime(*out),
+	})
+
+	return out, nil
+}
+
+func (uc *SocialUseCases) commentDepthToRoot(ctx context.Context, postID uuid.UUID, commentID uuid.UUID) (int, error) {
+	d := 0
+	cur := commentID
+	const maxHops = 512
+	for d < maxHops {
+		c, err := uc.commentRepo.GetByID(ctx, cur)
+		if err != nil {
+			return 0, err
+		}
+		if c.PostID != postID {
+			return 0, errors.BadRequest("comment does not belong to post")
+		}
+		if c.ParentCommentID == nil {
+			return d, nil
+		}
+		d++
+		cur = *c.ParentCommentID
+	}
+	return 0, errors.InternalServer("comment thread too deep", nil)
 }
 
 func (uc *SocialUseCases) GetPostComments(ctx context.Context, postID string, cursor string, limit int) (*CommentListOutput, error) {
@@ -1657,10 +1977,25 @@ func (uc *SocialUseCases) GetPostComments(ctx context.Context, postID string, cu
 	for _, comment := range comments {
 		parentIDs = append(parentIDs, comment.ID)
 	}
-	latestRepliesByParent, err := uc.commentRepo.GetLatestRepliesByParentIDs(ctx, parentIDs, 2)
+	latestRepliesByParent, err := uc.commentRepo.GetLatestRepliesByParentIDs(ctx, parentIDs, maxCommentPreviewRepliesPerParent)
 	if err != nil {
 		return nil, err
 	}
+
+	firstLevelReplyIDs := make([]uuid.UUID, 0)
+	for _, replies := range latestRepliesByParent {
+		for _, reply := range replies {
+			firstLevelReplyIDs = append(firstLevelReplyIDs, reply.ID)
+		}
+	}
+	nestedRepliesByParent := make(map[uuid.UUID][]socialdomain.Comment)
+	if len(firstLevelReplyIDs) > 0 {
+		nestedRepliesByParent, err = uc.commentRepo.GetLatestRepliesByParentIDs(ctx, firstLevelReplyIDs, maxCommentPreviewRepliesPerParent)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	commentIDs := make([]uuid.UUID, 0, len(comments))
 	for _, comment := range comments {
 		commentIDs = append(commentIDs, comment.ID)
@@ -1668,6 +2003,11 @@ func (uc *SocialUseCases) GetPostComments(ctx context.Context, postID string, cu
 	for _, replies := range latestRepliesByParent {
 		for _, reply := range replies {
 			commentIDs = append(commentIDs, reply.ID)
+		}
+	}
+	for _, nestedList := range nestedRepliesByParent {
+		for _, nr := range nestedList {
+			commentIDs = append(commentIDs, nr.ID)
 		}
 	}
 	mediaByCommentID, err := uc.commentRepo.GetMediaByCommentIDs(ctx, commentIDs)
@@ -1683,12 +2023,21 @@ func (uc *SocialUseCases) GetPostComments(ctx context.Context, postID string, cu
 			latestReplies = make([]CommentOutput, 0, len(replies))
 			for _, reply := range replies {
 				reply.Media = mediaByCommentID[reply.ID]
+				nestedOut := make([]CommentOutput, 0)
+				if nestedList, ok2 := nestedRepliesByParent[reply.ID]; ok2 {
+					nestedOut = make([]CommentOutput, 0, len(nestedList))
+					for _, nr := range nestedList {
+						nr.Media = mediaByCommentID[nr.ID]
+						nestedPath := buildCommentPath(&reply.ID, nr.ID)
+						nestedOut = append(nestedOut, mapCommentResponse(uc.cloudinary.URL, nr, 2, nestedPath, nil))
+					}
+				}
 				replyPath := buildCommentPath(&comment.ID, reply.ID)
-				latestReplies = append(latestReplies, mapCommentResponse(reply, 1, replyPath, make([]CommentOutput, 0)))
+				latestReplies = append(latestReplies, mapCommentResponse(uc.cloudinary.URL, reply, 1, replyPath, nestedOut))
 			}
 		}
 
-		data = append(data, mapCommentResponse(comment, 0, buildCommentPath(nil, comment.ID), latestReplies))
+		data = append(data, mapCommentResponse(uc.cloudinary.URL, comment, 0, buildCommentPath(nil, comment.ID), latestReplies))
 	}
 
 	hasMore := int64(page*limit) < total
@@ -1722,13 +2071,18 @@ func (uc *SocialUseCases) GetCommentReplies(ctx context.Context, postID string, 
 	if limit <= 0 {
 		limit = 20
 	}
-	if limit > 50 {
-		limit = 50
+	if limit > 2000 {
+		limit = 2000
 	}
 
 	page, err := decodePageCursor(cursor)
 	if err != nil {
 		return nil, errors.BadRequest("invalid cursor")
+	}
+
+	parentDepth, err := uc.commentDepthToRoot(ctx, postUUID, parentUUID)
+	if err != nil {
+		return nil, err
 	}
 
 	comments, total, err := uc.commentRepo.GetByPostID(ctx, postUUID, socialdomain.GetCommentsFilter{
@@ -1739,9 +2093,27 @@ func (uc *SocialUseCases) GetCommentReplies(ctx context.Context, postID string, 
 	if err != nil {
 		return nil, err
 	}
+
+	replyRowIDs := make([]uuid.UUID, 0, len(comments))
+	for _, comment := range comments {
+		replyRowIDs = append(replyRowIDs, comment.ID)
+	}
+	nestedRepliesByParent := make(map[uuid.UUID][]socialdomain.Comment)
+	if len(replyRowIDs) > 0 {
+		nestedRepliesByParent, err = uc.commentRepo.GetLatestRepliesByParentIDs(ctx, replyRowIDs, maxCommentPreviewRepliesPerParent)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	commentIDs := make([]uuid.UUID, 0, len(comments))
 	for _, comment := range comments {
 		commentIDs = append(commentIDs, comment.ID)
+	}
+	for _, nestedList := range nestedRepliesByParent {
+		for _, nr := range nestedList {
+			commentIDs = append(commentIDs, nr.ID)
+		}
 	}
 	mediaByCommentID, err := uc.commentRepo.GetMediaByCommentIDs(ctx, commentIDs)
 	if err != nil {
@@ -1751,7 +2123,16 @@ func (uc *SocialUseCases) GetCommentReplies(ctx context.Context, postID string, 
 	data := make([]CommentOutput, 0, len(comments))
 	for _, comment := range comments {
 		comment.Media = mediaByCommentID[comment.ID]
-		data = append(data, mapCommentResponse(comment, 1, buildCommentPath(&parentUUID, comment.ID), make([]CommentOutput, 0)))
+		nestedOut := make([]CommentOutput, 0)
+		if nestedList, ok := nestedRepliesByParent[comment.ID]; ok {
+			nestedOut = make([]CommentOutput, 0, len(nestedList))
+			for _, nr := range nestedList {
+				nr.Media = mediaByCommentID[nr.ID]
+				nestedPath := buildCommentPath(&comment.ID, nr.ID)
+				nestedOut = append(nestedOut, mapCommentResponse(uc.cloudinary.URL, nr, parentDepth+2, nestedPath, nil))
+			}
+		}
+		data = append(data, mapCommentResponse(uc.cloudinary.URL, comment, parentDepth+1, buildCommentPath(&parentUUID, comment.ID), nestedOut))
 	}
 
 	hasMore := int64(page*limit) < total
@@ -1788,6 +2169,12 @@ func (uc *SocialUseCases) DeleteComment(ctx context.Context, userID uuid.UUID, p
 		return errors.Forbidden("you can only delete your own comment")
 	}
 
+	var parentStr *string
+	if comment.ParentCommentID != nil {
+		s := comment.ParentCommentID.String()
+		parentStr = &s
+	}
+
 	if err := uc.commentRepo.Delete(ctx, commentUUID); err != nil {
 		return err
 	}
@@ -1799,7 +2186,48 @@ func (uc *SocialUseCases) DeleteComment(ctx context.Context, userID uuid.UUID, p
 			return err
 		}
 	}
+
+	uc.notify.PublishCommentDeleted(socialnotify.CommentDeletedPayload{
+		PostID:          postUUID.String(),
+		CommentID:       commentUUID.String(),
+		ParentID:        parentStr,
+		DeletedByUserID: userID.String(),
+	})
 	return nil
+}
+
+func commentOutputToRealtime(c CommentOutput) socialnotify.RealtimeComment {
+	var parent *string
+	if c.ParentID != nil {
+		s := c.ParentID.String()
+		parent = &s
+	}
+	previews := make([]socialnotify.RealtimeComment, 0, len(c.PreviewReplies))
+	for _, p := range c.PreviewReplies {
+		previews = append(previews, commentOutputToRealtime(p))
+	}
+	media := make([]socialnotify.RealtimeCommentMedia, 0, len(c.Media))
+	for _, m := range c.Media {
+		media = append(media, socialnotify.RealtimeCommentMedia{Type: m.Type, URL: m.URL})
+	}
+	return socialnotify.RealtimeComment{
+		ID:               c.ID.String(),
+		PostID:           c.PostID.String(),
+		ParentID:         parent,
+		Depth:            c.Depth,
+		Path:             c.Path,
+		DirectReplyCount: c.DirectReplyCount,
+		PreviewReplies:   previews,
+		Author: socialnotify.RealtimeCommentAuthor{
+			ID:        c.Author.ID.String(),
+			Name:      c.Author.Name,
+			AvatarURL: c.Author.AvatarURL,
+		},
+		Content:   c.Content,
+		Media:     media,
+		IsDeleted: c.IsDeleted,
+		CreatedAt: c.CreatedAt.UTC().Format(time.RFC3339Nano),
+	}
 }
 
 func mapCommentAuthor(comment socialdomain.Comment) CommentAuthorOutput {
@@ -1814,7 +2242,7 @@ func mapCommentAuthor(comment socialdomain.Comment) CommentAuthorOutput {
 	return author
 }
 
-func mapCommentResponse(comment socialdomain.Comment, depth int, path string, previewReplies []CommentOutput) CommentOutput {
+func mapCommentResponse(cloudinaryRawURL string, comment socialdomain.Comment, depth int, path string, previewReplies []CommentOutput) CommentOutput {
 	if previewReplies == nil {
 		previewReplies = make([]CommentOutput, 0)
 	}
@@ -1829,24 +2257,31 @@ func mapCommentResponse(comment socialdomain.Comment, depth int, path string, pr
 		PreviewReplies:   previewReplies,
 		Author:           mapCommentAuthor(comment),
 		Content:          comment.Content,
-		Media:            mapCommentMediaOutput(comment.Media),
+		Media:            mapCommentMediaOutput(cloudinaryRawURL, comment.Media),
 		IsDeleted:        comment.DeletedAt != nil,
 		CreatedAt:        comment.CreatedAt,
 	}
 }
 
-func mapCommentMediaOutput(media []socialdomain.CommentMedia) []PostMediaOutput {
+func mapCommentMediaOutput(cloudinaryRawURL string, media []socialdomain.CommentMedia) []PostMediaOutput {
 	if len(media) == 0 {
 		return make([]PostMediaOutput, 0)
 	}
 	out := make([]PostMediaOutput, 0, len(media))
 	for _, item := range media {
-		if item.SecureURL == nil || strings.TrimSpace(*item.SecureURL) == "" {
+		urlStr := ""
+		if item.SecureURL != nil {
+			urlStr = strings.TrimSpace(*item.SecureURL)
+		}
+		if urlStr == "" && item.ResourceType == "image" {
+			urlStr = cloudinaryImageDeliveryURL(cloudinaryRawURL, item.PublicID)
+		}
+		if urlStr == "" {
 			continue
 		}
 		out = append(out, PostMediaOutput{
 			Type: item.ResourceType,
-			URL:  *item.SecureURL,
+			URL:  urlStr,
 		})
 	}
 	return out
@@ -1857,4 +2292,199 @@ func buildCommentPath(parentID *uuid.UUID, commentID uuid.UUID) string {
 		return commentID.String()
 	}
 	return parentID.String() + "/" + commentID.String()
+}
+
+func notificationCategoryFromContentType(ct string) string {
+	switch ct {
+	case "workout_plan", "workout_session":
+		return "workouts"
+	case "meal_log":
+		return "nutrition"
+	default:
+		return "social"
+	}
+}
+
+func dayGroupUTC(t time.Time) string {
+	now := time.Now().UTC()
+	u := t.UTC()
+	y1, m1, d1 := now.Date()
+	y2, m2, d2 := u.Date()
+	if y1 == y2 && m1 == m2 && d1 == d2 {
+		return "today"
+	}
+	prev := now.AddDate(0, 0, -1)
+	y3, m3, d3 := prev.Date()
+	if y2 == y3 && m2 == m3 && d2 == d3 {
+		return "yesterday"
+	}
+	return "earlier"
+}
+
+func (uc *SocialUseCases) pushNotificationRealtime(ctx context.Context, recipient uuid.UUID, n *socialdomain.InAppNotification) {
+	if uc.notify == nil || n == nil {
+		return
+	}
+	uc.notify.PublishNotificationCreated(recipient, socialnotify.NotificationPayload{
+		ID:        n.ID.String(),
+		Type:      n.Type,
+		Title:     n.Title,
+		Meta:      n.Meta,
+		DayGroup:  dayGroupUTC(n.CreatedAt),
+		IsRead:    n.IsRead,
+		CreatedAt: n.CreatedAt.UTC().Format(time.RFC3339),
+	})
+	unread, err := uc.notifRepo.CountUnread(ctx, recipient)
+	if err != nil {
+		return
+	}
+	uc.notify.PublishUnread(recipient, unread)
+}
+
+func (uc *SocialUseCases) tryCreateFollowNotification(ctx context.Context, followerID, followingID uuid.UUID) {
+	follower, err := uc.userRepo.GetByID(ctx, followerID)
+	if err != nil || follower == nil {
+		return
+	}
+	name := strings.TrimSpace(follower.Name)
+	if name == "" {
+		name = "Someone"
+	}
+	n := &socialdomain.InAppNotification{
+		ID:        uuid.New(),
+		UserID:    followingID,
+		Type:      "social",
+		Title:     "New follower",
+		Meta:      name + " started following you",
+		IsRead:    false,
+		CreatedAt: time.Now(),
+	}
+	if err := uc.notifRepo.Create(ctx, n); err != nil {
+		return
+	}
+	uc.pushNotificationRealtime(ctx, followingID, n)
+}
+
+func (uc *SocialUseCases) tryCreateLikeNotification(ctx context.Context, likerID uuid.UUID, post *socialdomain.Post) {
+	liker, err := uc.userRepo.GetByID(ctx, likerID)
+	if err != nil {
+		return
+	}
+	pid := post.ID
+	n := &socialdomain.InAppNotification{
+		ID:        uuid.New(),
+		UserID:    post.UserID,
+		Type:      notificationCategoryFromContentType(post.ContentType),
+		Title:     "New like",
+		Meta:      liker.Name + " liked your post",
+		PostID:    &pid,
+		IsRead:    false,
+		CreatedAt: time.Now(),
+	}
+	if err := uc.notifRepo.Create(ctx, n); err != nil {
+		return
+	}
+	uc.pushNotificationRealtime(ctx, post.UserID, n)
+}
+
+func (uc *SocialUseCases) tryCreateCommentNotification(ctx context.Context, commenterID uuid.UUID, post *socialdomain.Post) {
+	commenter, err := uc.userRepo.GetByID(ctx, commenterID)
+	if err != nil {
+		return
+	}
+	pid := post.ID
+	n := &socialdomain.InAppNotification{
+		ID:        uuid.New(),
+		UserID:    post.UserID,
+		Type:      notificationCategoryFromContentType(post.ContentType),
+		Title:     "New comment",
+		Meta:      commenter.Name + " commented on your post",
+		PostID:    &pid,
+		IsRead:    false,
+		CreatedAt: time.Now(),
+	}
+	if err := uc.notifRepo.Create(ctx, n); err != nil {
+		return
+	}
+	uc.pushNotificationRealtime(ctx, post.UserID, n)
+}
+
+func (uc *SocialUseCases) ListNotifications(ctx context.Context, userID uuid.UUID, filter string, cursor string, limit int) (*NotificationsListPayload, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	page, err := decodePageCursor(cursor)
+	if err != nil {
+		return nil, errors.BadRequest("invalid cursor")
+	}
+	f := strings.TrimSpace(strings.ToLower(filter))
+	if f != "all" && f != "workouts" && f != "social" && f != "nutrition" {
+		f = "all"
+	}
+	rows, total, err := uc.notifRepo.ListForUser(ctx, userID, f, page, limit)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]NotificationRowOutput, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, NotificationRowOutput{
+			ID:        r.ID,
+			Type:      r.Type,
+			Title:     r.Title,
+			Meta:      r.Meta,
+			DayGroup:  dayGroupUTC(r.CreatedAt),
+			IsRead:    r.IsRead,
+			CreatedAt: r.CreatedAt,
+		})
+	}
+	hasMore := int64(page*limit) < total
+	var next *string
+	if hasMore {
+		v := encodePageCursor(page + 1)
+		next = &v
+	}
+	return &NotificationsListPayload{
+		Data: out,
+		Pagination: notificationsListPagination{
+			NextCursor: next,
+			HasMore:    hasMore,
+		},
+	}, nil
+}
+
+func (uc *SocialUseCases) GetNotificationsUnreadCount(ctx context.Context, userID uuid.UUID) (*UnreadNotificationsCountPayload, error) {
+	n, err := uc.notifRepo.CountUnread(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return &UnreadNotificationsCountPayload{Unread: n}, nil
+}
+
+func (uc *SocialUseCases) MarkNotificationsRead(ctx context.Context, userID uuid.UUID, rawIDs []string) (*MarkNotificationsReadPayload, error) {
+	ids := make([]uuid.UUID, 0, len(rawIDs))
+	for _, s := range rawIDs {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		id, err := uuid.Parse(s)
+		if err != nil {
+			return nil, errors.BadRequest("invalid notification id")
+		}
+		ids = append(ids, id)
+	}
+	n, err := uc.notifRepo.MarkRead(ctx, userID, ids)
+	if err != nil {
+		return nil, err
+	}
+	if uc.notify != nil {
+		unread, err := uc.notifRepo.CountUnread(ctx, userID)
+		if err == nil {
+			uc.notify.PublishUnread(userID, unread)
+		}
+	}
+	return &MarkNotificationsReadPayload{Updated: n}, nil
 }

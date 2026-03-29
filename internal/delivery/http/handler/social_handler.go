@@ -129,6 +129,34 @@ func (h *SocialHandler) GetPostByID(c *gin.Context) {
 	response.Success(c, result)
 }
 
+func (h *SocialHandler) GetPostAttachedMealLog(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	result, err := h.socialUC.GetPostAttachedMealLog(c.Request.Context(), userID, c.Param("postId"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
+func (h *SocialHandler) GetPostAttachedWorkoutSession(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	result, err := h.socialUC.GetPostAttachedWorkoutSession(c.Request.Context(), userID, c.Param("postId"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
 func (h *SocialHandler) GetUserProfile(c *gin.Context) {
 	currentUserID, err := middleware.GetUserID(c)
 	if err != nil {
@@ -581,4 +609,67 @@ func (h *SocialHandler) GetCommentReplies(c *gin.Context) {
 	}
 
 	response.Success(c, result)
+}
+
+func (h *SocialHandler) SocialNotifications(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	typ := strings.ToLower(strings.TrimSpace(c.DefaultQuery("type", "list")))
+	switch typ {
+	case "unread_count":
+		out, err := h.socialUC.GetNotificationsUnreadCount(c.Request.Context(), userID)
+		if err != nil {
+			response.Error(c, err)
+			return
+		}
+		response.Success(c, out)
+		return
+	case "list":
+		filter := c.DefaultQuery("filter", "all")
+		cursor := c.Query("cursor")
+		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+		out, err := h.socialUC.ListNotifications(c.Request.Context(), userID, filter, cursor, limit)
+		if err != nil {
+			response.Error(c, err)
+			return
+		}
+		response.Success(c, out)
+		return
+	default:
+		response.Error(c, errors.BadRequest("invalid notifications type"))
+	}
+}
+
+type socialNotificationsPostBody struct {
+	Type string   `json:"type"`
+	IDs  []string `json:"ids"`
+}
+
+func (h *SocialHandler) SocialNotificationsWrite(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	var req socialNotificationsPostBody
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, errors.BadRequest("invalid request body"))
+		return
+	}
+	if strings.TrimSpace(strings.ToLower(req.Type)) != "mark_read" {
+		response.Error(c, errors.BadRequest("invalid type"))
+		return
+	}
+
+	out, err := h.socialUC.MarkNotificationsRead(c.Request.Context(), userID, req.IDs)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, out)
 }

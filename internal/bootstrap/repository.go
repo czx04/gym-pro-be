@@ -79,6 +79,10 @@ func ProvideBlockRepository(db *database.DB) social.BlockRepository {
 	return postgres.NewBlockRepository(db)
 }
 
+func ProvideInAppNotificationRepository(db *database.DB) social.InAppNotificationRepository {
+	return postgres.NewInAppNotificationRepository(db)
+}
+
 // RepositoryProviders returns all repository providers
 var RepositoryProviders = fx.Options(
 	fx.Provide(
@@ -98,5 +102,6 @@ var RepositoryProviders = fx.Options(
 		ProvidePreferenceRepository,
 		ProvideReportRepository,
 		ProvideBlockRepository,
+		ProvideInAppNotificationRepository,
 	),
 )

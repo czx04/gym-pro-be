@@ -154,3 +154,10 @@ type BlockRepository interface {
 	Unblock(ctx context.Context, blockerID, blockedID uuid.UUID) error
 	IsBlocked(ctx context.Context, blockerID, blockedID uuid.UUID) (bool, error)
 }
+
+type InAppNotificationRepository interface {
+	Create(ctx context.Context, n *InAppNotification) error
+	ListForUser(ctx context.Context, userID uuid.UUID, filter string, page, limit int) ([]InAppNotification, int64, error)
+	CountUnread(ctx context.Context, userID uuid.UUID) (int64, error)
+	MarkRead(ctx context.Context, userID uuid.UUID, ids []uuid.UUID) (int64, error)
+}
