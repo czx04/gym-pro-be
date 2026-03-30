@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/pgvector/pgvector-go"
 )
 
 type FoodUseCases struct {
@@ -59,6 +60,27 @@ func (uc *FoodUseCases) CreateFood(ctx context.Context, userID uuid.UUID, input 
 	isSystem := u.IsAdmin()
 	now := time.Now()
 
+	// Prepare text for vector embedding
+	desc := ""
+	if input.Description != nil {
+		desc = *input.Description
+	}
+	cat := ""
+	if input.Category != nil {
+		cat = *input.Category
+	}
+
+	textToEmbed := fmt.Sprintf("%s. %s. Category: %s", input.Name, desc, cat)
+	
+	var pgEmbedding *pgvector.Vector
+	embedding, err := uc.aiService.GetEmbedding(ctx, textToEmbed)
+	if err != nil {
+		fmt.Printf("Warning: failed to generate embedding for new food %s: %v\n", input.Name, err)
+	} else if embedding != nil {
+		vec := pgvector.NewVector(embedding)
+		pgEmbedding = &vec
+	}
+
 	food := &meal.Food{
 		ID:              uuid.New(),
 		Name:            input.Name,
@@ -76,6 +98,7 @@ func (uc *FoodUseCases) CreateFood(ctx context.Context, userID uuid.UUID, input 
 		IsSystem:        isSystem,
 		CreatedByUserID: &userID,
 		Category:        input.Category,
+		Embedding:       pgEmbedding,
 		CreatedAt:       now,
 		UpdatedAt:       now,
 	}
@@ -186,7 +209,34 @@ func (uc *FoodUseCases) UpdateFood(ctx context.Context, id uuid.UUID, userID uui
 
 	// Return updated food
 	updatedFood, err := uc.foodRepo.GetByID(ctx, id)
-	return updatedFood, err
+	if err != nil {
+		return updatedFood, err
+	}
+
+	// Update vector embedding synchronously
+	desc := ""
+	if updatedFood.Description != nil {
+		desc = *updatedFood.Description
+	}
+	cat := ""
+	if updatedFood.Category != nil {
+		cat = *updatedFood.Category
+	}
+
+	textToEmbed := fmt.Sprintf("%s. %s. Category: %s", updatedFood.Name, desc, cat)
+	embedding, embErr := uc.aiService.GetEmbedding(ctx, textToEmbed)
+	if embErr == nil && embedding != nil {
+		if vecErr := uc.foodRepo.UpdateVector(ctx, id, embedding); vecErr != nil {
+			fmt.Printf("Warning: failed to update vector in DB for food ID %s: %v\n", id, vecErr)
+		} else {
+			vec := pgvector.NewVector(embedding)
+			updatedFood.Embedding = &vec
+		}
+	} else {
+		fmt.Printf("Warning: failed to generate embedding for updating food %s: %v\n", id, embErr)
+	}
+
+	return updatedFood, nil
 }
 
 func (uc *FoodUseCases) DeleteFood(ctx context.Context, id uuid.UUID, userID uuid.UUID) error {

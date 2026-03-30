@@ -27,13 +27,13 @@ func (r *foodRepository) Create(ctx context.Context, food *meal.Food) error {
 		INSERT INTO foods (
 			id, name, description, brand, image_url, barcode, serving_size, unit, calories, 
 			protein_g, carbs_g, fat_g, fiber_g, is_system, created_by_user_id, 
-			category, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+			category, embedding, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 	`
 	_, err := r.db.Exec(ctx, query,
 		food.ID, food.Name, food.Description, food.Brand, food.ImageUrl, food.Barcode, food.ServingSize, food.Unit, food.Calories,
 		food.ProteinG, food.CarbsG, food.FatG, food.FiberG, food.IsSystem, food.CreatedByUserID,
-		food.Category, food.CreatedAt, food.UpdatedAt,
+		food.Category, food.Embedding, food.CreatedAt, food.UpdatedAt,
 	)
 
 	fmt.Println(err)
