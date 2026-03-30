@@ -3,13 +3,15 @@ package socialnotify
 import "github.com/google/uuid"
 
 type NotificationPayload struct {
-	ID        string `json:"id"`
-	Type      string `json:"type"`
-	Title     string `json:"title"`
-	Meta      string `json:"meta"`
-	DayGroup  string `json:"dayGroup"`
-	IsRead    bool   `json:"isRead"`
-	CreatedAt string `json:"createdAt"`
+	ID        string  `json:"id"`
+	Type      string  `json:"type"`
+	Title     string  `json:"title"`
+	Meta      string  `json:"meta"`
+	DayGroup  string  `json:"dayGroup"`
+	IsRead    bool    `json:"isRead"`
+	CreatedAt string  `json:"createdAt"`
+	PostID    *string `json:"postId,omitempty"`
+	Kind      string  `json:"kind,omitempty"`
 }
 
 type RealtimeCommentAuthor struct {
@@ -35,7 +37,9 @@ type RealtimeComment struct {
 	Content          string                 `json:"content"`
 	Media            []RealtimeCommentMedia `json:"media"`
 	IsDeleted        bool                   `json:"isDeleted"`
+	IsEdited         bool                   `json:"isEdited"`
 	CreatedAt        string                 `json:"createdAt"`
+	UpdatedAt        string                 `json:"updatedAt"`
 }
 
 type CommentCreatedPayload struct {
@@ -50,9 +54,15 @@ type CommentDeletedPayload struct {
 	DeletedByUserID string  `json:"deletedByUserId"`
 }
 
+type CommentUpdatedPayload struct {
+	PostID  string          `json:"postId"`
+	Comment RealtimeComment `json:"comment"`
+}
+
 type Broadcaster interface {
 	PublishNotificationCreated(userID uuid.UUID, n NotificationPayload)
 	PublishUnread(userID uuid.UUID, unread int64)
 	PublishCommentCreated(p CommentCreatedPayload)
+	PublishCommentUpdated(p CommentUpdatedPayload)
 	PublishCommentDeleted(p CommentDeletedPayload)
 }

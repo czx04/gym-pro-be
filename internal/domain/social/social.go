@@ -189,12 +189,13 @@ type UserBlock struct {
 }
 
 type InAppNotification struct {
-	ID        uuid.UUID  `json:"id"`
-	UserID    uuid.UUID  `json:"user_id"`
-	Type      string     `json:"type"`
-	Title     string     `json:"title"`
-	Meta      string     `json:"meta"`
-	PostID    *uuid.UUID `json:"post_id,omitempty"`
-	IsRead    bool       `json:"is_read"`
-	CreatedAt time.Time  `json:"created_at"`
+	ID            uuid.UUID  `json:"id"`
+	UserID        uuid.UUID  `json:"user_id"`
+	Type          string     `json:"type"`
+	Title         string     `json:"title"`
+	Meta          string     `json:"meta"`
+	PostID        *uuid.UUID `json:"post_id,omitempty"`
+	RelatedPostID *uuid.UUID `json:"related_post_id,omitempty"`
+	IsRead        bool       `json:"is_read"`
+	CreatedAt     time.Time  `json:"created_at"`
 }

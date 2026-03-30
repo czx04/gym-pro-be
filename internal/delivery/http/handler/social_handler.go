@@ -348,6 +348,32 @@ func (h *SocialHandler) CreateComment(c *gin.Context) {
 	response.Created(c, result)
 }
 
+func (h *SocialHandler) UpdateComment(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	var req struct {
+		Content string `json:"content"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, errors.BadRequest("invalid request body"))
+		return
+	}
+
+	result, err := h.socialUC.UpdateComment(c.Request.Context(), userID, c.Param("postId"), c.Param("commentId"), socialuc.UpdateCommentInput{
+		Content: strings.TrimSpace(req.Content),
+	})
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	response.Success(c, result)
+}
+
 func (h *SocialHandler) DeleteComment(c *gin.Context) {
 	userID, err := middleware.GetUserID(c)
 	if err != nil {
@@ -355,12 +381,13 @@ func (h *SocialHandler) DeleteComment(c *gin.Context) {
 		return
 	}
 
-	if err := h.socialUC.DeleteComment(c.Request.Context(), userID, c.Param("postId"), c.Param("commentId")); err != nil {
+	out, err := h.socialUC.DeleteComment(c.Request.Context(), userID, c.Param("postId"), c.Param("commentId"))
+	if err != nil {
 		response.Error(c, err)
 		return
 	}
 
-	response.Success(c, gin.H{"deleted": true})
+	response.Success(c, gin.H{"deleted": true, "deletedByRole": out.DeletedByRole})
 }
 
 func (h *SocialHandler) ReportPost(c *gin.Context) {

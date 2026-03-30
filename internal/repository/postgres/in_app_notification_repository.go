@@ -24,10 +24,10 @@ func (r *inAppNotificationRepository) Create(ctx context.Context, n *social.InAp
 		return errors.BadRequest("notification is nil")
 	}
 	q := `
-		INSERT INTO in_app_notifications (id, user_id, type, title, meta, post_id, is_read, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO in_app_notifications (id, user_id, type, title, meta, post_id, related_post_id, is_read, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	`
-	_, err := r.db.Exec(ctx, q, n.ID, n.UserID, n.Type, n.Title, n.Meta, n.PostID, n.IsRead, n.CreatedAt)
+	_, err := r.db.Exec(ctx, q, n.ID, n.UserID, n.Type, n.Title, n.Meta, n.PostID, n.RelatedPostID, n.IsRead, n.CreatedAt)
 	if err != nil {
 		return errors.DatabaseError("create in_app_notification", err)
 	}
@@ -53,7 +53,7 @@ func (r *inAppNotificationRepository) ListForUser(ctx context.Context, userID uu
 	if filter != "all" {
 		countQ = `SELECT COUNT(*) FROM in_app_notifications WHERE user_id = $1 AND type = $2`
 		listQ = `
-			SELECT id, user_id, type, title, meta, post_id, is_read, created_at
+			SELECT id, user_id, type, title, meta, post_id, related_post_id, is_read, created_at
 			FROM in_app_notifications
 			WHERE user_id = $1 AND type = $2
 			ORDER BY created_at DESC
@@ -62,7 +62,7 @@ func (r *inAppNotificationRepository) ListForUser(ctx context.Context, userID uu
 	} else {
 		countQ = `SELECT COUNT(*) FROM in_app_notifications WHERE user_id = $1`
 		listQ = `
-			SELECT id, user_id, type, title, meta, post_id, is_read, created_at
+			SELECT id, user_id, type, title, meta, post_id, related_post_id, is_read, created_at
 			FROM in_app_notifications
 			WHERE user_id = $1
 			ORDER BY created_at DESC
@@ -91,7 +91,7 @@ func (r *inAppNotificationRepository) ListForUser(ctx context.Context, userID uu
 	out := make([]social.InAppNotification, 0)
 	for rows.Next() {
 		var n social.InAppNotification
-		if err := rows.Scan(&n.ID, &n.UserID, &n.Type, &n.Title, &n.Meta, &n.PostID, &n.IsRead, &n.CreatedAt); err != nil {
+		if err := rows.Scan(&n.ID, &n.UserID, &n.Type, &n.Title, &n.Meta, &n.PostID, &n.RelatedPostID, &n.IsRead, &n.CreatedAt); err != nil {
 			return nil, 0, errors.DatabaseError("scan in_app_notification", err)
 		}
 		out = append(out, n)

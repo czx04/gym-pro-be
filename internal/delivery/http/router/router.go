@@ -189,6 +189,7 @@ func New(
 				social.GET("/posts/:postId/comments", socialHandler.GetPostComments)
 				social.GET("/posts/:postId/comments/:commentId/replies", socialHandler.GetCommentReplies)
 				social.POST("/posts/:postId/comments", socialHandler.CreateComment)
+				social.PUT("/posts/:postId/comments/:commentId", socialHandler.UpdateComment)
 				social.DELETE("/posts/:postId/comments/:commentId", socialHandler.DeleteComment)
 				social.GET("/users/:userId/profile", socialHandler.GetUserProfile)
 				social.GET("/users/:userId/posts", socialHandler.GetUserPosts)

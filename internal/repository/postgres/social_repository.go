@@ -110,8 +110,7 @@ func (r *followRepository) SearchUsers(ctx context.Context, viewerID uuid.UUID, 
 	countQuery := `
 		SELECT COUNT(*)
 		FROM users u
-		WHERE u.id != $1
-		  AND NOT EXISTS (
+		WHERE NOT EXISTS (
 			SELECT 1
 			FROM user_blocks ub
 			WHERE (ub.blocker_id = $1 AND ub.blocked_id = u.id)
@@ -128,8 +127,7 @@ func (r *followRepository) SearchUsers(ctx context.Context, viewerID uuid.UUID, 
 	listQuery := `
 		SELECT u.id, u.name, u.avatar_url, u.bio
 		FROM users u
-		WHERE u.id != $1
-		  AND NOT EXISTS (
+		WHERE NOT EXISTS (
 			SELECT 1
 			FROM user_blocks ub
 			WHERE (ub.blocker_id = $1 AND ub.blocked_id = u.id)

@@ -48,6 +48,14 @@ func (b *socialBroadcaster) PublishCommentCreated(p socialnotify.CommentCreatedP
 	})
 }
 
+func (b *socialBroadcaster) PublishCommentUpdated(p socialnotify.CommentUpdatedPayload) {
+	_ = b.hub.BroadcastJSON(map[string]any{
+		"v":       1,
+		"type":    "comment.updated",
+		"payload": p,
+	})
+}
+
 func (b *socialBroadcaster) PublishCommentDeleted(p socialnotify.CommentDeletedPayload) {
 	_ = b.hub.BroadcastJSON(map[string]any{
 		"v":       1,

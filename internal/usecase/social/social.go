@@ -31,6 +31,8 @@ import (
 
 const maxCommentPreviewRepliesPerParent = 100
 
+const socialCommentEditWindow = 15 * time.Minute
+
 func roundMealLogForShare(log *mealdomain.MealLog) {
 	if log == nil {
 		return
@@ -65,22 +67,22 @@ func roundMealLogForShare(log *mealdomain.MealLog) {
 }
 
 type SocialUseCases struct {
-	postRepo             socialdomain.PostRepository
-	followRepo           socialdomain.FollowRepository
-	likeRepo             socialdomain.LikeRepository
-	commentRepo          socialdomain.CommentRepository
-	mediaAssetRepo       socialdomain.MediaAssetRepository
-	preferenceRepo       socialdomain.PreferenceRepository
-	reportRepo           socialdomain.ReportRepository
-	blockRepo            socialdomain.BlockRepository
-	notifRepo            socialdomain.InAppNotificationRepository
-	userRepo             user.Repository
-	mealLogRepo          mealdomain.MealLogRepository
-	workoutSessionRepo   workoutdomain.WorkoutSessionRepository
-	workoutPlanRepo      workoutdomain.WorkoutPlanRepository
-	validator            *validator.Validator
-	cloudinary           config.CloudinaryConfig
-	notify               socialnotify.Broadcaster
+	postRepo           socialdomain.PostRepository
+	followRepo         socialdomain.FollowRepository
+	likeRepo           socialdomain.LikeRepository
+	commentRepo        socialdomain.CommentRepository
+	mediaAssetRepo     socialdomain.MediaAssetRepository
+	preferenceRepo     socialdomain.PreferenceRepository
+	reportRepo         socialdomain.ReportRepository
+	blockRepo          socialdomain.BlockRepository
+	notifRepo          socialdomain.InAppNotificationRepository
+	userRepo           user.Repository
+	mealLogRepo        mealdomain.MealLogRepository
+	workoutSessionRepo workoutdomain.WorkoutSessionRepository
+	workoutPlanRepo    workoutdomain.WorkoutPlanRepository
+	validator          *validator.Validator
+	cloudinary         config.CloudinaryConfig
+	notify             socialnotify.Broadcaster
 }
 
 func NewSocialUseCases(
@@ -132,6 +134,14 @@ type CreateCommentInput struct {
 	ParentID *string                             `json:"parentId" validate:"omitempty,uuid4"`
 }
 
+type UpdateCommentInput struct {
+	Content string `json:"content" validate:"required,min=1,max=1000"`
+}
+
+type DeleteCommentResult struct {
+	DeletedByRole string `json:"deletedByRole"`
+}
+
 type CommentAuthorOutput struct {
 	ID        uuid.UUID `json:"id"`
 	Name      string    `json:"name"`
@@ -150,7 +160,9 @@ type CommentOutput struct {
 	Content          string              `json:"content"`
 	Media            []PostMediaOutput   `json:"media"`
 	IsDeleted        bool                `json:"isDeleted"`
+	IsEdited         bool                `json:"isEdited"`
 	CreatedAt        time.Time           `json:"createdAt"`
+	UpdatedAt        time.Time           `json:"updatedAt"`
 }
 
 type CommentListOutput struct {
@@ -164,24 +176,24 @@ type CommentRepliesOutput struct {
 }
 
 type CreatePostInput struct {
-	Caption          *string                             `json:"caption,omitempty" validate:"omitempty,max=2000"`
-	Media            []socialdomain.CreatePostMediaInput `json:"media,omitempty" validate:"omitempty,dive"`
-	ContentType      *string                             `json:"content_type,omitempty"`
-	ContentTypeAlt   *string                             `json:"contentType,omitempty"`
-	ContentID        *string                             `json:"content_id,omitempty"`
-	ContentIDAlt     *string                             `json:"contentId,omitempty"`
-	Feeling          *string                             `json:"feeling,omitempty" validate:"omitempty,max=100"`
-	Location         *CreatePostLocationInput            `json:"location,omitempty" validate:"omitempty"`
-	Hashtags         []string                            `json:"hashtags,omitempty" validate:"omitempty,dive,max=50"`
+	Caption        *string                             `json:"caption,omitempty" validate:"omitempty,max=2000"`
+	Media          []socialdomain.CreatePostMediaInput `json:"media,omitempty" validate:"omitempty,dive"`
+	ContentType    *string                             `json:"content_type,omitempty"`
+	ContentTypeAlt *string                             `json:"contentType,omitempty"`
+	ContentID      *string                             `json:"content_id,omitempty"`
+	ContentIDAlt   *string                             `json:"contentId,omitempty"`
+	Feeling        *string                             `json:"feeling,omitempty" validate:"omitempty,max=100"`
+	Location       *CreatePostLocationInput            `json:"location,omitempty" validate:"omitempty"`
+	Hashtags       []string                            `json:"hashtags,omitempty" validate:"omitempty,dive,max=50"`
 }
 
 type UpdatePostInput struct {
-	Caption       *string                             `json:"caption,omitempty" validate:"omitempty,max=2000"`
-	Feeling       *string                             `json:"feeling,omitempty" validate:"omitempty,max=100"`
-	Location      *CreatePostLocationInput            `json:"location,omitempty" validate:"omitempty"`
-	Hashtags      *[]string                           `json:"hashtags,omitempty" validate:"omitempty,dive,max=50"`
+	Caption       *string                              `json:"caption,omitempty" validate:"omitempty,max=2000"`
+	Feeling       *string                              `json:"feeling,omitempty" validate:"omitempty,max=100"`
+	Location      *CreatePostLocationInput             `json:"location,omitempty" validate:"omitempty"`
+	Hashtags      *[]string                            `json:"hashtags,omitempty" validate:"omitempty,dive,max=50"`
 	Media         *[]socialdomain.CreatePostMediaInput `json:"media,omitempty" validate:"omitempty,dive"`
-	ClearLocation *bool                               `json:"clear_location,omitempty"`
+	ClearLocation *bool                                `json:"clear_location,omitempty"`
 }
 
 type CreatePostLocationInput struct {
@@ -237,6 +249,8 @@ type NotificationRowOutput struct {
 	DayGroup  string    `json:"dayGroup"`
 	IsRead    bool      `json:"isRead"`
 	CreatedAt time.Time `json:"createdAt"`
+	PostID    *string   `json:"postId,omitempty"`
+	Kind      string    `json:"kind,omitempty"`
 }
 
 type notificationsListPagination struct {
@@ -245,7 +259,7 @@ type notificationsListPagination struct {
 }
 
 type NotificationsListPayload struct {
-	Data       []NotificationRowOutput       `json:"data"`
+	Data       []NotificationRowOutput     `json:"data"`
 	Pagination notificationsListPagination `json:"pagination"`
 }
 
@@ -265,9 +279,9 @@ type UserSearchHit struct {
 }
 
 type SocialSearchOutput struct {
-	Posts      []PostOutput   `json:"posts,omitempty"`
+	Posts      []PostOutput    `json:"posts,omitempty"`
 	Users      []UserSearchHit `json:"users,omitempty"`
-	Pagination FeedPagination `json:"pagination"`
+	Pagination FeedPagination  `json:"pagination"`
 }
 
 type AuthorOutput struct {
@@ -1911,7 +1925,9 @@ func (uc *SocialUseCases) CreateComment(ctx context.Context, userID uuid.UUID, p
 		Content:          comment.Content,
 		Media:            mapCommentMediaOutput(uc.cloudinary.URL, loadedMedia),
 		IsDeleted:        comment.DeletedAt != nil,
+		IsEdited:         false,
 		CreatedAt:        comment.CreatedAt,
+		UpdatedAt:        comment.UpdatedAt,
 	}
 
 	uc.notify.PublishCommentCreated(socialnotify.CommentCreatedPayload{
@@ -2141,28 +2157,114 @@ func (uc *SocialUseCases) GetCommentReplies(ctx context.Context, postID string, 
 	return out, nil
 }
 
-func (uc *SocialUseCases) DeleteComment(ctx context.Context, userID uuid.UUID, postID string, commentID string) error {
+func (uc *SocialUseCases) UpdateComment(ctx context.Context, userID uuid.UUID, postID string, commentID string, input UpdateCommentInput) (*CommentOutput, error) {
+	if err := uc.validator.Validate(input); err != nil {
+		return nil, errors.Validation(err.Error())
+	}
+
 	postUUID, err := uuid.Parse(postID)
 	if err != nil {
-		return errors.BadRequest("invalid post id")
+		return nil, errors.BadRequest("invalid post id")
 	}
 	commentUUID, err := uuid.Parse(commentID)
 	if err != nil {
-		return errors.BadRequest("invalid comment id")
+		return nil, errors.BadRequest("invalid comment id")
+	}
+
+	if _, err := uc.postRepo.GetByID(ctx, postUUID); err != nil {
+		return nil, err
 	}
 
 	comment, err := uc.commentRepo.GetByID(ctx, commentUUID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if comment.PostID != postUUID {
-		return errors.BadRequest("comment does not belong to post")
+		return nil, errors.BadRequest("comment does not belong to post")
 	}
 	if comment.DeletedAt != nil {
-		return nil
+		return nil, errors.NotFound("comment")
 	}
 	if comment.UserID != userID {
-		return errors.Forbidden("you can only delete your own comment")
+		return nil, errors.Forbidden("you can only edit your own comment")
+	}
+	if time.Since(comment.CreatedAt) > socialCommentEditWindow {
+		return nil, errors.Forbidden("comment edit window expired")
+	}
+
+	content := strings.TrimSpace(input.Content)
+	if content == "" {
+		return nil, errors.Validation("content is required")
+	}
+
+	comment.Content = content
+	if err := uc.commentRepo.Update(ctx, comment); err != nil {
+		return nil, err
+	}
+
+	updated, err := uc.commentRepo.GetByID(ctx, commentUUID)
+	if err != nil {
+		return nil, err
+	}
+	mediaByCommentID, err := uc.commentRepo.GetMediaByCommentIDs(ctx, []uuid.UUID{commentUUID})
+	if err != nil {
+		return nil, err
+	}
+	updated.Media = mediaByCommentID[commentUUID]
+	if updated.Media == nil {
+		updated.Media = []socialdomain.CommentMedia{}
+	}
+
+	depth, err := uc.commentDepthToRoot(ctx, postUUID, commentUUID)
+	if err != nil {
+		return nil, err
+	}
+	path := buildCommentPath(updated.ParentCommentID, updated.ID)
+	out := mapCommentResponse(uc.cloudinary.URL, *updated, depth, path, make([]CommentOutput, 0))
+
+	uc.notify.PublishCommentUpdated(socialnotify.CommentUpdatedPayload{
+		PostID:  postUUID.String(),
+		Comment: commentOutputToRealtime(out),
+	})
+
+	return &out, nil
+}
+
+func (uc *SocialUseCases) DeleteComment(ctx context.Context, userID uuid.UUID, postID string, commentID string) (*DeleteCommentResult, error) {
+	postUUID, err := uuid.Parse(postID)
+	if err != nil {
+		return nil, errors.BadRequest("invalid post id")
+	}
+	commentUUID, err := uuid.Parse(commentID)
+	if err != nil {
+		return nil, errors.BadRequest("invalid comment id")
+	}
+
+	post, err := uc.postRepo.GetByID(ctx, postUUID)
+	if err != nil {
+		return nil, err
+	}
+
+	comment, err := uc.commentRepo.GetByID(ctx, commentUUID)
+	if err != nil {
+		return nil, err
+	}
+	if comment.PostID != postUUID {
+		return nil, errors.BadRequest("comment does not belong to post")
+	}
+	if comment.DeletedAt != nil {
+		return &DeleteCommentResult{DeletedByRole: "none"}, nil
+	}
+
+	isAuthor := comment.UserID == userID
+	isPostOwner := post.UserID == userID
+	if !isAuthor && !isPostOwner {
+		return nil, errors.Forbidden("you cannot delete this comment")
+	}
+
+	role := "author"
+	if isPostOwner && !isAuthor {
+		role = "post_owner"
 	}
 
 	var parentStr *string
@@ -2172,14 +2274,14 @@ func (uc *SocialUseCases) DeleteComment(ctx context.Context, userID uuid.UUID, p
 	}
 
 	if err := uc.commentRepo.Delete(ctx, commentUUID); err != nil {
-		return err
+		return nil, err
 	}
 	if err := uc.postRepo.DecrementCommentsCount(ctx, postUUID); err != nil {
-		return err
+		return nil, err
 	}
 	if comment.ParentCommentID != nil {
 		if err := uc.commentRepo.DecrementReplyCount(ctx, *comment.ParentCommentID); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
@@ -2189,7 +2291,7 @@ func (uc *SocialUseCases) DeleteComment(ctx context.Context, userID uuid.UUID, p
 		ParentID:        parentStr,
 		DeletedByUserID: userID.String(),
 	})
-	return nil
+	return &DeleteCommentResult{DeletedByRole: role}, nil
 }
 
 func commentOutputToRealtime(c CommentOutput) socialnotify.RealtimeComment {
@@ -2222,7 +2324,9 @@ func commentOutputToRealtime(c CommentOutput) socialnotify.RealtimeComment {
 		Content:   c.Content,
 		Media:     media,
 		IsDeleted: c.IsDeleted,
+		IsEdited:  c.IsEdited,
 		CreatedAt: c.CreatedAt.UTC().Format(time.RFC3339Nano),
+		UpdatedAt: c.UpdatedAt.UTC().Format(time.RFC3339Nano),
 	}
 }
 
@@ -2243,6 +2347,7 @@ func mapCommentResponse(cloudinaryRawURL string, comment socialdomain.Comment, d
 		previewReplies = make([]CommentOutput, 0)
 	}
 
+	isEdited := comment.UpdatedAt.After(comment.CreatedAt)
 	return CommentOutput{
 		ID:               comment.ID,
 		PostID:           comment.PostID,
@@ -2255,7 +2360,9 @@ func mapCommentResponse(cloudinaryRawURL string, comment socialdomain.Comment, d
 		Content:          comment.Content,
 		Media:            mapCommentMediaOutput(cloudinaryRawURL, comment.Media),
 		IsDeleted:        comment.DeletedAt != nil,
+		IsEdited:         isEdited,
 		CreatedAt:        comment.CreatedAt,
+		UpdatedAt:        comment.UpdatedAt,
 	}
 }
 
@@ -2317,10 +2424,64 @@ func dayGroupUTC(t time.Time) string {
 	return "earlier"
 }
 
+func socialDisplayName(name string) string {
+	s := strings.TrimSpace(name)
+	if s == "" {
+		return "Ai đó"
+	}
+	return s
+}
+
+func notificationKindFromRecord(title string, postID *uuid.UUID) string {
+	t := strings.TrimSpace(strings.ToLower(title))
+	switch t {
+	case "new like", "lượt thích":
+		return "like"
+	case "new comment", "bình luận mới":
+		return "comment"
+	case "new follower", "theo dõi mới":
+		return "follow"
+	}
+	if strings.Contains(t, "thích") || strings.Contains(t, "liked") {
+		return "like"
+	}
+	if strings.Contains(t, "bình luận") || strings.Contains(t, "comment") {
+		return "comment"
+	}
+	if strings.Contains(t, "theo dõi") || strings.Contains(t, "follow") {
+		return "follow"
+	}
+	if postID != nil {
+		return "post"
+	}
+	return ""
+}
+
+func notificationMetaWithPostID(text string, postID uuid.UUID) string {
+	return text + "|" + postID.String()
+}
+
+func effectivePostIDForNotification(n *socialdomain.InAppNotification) *uuid.UUID {
+	if n == nil {
+		return nil
+	}
+	if n.PostID != nil {
+		return n.PostID
+	}
+	return n.RelatedPostID
+}
+
 func (uc *SocialUseCases) pushNotificationRealtime(ctx context.Context, recipient uuid.UUID, n *socialdomain.InAppNotification) {
 	if uc.notify == nil || n == nil {
 		return
 	}
+	eff := effectivePostIDForNotification(n)
+	var postIDStr *string
+	if eff != nil {
+		s := eff.String()
+		postIDStr = &s
+	}
+	kind := notificationKindFromRecord(n.Title, eff)
 	uc.notify.PublishNotificationCreated(recipient, socialnotify.NotificationPayload{
 		ID:        n.ID.String(),
 		Type:      n.Type,
@@ -2329,6 +2490,8 @@ func (uc *SocialUseCases) pushNotificationRealtime(ctx context.Context, recipien
 		DayGroup:  dayGroupUTC(n.CreatedAt),
 		IsRead:    n.IsRead,
 		CreatedAt: n.CreatedAt.UTC().Format(time.RFC3339),
+		PostID:    postIDStr,
+		Kind:      kind,
 	})
 	unread, err := uc.notifRepo.CountUnread(ctx, recipient)
 	if err != nil {
@@ -2342,16 +2505,13 @@ func (uc *SocialUseCases) tryCreateFollowNotification(ctx context.Context, follo
 	if err != nil || follower == nil {
 		return
 	}
-	name := strings.TrimSpace(follower.Name)
-	if name == "" {
-		name = "Someone"
-	}
+	name := socialDisplayName(follower.Name)
 	n := &socialdomain.InAppNotification{
 		ID:        uuid.New(),
 		UserID:    followingID,
 		Type:      "social",
-		Title:     "New follower",
-		Meta:      name + " started following you",
+		Title:     "Theo dõi mới",
+		Meta:      name + " đã bắt đầu theo dõi bạn",
 		IsRead:    false,
 		CreatedAt: time.Now(),
 	}
@@ -2367,15 +2527,17 @@ func (uc *SocialUseCases) tryCreateLikeNotification(ctx context.Context, likerID
 		return
 	}
 	pid := post.ID
+	likerName := socialDisplayName(liker.Name)
 	n := &socialdomain.InAppNotification{
-		ID:        uuid.New(),
-		UserID:    post.UserID,
-		Type:      notificationCategoryFromContentType(post.ContentType),
-		Title:     "New like",
-		Meta:      liker.Name + " liked your post",
-		PostID:    &pid,
-		IsRead:    false,
-		CreatedAt: time.Now(),
+		ID:            uuid.New(),
+		UserID:        post.UserID,
+		Type:          notificationCategoryFromContentType(post.ContentType),
+		Title:         "Lượt thích",
+		Meta:          notificationMetaWithPostID(likerName+" đã thích bài viết của bạn", pid),
+		PostID:        &pid,
+		RelatedPostID: &pid,
+		IsRead:        false,
+		CreatedAt:     time.Now(),
 	}
 	if err := uc.notifRepo.Create(ctx, n); err != nil {
 		return
@@ -2389,15 +2551,17 @@ func (uc *SocialUseCases) tryCreateCommentNotification(ctx context.Context, comm
 		return
 	}
 	pid := post.ID
+	commenterName := socialDisplayName(commenter.Name)
 	n := &socialdomain.InAppNotification{
-		ID:        uuid.New(),
-		UserID:    post.UserID,
-		Type:      notificationCategoryFromContentType(post.ContentType),
-		Title:     "New comment",
-		Meta:      commenter.Name + " commented on your post",
-		PostID:    &pid,
-		IsRead:    false,
-		CreatedAt: time.Now(),
+		ID:            uuid.New(),
+		UserID:        post.UserID,
+		Type:          notificationCategoryFromContentType(post.ContentType),
+		Title:         "Bình luận mới",
+		Meta:          notificationMetaWithPostID(commenterName+" đã bình luận bài viết của bạn", pid),
+		PostID:        &pid,
+		RelatedPostID: &pid,
+		IsRead:        false,
+		CreatedAt:     time.Now(),
 	}
 	if err := uc.notifRepo.Create(ctx, n); err != nil {
 		return
@@ -2426,6 +2590,13 @@ func (uc *SocialUseCases) ListNotifications(ctx context.Context, userID uuid.UUI
 	}
 	out := make([]NotificationRowOutput, 0, len(rows))
 	for _, r := range rows {
+		eff := effectivePostIDForNotification(&r)
+		var postIDStr *string
+		if eff != nil {
+			s := eff.String()
+			postIDStr = &s
+		}
+		kind := notificationKindFromRecord(r.Title, eff)
 		out = append(out, NotificationRowOutput{
 			ID:        r.ID,
 			Type:      r.Type,
@@ -2434,6 +2605,8 @@ func (uc *SocialUseCases) ListNotifications(ctx context.Context, userID uuid.UUI
 			DayGroup:  dayGroupUTC(r.CreatedAt),
 			IsRead:    r.IsRead,
 			CreatedAt: r.CreatedAt,
+			PostID:    postIDStr,
+			Kind:      kind,
 		})
 	}
 	hasMore := int64(page*limit) < total
