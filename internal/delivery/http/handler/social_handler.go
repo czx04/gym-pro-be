@@ -129,32 +129,32 @@ func (h *SocialHandler) GetPostByID(c *gin.Context) {
 	response.Success(c, result)
 }
 
-func (h *SocialHandler) GetPostAttachedMealLog(c *gin.Context) {
+func (h *SocialHandler) GetPostAttachment(c *gin.Context) {
 	userID, err := middleware.GetUserID(c)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
-	result, err := h.socialUC.GetPostAttachedMealLog(c.Request.Context(), userID, c.Param("postId"))
-	if err != nil {
-		response.Error(c, err)
-		return
+	postID := c.Param("postId")
+	kind := strings.ToLower(strings.TrimSpace(c.Query("kind")))
+	switch kind {
+	case "meal":
+		result, err := h.socialUC.GetPostAttachedMealLog(c.Request.Context(), userID, postID)
+		if err != nil {
+			response.Error(c, err)
+			return
+		}
+		response.Success(c, result)
+	case "workout":
+		result, err := h.socialUC.GetPostAttachedWorkoutSession(c.Request.Context(), userID, postID)
+		if err != nil {
+			response.Error(c, err)
+			return
+		}
+		response.Success(c, result)
+	default:
+		response.Error(c, errors.BadRequest("kind must be meal or workout"))
 	}
-	response.Success(c, result)
-}
-
-func (h *SocialHandler) GetPostAttachedWorkoutSession(c *gin.Context) {
-	userID, err := middleware.GetUserID(c)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-	result, err := h.socialUC.GetPostAttachedWorkoutSession(c.Request.Context(), userID, c.Param("postId"))
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-	response.Success(c, result)
 }
 
 func (h *SocialHandler) GetUserProfile(c *gin.Context) {

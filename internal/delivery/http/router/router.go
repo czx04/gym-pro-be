@@ -172,8 +172,6 @@ func New(
 			{
 				social.GET("/notifications", socialHandler.SocialNotifications)
 				social.POST("/notifications", socialHandler.SocialNotificationsWrite)
-				social.GET("/attachments/meal/:postId", socialHandler.GetPostAttachedMealLog)
-				social.GET("/attachments/workout/:postId", socialHandler.GetPostAttachedWorkoutSession)
 				social.GET("/search", socialHandler.Search)
 				social.GET("/feed", socialHandler.GetFeed)
 				social.PUT("/posts/:postId", socialHandler.UpdatePost)
@@ -182,8 +180,7 @@ func New(
 				social.PUT("/users/:userId/block", socialHandler.SetBlockState)
 				social.POST("/posts", socialHandler.CreatePost)
 				social.DELETE("/posts/:postId", socialHandler.DeletePost)
-				social.GET("/posts/:postId/attached-meal", socialHandler.GetPostAttachedMealLog)
-				social.GET("/posts/:postId/attached-workout-session", socialHandler.GetPostAttachedWorkoutSession)
+				social.GET("/posts/:postId/attachment", socialHandler.GetPostAttachment)
 				social.GET("/posts/:postId", socialHandler.GetPostByID)
 				social.POST("/posts/:postId/reports", socialHandler.ReportPost)
 				social.GET("/posts/:postId/comments", socialHandler.GetPostComments)
