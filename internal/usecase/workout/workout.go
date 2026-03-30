@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"gym-pro-2026-ptit/internal/domain/user"
 	"gym-pro-2026-ptit/internal/domain/workout"
+	cacheinfra "gym-pro-2026-ptit/internal/infrastructure/cache"
 	"gym-pro-2026-ptit/internal/infrastructure/database"
 	"gym-pro-2026-ptit/internal/infrastructure/logger"
 	"gym-pro-2026-ptit/pkg/errors"
@@ -21,10 +22,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 )
 
 type WorkoutUseCases struct {
 	db              *database.DB
+	cache           *cacheinfra.Cache
 	userRepo        user.Repository
 	workoutPlanRepo workout.WorkoutPlanRepository
 	sessionRepo     workout.WorkoutSessionRepository
@@ -33,6 +36,7 @@ type WorkoutUseCases struct {
 
 func NewWorkoutUseCases(
 	db *database.DB,
+	cache *cacheinfra.Cache,
 	userRepo user.Repository,
 	workoutPlanRepo workout.WorkoutPlanRepository,
 	sessionRepo workout.WorkoutSessionRepository,
@@ -40,11 +44,21 @@ func NewWorkoutUseCases(
 ) *WorkoutUseCases {
 	return &WorkoutUseCases{
 		db:              db,
+		cache:           cache,
 		userRepo:        userRepo,
 		workoutPlanRepo: workoutPlanRepo,
 		sessionRepo:     sessionRepo,
 		validator:       validator,
 	}
+}
+
+const aiWeeklySummaryCacheTTL = 24 * time.Hour
+
+type cachedAIWeeklySummary struct {
+	Insights        []workout.WeeklyInsight `json:"insights"`
+	Recommendations []string                `json:"recommendations"`
+	AISummary       string                  `json:"ai_summary,omitempty"`
+	AIModel         string                  `json:"ai_model,omitempty"`
 }
 
 func (uc *WorkoutUseCases) CreateWorkoutPlan(ctx context.Context, u *user.User, input workout.CreateWorkoutPlanInput) (*workout.WorkoutPlan, error) {
@@ -232,6 +246,39 @@ func (uc *WorkoutUseCases) GetScheduledDates(ctx context.Context, userID uuid.UU
 
 func (uc *WorkoutUseCases) GetSessionsByDate(ctx context.Context, userID uuid.UUID, date string) ([]workout.WorkoutSession, error) {
 	return uc.sessionRepo.GetByDate(ctx, userID, date)
+}
+
+func (uc *WorkoutUseCases) DeleteWorkoutSession(ctx context.Context, userID uuid.UUID, sessionID string) error {
+	id, err := uuid.Parse(sessionID)
+	if err != nil {
+		return errors.BadRequest("invalid session ID")
+	}
+
+	s, err := uc.sessionRepo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if s.UserID != userID {
+		return errors.Forbidden("not your session")
+	}
+
+	now := time.Now().In(time.Local)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
+
+	target := time.Date(s.CreatedAt.Year(), s.CreatedAt.Month(), s.CreatedAt.Day(), 0, 0, 0, 0, time.Local)
+	if s.ScheduledDate != nil {
+		if scheduledDate, parseErr := time.ParseInLocation("2006-01-02", *s.ScheduledDate, time.Local); parseErr == nil {
+			target = time.Date(scheduledDate.Year(), scheduledDate.Month(), scheduledDate.Day(), 0, 0, 0, 0, time.Local)
+		}
+	} else if s.StartedAt != nil {
+		target = time.Date(s.StartedAt.Year(), s.StartedAt.Month(), s.StartedAt.Day(), 0, 0, 0, 0, time.Local)
+	}
+
+	if target.Before(today) {
+		return errors.Forbidden("can only delete sessions for today or future dates")
+	}
+
+	return uc.sessionRepo.Delete(ctx, id)
 }
 
 func (uc *WorkoutUseCases) GetSessionByID(ctx context.Context, userID uuid.UUID, sessionID string) (*workout.WorkoutSession, error) {
@@ -436,6 +483,16 @@ func (uc *WorkoutUseCases) GetWeeklySummary(ctx context.Context, userID uuid.UUI
 
 	summary.Insights, summary.Recommendations = buildWeeklyInsightsAndRecommendations(summary)
 	summary.RecommendationSource = "rule_based"
+	aiCacheKey := uc.buildAIWeeklySummaryCacheKey(userID, summary.StartDate, summary.EndDate)
+
+	if cachedAI, ok := uc.getCachedAIWeeklySummary(ctx, aiCacheKey); ok {
+		summary.Insights = cachedAI.Insights
+		summary.Recommendations = cachedAI.Recommendations
+		summary.RecommendationSource = "gemini"
+		summary.AISummary = cachedAI.AISummary
+		summary.AIModel = cachedAI.AIModel
+		return summary, nil
+	}
 
 	var fitnessGoal *string
 	if u, err := uc.userRepo.GetByID(ctx, userID); err == nil {
@@ -444,7 +501,7 @@ func (uc *WorkoutUseCases) GetWeeklySummary(ctx context.Context, userID uuid.UUI
 		logger.Warn("failed to load user profile for ai recommendation", "user_id", userID, "err", err)
 	}
 
-	aiInsights, aiRecommendations, aiSummary, aiModel, err := tryGeminiRecommendations(ctx, summary, fitnessGoal)
+	aiInsights, aiRecommendations, aiSummary, aiModel, err := tryGeminiRecommendationsWithRetry(ctx, summary, fitnessGoal)
 	if err != nil {
 		logger.Warn("gemini recommendation fallback to rule-based", "user_id", userID, "err", err)
 		return summary, nil
@@ -460,7 +517,60 @@ func (uc *WorkoutUseCases) GetWeeklySummary(ctx context.Context, userID uuid.UUI
 	summary.AISummary = aiSummary
 	summary.AIModel = aiModel
 
+	uc.setCachedAIWeeklySummary(ctx, aiCacheKey, cachedAIWeeklySummary{
+		Insights:        summary.Insights,
+		Recommendations: summary.Recommendations,
+		AISummary:       summary.AISummary,
+		AIModel:         summary.AIModel,
+	})
+
 	return summary, nil
+}
+
+func (uc *WorkoutUseCases) buildAIWeeklySummaryCacheKey(userID uuid.UUID, startDate, endDate string) string {
+	return fmt.Sprintf("weekly_ai_summary:%s:%s:%s", userID.String(), startDate, endDate)
+}
+
+func (uc *WorkoutUseCases) getCachedAIWeeklySummary(ctx context.Context, cacheKey string) (*cachedAIWeeklySummary, bool) {
+	if uc.cache == nil {
+		return nil, false
+	}
+
+	raw, err := uc.cache.Get(ctx, cacheKey)
+	if err != nil {
+		if err != redis.Nil {
+			logger.Warn("failed to read ai summary cache", "cache_key", cacheKey, "err", err)
+		}
+		return nil, false
+	}
+
+	var cached cachedAIWeeklySummary
+	if err := json.Unmarshal([]byte(raw), &cached); err != nil {
+		logger.Warn("failed to unmarshal ai summary cache", "cache_key", cacheKey, "err", err)
+		return nil, false
+	}
+
+	if len(cached.Recommendations) == 0 {
+		return nil, false
+	}
+
+	return &cached, true
+}
+
+func (uc *WorkoutUseCases) setCachedAIWeeklySummary(ctx context.Context, cacheKey string, payload cachedAIWeeklySummary) {
+	if uc.cache == nil {
+		return
+	}
+
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		logger.Warn("failed to marshal ai summary cache payload", "cache_key", cacheKey, "err", err)
+		return
+	}
+
+	if err := uc.cache.Set(ctx, cacheKey, raw, aiWeeklySummaryCacheTTL); err != nil {
+		logger.Warn("failed to set ai summary cache", "cache_key", cacheKey, "err", err)
+	}
 }
 
 type geminiRequest struct {
@@ -617,6 +727,46 @@ func tryGeminiRecommendations(ctx context.Context, summary *workout.WeeklyWorkou
 	}
 
 	return cleanedInsights, cleanedRecommendations, strings.TrimSpace(output.Summary), model, nil
+}
+
+func tryGeminiRecommendationsWithRetry(ctx context.Context, summary *workout.WeeklyWorkoutSummary, fitnessGoal *string) ([]workout.WeeklyInsight, []string, string, string, error) {
+	attempts := 3
+	if rawAttempts := strings.TrimSpace(os.Getenv("GEMINI_RETRY_ATTEMPTS")); rawAttempts != "" {
+		if v, err := strconv.Atoi(rawAttempts); err == nil && v > 0 {
+			attempts = v
+		}
+	}
+
+	backoff := 300 * time.Millisecond
+	if rawBackoff := strings.TrimSpace(os.Getenv("GEMINI_RETRY_BACKOFF_MS")); rawBackoff != "" {
+		if v, err := strconv.Atoi(rawBackoff); err == nil && v > 0 {
+			backoff = time.Duration(v) * time.Millisecond
+		}
+	}
+
+	var lastErr error
+	for i := 1; i <= attempts; i++ {
+		insights, recommendations, summaryText, model, err := tryGeminiRecommendations(ctx, summary, fitnessGoal)
+		if err == nil {
+			return insights, recommendations, summaryText, model, nil
+		}
+
+		lastErr = err
+		if i == attempts {
+			break
+		}
+
+		logger.Warn("gemini request failed, retrying", "attempt", i, "max_attempts", attempts, "err", err)
+
+		wait := backoff * time.Duration(i)
+		select {
+		case <-ctx.Done():
+			return nil, nil, "", "", ctx.Err()
+		case <-time.After(wait):
+		}
+	}
+
+	return nil, nil, "", "", fmt.Errorf("gemini failed after %d attempts: %w", attempts, lastErr)
 }
 
 func extractJSONBody(raw string) string {

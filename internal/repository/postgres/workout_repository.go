@@ -260,60 +260,6 @@ func (r *workoutPlanRepository) GetExercises(ctx context.Context, planID uuid.UU
 	return exercises, nil
 }
 
-// WorkoutScheduleRepository implementation
-type workoutScheduleRepository struct {
-	db *database.DB
-}
-
-func NewWorkoutScheduleRepository(db *database.DB) workout.WorkoutScheduleRepository {
-	return &workoutScheduleRepository{db: db}
-}
-
-func (r *workoutScheduleRepository) WithTx(tx *database.DB) workout.WorkoutScheduleRepository {
-	return &workoutScheduleRepository{db: tx}
-}
-
-// TODO: Implement all WorkoutScheduleRepository methods
-func (r *workoutScheduleRepository) Create(ctx context.Context, schedule *workout.WorkoutSchedule) error {
-	// TODO: Insert into workout_schedules
-	return nil
-}
-
-func (r *workoutScheduleRepository) GetByID(ctx context.Context, id uuid.UUID) (*workout.WorkoutSchedule, error) {
-	// TODO: Query schedule with workout plan details
-	return nil, nil
-}
-
-func (r *workoutScheduleRepository) GetByUserID(ctx context.Context, userID uuid.UUID, filter workout.GetScheduleFilter) ([]workout.WorkoutSchedule, error) {
-	// TODO: Query schedules with filters (date range, completed status)
-	return nil, nil
-}
-
-func (r *workoutScheduleRepository) GetByDateRange(ctx context.Context, userID uuid.UUID, filter workout.GetScheduleFilter) ([]workout.WorkoutSchedule, error) {
-	// TODO: Query schedules in date range
-	return nil, nil
-}
-
-func (r *workoutScheduleRepository) Update(ctx context.Context, schedule *workout.WorkoutSchedule) error {
-	// TODO: Update schedule
-	return nil
-}
-
-func (r *workoutScheduleRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	// TODO: Delete schedule
-	return nil
-}
-
-func (r *workoutScheduleRepository) MarkCompleted(ctx context.Context, id uuid.UUID) error {
-	// TODO: Set is_completed = true, completed_at = NOW()
-	return nil
-}
-
-func (r *workoutScheduleRepository) BulkCreate(ctx context.Context, schedules []workout.WorkoutSchedule) error {
-	// TODO: Batch insert multiple schedules
-	return nil
-}
-
 // WorkoutSessionRepository implementation
 type workoutSessionRepository struct {
 	db *database.DB
@@ -329,8 +275,8 @@ func (r *workoutSessionRepository) WithTx(tx *database.DB) workout.WorkoutSessio
 
 func (r *workoutSessionRepository) Create(ctx context.Context, session *workout.WorkoutSession) error {
 	q := `INSERT INTO workout_sessions (
-		id, workout_schedule_id, user_id, workout_plan_id, scheduled_date, status, started_at, completed_at, duration_mins, total_calories_burned, notes, mood, difficulty_rating, created_at, updated_at
-	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`
+		id, user_id, workout_plan_id, scheduled_date, status, started_at, completed_at, duration_mins, total_calories_burned, notes, mood, difficulty_rating, created_at, updated_at
+	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`
 	var startedAt, completedAt interface{}
 	if session.StartedAt != nil {
 		startedAt = *session.StartedAt
@@ -339,7 +285,7 @@ func (r *workoutSessionRepository) Create(ctx context.Context, session *workout.
 		completedAt = *session.CompletedAt
 	}
 	_, err := r.db.Exec(ctx, q,
-		session.ID, session.WorkoutScheduleID, session.UserID, session.WorkoutPlanID, session.ScheduledDate, session.Status, startedAt, completedAt,
+		session.ID, session.UserID, session.WorkoutPlanID, session.ScheduledDate, session.Status, startedAt, completedAt,
 		session.DurationMins, session.TotalCaloriesBurned, session.Notes, session.Mood, session.DifficultyRating, session.CreatedAt, session.UpdatedAt,
 	)
 	if err != nil {
@@ -377,13 +323,13 @@ func (r *workoutSessionRepository) insertSessionExercise(ctx context.Context, se
 }
 
 func (r *workoutSessionRepository) GetByID(ctx context.Context, id uuid.UUID) (*workout.WorkoutSession, error) {
-	q := `SELECT s.id, s.workout_schedule_id, s.user_id, s.workout_plan_id, s.scheduled_date::text, s.status, s.started_at, s.completed_at, s.duration_mins, s.total_calories_burned, s.notes, s.mood, s.difficulty_rating, s.created_at, s.updated_at, p.title
+	q := `SELECT s.id, s.user_id, s.workout_plan_id, s.scheduled_date::text, s.status, s.started_at, s.completed_at, s.duration_mins, s.total_calories_burned, s.notes, s.mood, s.difficulty_rating, s.created_at, s.updated_at, p.title
 		FROM workout_sessions s LEFT JOIN workout_plans p ON p.id = s.workout_plan_id WHERE s.id = $1`
 	var s workout.WorkoutSession
 	var scheduledDate *string
 	var title *string
 	err := r.db.QueryRow(ctx, q, id).Scan(
-		&s.ID, &s.WorkoutScheduleID, &s.UserID, &s.WorkoutPlanID, &scheduledDate, &s.Status, &s.StartedAt, &s.CompletedAt,
+		&s.ID, &s.UserID, &s.WorkoutPlanID, &scheduledDate, &s.Status, &s.StartedAt, &s.CompletedAt,
 		&s.DurationMins, &s.TotalCaloriesBurned, &s.Notes, &s.Mood, &s.DifficultyRating, &s.CreatedAt, &s.UpdatedAt, &title,
 	)
 	if err != nil {
@@ -471,7 +417,7 @@ func (r *workoutSessionRepository) GetScheduledDates(ctx context.Context, userID
 }
 
 func (r *workoutSessionRepository) GetByDate(ctx context.Context, userID uuid.UUID, date string) ([]workout.WorkoutSession, error) {
-	q := `SELECT s.id, s.workout_schedule_id, s.user_id, s.workout_plan_id, s.scheduled_date::text, s.status, s.started_at, s.completed_at, s.duration_mins, s.total_calories_burned, s.notes, s.mood, s.difficulty_rating, s.created_at, s.updated_at, p.title
+	q := `SELECT s.id, s.user_id, s.workout_plan_id, s.scheduled_date::text, s.status, s.started_at, s.completed_at, s.duration_mins, s.total_calories_burned, s.notes, s.mood, s.difficulty_rating, s.created_at, s.updated_at, p.title
 		FROM workout_sessions s LEFT JOIN workout_plans p ON p.id = s.workout_plan_id
 		WHERE s.user_id = $1 AND (s.scheduled_date = $2::date OR (s.started_at IS NOT NULL AND s.started_at::date = $2::date)) ORDER BY s.scheduled_date NULLS LAST, s.started_at NULLS LAST`
 	rows, err := r.db.Query(ctx, q, userID, date)
@@ -485,7 +431,7 @@ func (r *workoutSessionRepository) GetByDate(ctx context.Context, userID uuid.UU
 		var scheduledDate *string
 		var title *string
 		err := rows.Scan(
-			&s.ID, &s.WorkoutScheduleID, &s.UserID, &s.WorkoutPlanID, &scheduledDate, &s.Status, &s.StartedAt, &s.CompletedAt,
+			&s.ID, &s.UserID, &s.WorkoutPlanID, &scheduledDate, &s.Status, &s.StartedAt, &s.CompletedAt,
 			&s.DurationMins, &s.TotalCaloriesBurned, &s.Notes, &s.Mood, &s.DifficultyRating, &s.CreatedAt, &s.UpdatedAt, &title,
 		)
 		if err != nil {
@@ -503,7 +449,7 @@ func (r *workoutSessionRepository) GetByDate(ctx context.Context, userID uuid.UU
 }
 
 func (r *workoutSessionRepository) GetByUserID(ctx context.Context, userID uuid.UUID, page, pageSize int) ([]workout.WorkoutSession, int64, error) {
-	q := `SELECT id, workout_schedule_id, user_id, workout_plan_id, scheduled_date::text, status, started_at, completed_at, duration_mins, total_calories_burned, notes, mood, difficulty_rating, created_at, updated_at FROM workout_sessions WHERE user_id = $1 ORDER BY COALESCE(started_at, created_at) DESC LIMIT $2 OFFSET $3`
+	q := `SELECT id, user_id, workout_plan_id, scheduled_date::text, status, started_at, completed_at, duration_mins, total_calories_burned, notes, mood, difficulty_rating, created_at, updated_at FROM workout_sessions WHERE user_id = $1 ORDER BY COALESCE(started_at, created_at) DESC LIMIT $2 OFFSET $3`
 	rows, err := r.db.Query(ctx, q, userID, pageSize, (page-1)*pageSize)
 	if err != nil {
 		return nil, 0, errors.DatabaseError("get sessions by user", err)
@@ -513,7 +459,7 @@ func (r *workoutSessionRepository) GetByUserID(ctx context.Context, userID uuid.
 	for rows.Next() {
 		var s workout.WorkoutSession
 		var scheduledDate *string
-		err := rows.Scan(&s.ID, &s.WorkoutScheduleID, &s.UserID, &s.WorkoutPlanID, &scheduledDate, &s.Status, &s.StartedAt, &s.CompletedAt, &s.DurationMins, &s.TotalCaloriesBurned, &s.Notes, &s.Mood, &s.DifficultyRating, &s.CreatedAt, &s.UpdatedAt)
+		err := rows.Scan(&s.ID, &s.UserID, &s.WorkoutPlanID, &scheduledDate, &s.Status, &s.StartedAt, &s.CompletedAt, &s.DurationMins, &s.TotalCaloriesBurned, &s.Notes, &s.Mood, &s.DifficultyRating, &s.CreatedAt, &s.UpdatedAt)
 		if err != nil {
 			return nil, 0, errors.DatabaseError("scan session", err)
 		}

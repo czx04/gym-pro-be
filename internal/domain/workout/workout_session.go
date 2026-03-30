@@ -15,7 +15,6 @@ const (
 
 type WorkoutSession struct {
 	ID                  uuid.UUID                `json:"id"`
-	WorkoutScheduleID   *uuid.UUID               `json:"workout_schedule_id,omitempty"`
 	UserID              uuid.UUID                `json:"user_id"`
 	WorkoutPlanID       uuid.UUID                `json:"workout_plan_id"`
 	ScheduledDate       *string                  `json:"scheduled_date,omitempty"` // YYYY-MM-DD
@@ -72,9 +71,8 @@ type SetData struct {
 }
 
 type StartWorkoutSessionInput struct {
-	WorkoutScheduleID *uuid.UUID `json:"workout_schedule_id,omitempty"`
-	WorkoutPlanID     uuid.UUID  `json:"workout_plan_id" validate:"required"`
-	StartedAt         *time.Time `json:"started_at,omitempty"`
+	WorkoutPlanID uuid.UUID  `json:"workout_plan_id" validate:"required"`
+	StartedAt     *time.Time `json:"started_at,omitempty"`
 }
 
 type LogExerciseSetInput struct {

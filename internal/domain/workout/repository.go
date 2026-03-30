@@ -61,34 +61,6 @@ type WorkoutPlanRepository interface {
 	GetExercises(ctx context.Context, planID uuid.UUID) ([]WorkoutPlanExercise, error)
 }
 
-// WorkoutScheduleRepository defines the interface for workout schedule data access
-type WorkoutScheduleRepository interface {
-	WithTx(tx *database.DB) WorkoutScheduleRepository
-	// Create creates a new workout schedule
-	Create(ctx context.Context, schedule *WorkoutSchedule) error
-
-	// GetByID retrieves a schedule by ID
-	GetByID(ctx context.Context, id uuid.UUID) (*WorkoutSchedule, error)
-
-	// GetByUserID retrieves schedules for a user with filters
-	GetByUserID(ctx context.Context, userID uuid.UUID, filter GetScheduleFilter) ([]WorkoutSchedule, error)
-
-	// GetByDateRange retrieves schedules within a date range
-	GetByDateRange(ctx context.Context, userID uuid.UUID, filter GetScheduleFilter) ([]WorkoutSchedule, error)
-
-	// Update updates a schedule
-	Update(ctx context.Context, schedule *WorkoutSchedule) error
-
-	// Delete deletes a schedule
-	Delete(ctx context.Context, id uuid.UUID) error
-
-	// MarkCompleted marks a schedule as completed
-	MarkCompleted(ctx context.Context, id uuid.UUID) error
-
-	// BulkCreate creates multiple schedules at once
-	BulkCreate(ctx context.Context, schedules []WorkoutSchedule) error
-}
-
 // WorkoutSessionRepository defines the interface for workout session data access
 type WorkoutSessionRepository interface {
 	WithTx(tx *database.DB) WorkoutSessionRepository
