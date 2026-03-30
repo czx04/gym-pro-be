@@ -2,6 +2,7 @@ package user
 
 import (
 	"context"
+	"mime/multipart"
 	"time"
 
 	"gym-pro-2026-ptit/internal/domain/user"
@@ -10,6 +11,7 @@ import (
 	"gym-pro-2026-ptit/internal/infrastructure/email"
 	"gym-pro-2026-ptit/internal/infrastructure/otp"
 	mealuc "gym-pro-2026-ptit/internal/usecase/meal"
+	"gym-pro-2026-ptit/pkg/cloudinary"
 	"gym-pro-2026-ptit/pkg/errors"
 	"gym-pro-2026-ptit/pkg/validator"
 
@@ -53,17 +55,23 @@ type (
 		FatTargetG         *int    `json:"fat_target_g,omitempty" validate:"omitempty,gte=0,lte=300"`
 		EffectiveDate      *string `json:"effective_date,omitempty"`
 	}
+	UploadAvatarImageInput struct {
+		File *multipart.FileHeader `form:"file" validate:"required"`
+	}
+	UploadAvatarImageOutput struct {
+		AvatarURL string `json:"avatar_url"`
+	}
 )
 
 // UserUseCases groups all user/auth use cases with a single dependency set.
 type UserUseCases struct {
-	userRepo      user.Repository
-	mealDailyUC   *mealuc.MealDailyUseCases
-	otpService    otp.Service
-	emailService  email.Service
-	passwordMgr   *auth.PasswordManager
-	jwtMgr        *auth.JWTManager
-	validator     *validator.Validator
+	userRepo     user.Repository
+	mealDailyUC  *mealuc.MealDailyUseCases
+	otpService   otp.Service
+	emailService email.Service
+	passwordMgr  *auth.PasswordManager
+	jwtMgr       *auth.JWTManager
+	validator    *validator.Validator
 }
 
 // NewUserUseCases creates the user use cases container.
@@ -331,4 +339,61 @@ func (uc *UserUseCases) UpdateUserNutritionTarget(ctx context.Context, userID uu
 		CarbsTargetG:       u.CarbsTargetG,
 		FatTargetG:         u.FatTargetG,
 	}, nil
+}
+
+func (uc *UserUseCases) UploadAvatarImage(ctx context.Context, userID uuid.UUID, input UploadAvatarImageInput) (*UploadAvatarImageOutput, error) {
+	if err := uc.validator.Validate(input); err != nil {
+		return nil, errors.Validation(err.Error())
+	}
+
+	updated, err := uc.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return nil, errors.InternalServer("failed to get user", err)
+	}
+	oldAvatarURL := updated.AvatarURL
+
+	f, err := input.File.Open()
+	if err != nil {
+		return nil, errors.BadRequest("invalid file")
+	}
+	defer func() { _ = f.Close() }()
+
+	imageURL, err := cloudinary.UploadAvatarImage(ctx, f, userID)
+	if err != nil {
+		return nil, errors.InternalServer("failed to upload avatar image", err)
+	}
+	updated.AvatarURL = &imageURL
+	updated.UpdatedAt = time.Now()
+	if err := uc.userRepo.Update(ctx, updated); err != nil {
+		return nil, errors.InternalServer("failed to update user", err)
+	}
+
+	// Best-effort cleanup old avatar to avoid orphaned uploads.
+	if oldAvatarURL != nil && *oldAvatarURL != "" && *oldAvatarURL != imageURL {
+		_ = cloudinary.DeleteImage(ctx, *oldAvatarURL)
+	}
+	return &UploadAvatarImageOutput{AvatarURL: *updated.AvatarURL}, nil
+}
+
+func (uc *UserUseCases) DeleteAccount(ctx context.Context, userID uuid.UUID) error {
+	// Fetch user first to get avatar URL for best-effort cleanup.
+	u, err := uc.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	var avatarURL *string
+	if u != nil {
+		avatarURL = u.AvatarURL
+	}
+
+	if err := uc.userRepo.Delete(ctx, userID); err != nil {
+		// Preserve NotFound (and other domain errors) when applicable.
+		return err
+	}
+
+	// Best-effort cleanup avatar to avoid orphaned uploads.
+	if avatarURL != nil && *avatarURL != "" {
+		_ = cloudinary.DeleteImage(ctx, *avatarURL)
+	}
+	return nil
 }

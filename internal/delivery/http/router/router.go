@@ -79,9 +79,13 @@ func New(
 				users.GET("/me/meal-streak", userHandler.GetMealStreak)
 				users.POST("/me/push-token", userHandler.RegisterPushToken)
 				users.DELETE("/me/push-token", userHandler.DeletePushToken)
+				users.PUT("/me/avatar", userHandler.UploadAvatarImage)
 				users.GET("/:id", placeholderHandler("Get user by ID"))
 				users.GET("/nutrition-target", userHandler.GetUserNutritionTarget)
 				users.PUT("/nutrition-target", userHandler.UpdateUserNutritionTarget)
+				// Backward compatibility (deprecated): use PUT /users/me/avatar
+				users.PUT("/avatar", userHandler.UploadAvatarImage)
+				users.DELETE("/me", userHandler.DeleteAccount)
 			}
 
 			// Exercise routes
