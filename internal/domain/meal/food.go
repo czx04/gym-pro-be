@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/pgvector/pgvector-go"
 )
 
 // FoodCategory represents the category of a food item
@@ -46,10 +47,11 @@ type Food struct {
 	FatG            float64    `json:"fat_g"`
 	FiberG          *float64   `json:"fiber_g,omitempty"`
 	IsSystem        bool       `json:"is_system"` // System food vs user custom
-	CreatedByUserID *uuid.UUID `json:"created_by_user_id,omitempty"`
-	Category        *string    `json:"category,omitempty"` // protein, carb, vegetable, fruit, dairy, etc.
-	CreatedAt       time.Time  `json:"created_at"`
-	UpdatedAt       time.Time  `json:"updated_at"`
+	CreatedByUserID *uuid.UUID       `json:"created_by_user_id,omitempty"`
+	Category        *string          `json:"category,omitempty"` // protein, carb, vegetable, fruit, dairy, etc.
+	Embedding       *pgvector.Vector `json:"-"`
+	CreatedAt       time.Time        `json:"created_at"`
+	UpdatedAt       time.Time        `json:"updated_at"`
 }
 
 // CreateFoodInput represents input for creating a food item

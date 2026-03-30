@@ -137,6 +137,8 @@ func New(
 				foods.POST("", foodHandler.CreateFood)
 				foods.PUT("/:id", foodHandler.UpdateFood)
 				foods.DELETE("/:id", foodHandler.DeleteFood)
+				foods.POST("/scan", foodHandler.ScanFood)
+				foods.POST("/sync-vectors", foodHandler.SyncVectors)
 			}
 
 			// Recipe routes

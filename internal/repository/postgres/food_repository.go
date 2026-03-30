@@ -10,6 +10,7 @@ import (
 	"gym-pro-2026-ptit/internal/infrastructure/database"
 
 	"github.com/google/uuid"
+	"github.com/pgvector/pgvector-go"
 )
 
 // FoodRepository implementation
@@ -94,7 +95,7 @@ func (r *foodRepository) List(ctx context.Context, userID uuid.UUID, page, pageS
 			category, created_at, updated_at
 		FROM foods 
 		WHERE is_system = true OR created_by_user_id = $1
-		ORDER BY is_system DESC, name ASC
+		ORDER BY created_at DESC
 		LIMIT $2 OFFSET $3
 	`
 	rows, err := r.db.Query(ctx, query, userID, pageSize, offset)
@@ -165,7 +166,7 @@ func (r *foodRepository) Search(ctx context.Context, filter meal.SearchFoodsFilt
 			category, created_at, updated_at
 		FROM foods 
 		` + baseWhere + `
-		ORDER BY is_system DESC, name ASC
+		ORDER BY created_at DESC
 		LIMIT $` + fmt.Sprint(argCount) + ` OFFSET $` + fmt.Sprint(argCount+1)
 
 	args = append(args, filter.PageSize, offset)
@@ -283,4 +284,74 @@ func (r *foodRepository) Delete(ctx context.Context, id uuid.UUID, userID uuid.U
 		return errors.New("food not found or you don't have permission to delete it")
 	}
 	return nil
+}
+
+func (r *foodRepository) GetAllFoods(ctx context.Context) ([]meal.Food, error) {
+	query := `
+		SELECT id, name, description, brand, image_url, barcode, serving_size, unit, calories, 
+			protein_g, carbs_g, fat_g, fiber_g, is_system, created_by_user_id, 
+			category, created_at, updated_at
+		FROM foods 
+	`
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var foods []meal.Food
+	for rows.Next() {
+		var food meal.Food
+		err := rows.Scan(
+			&food.ID, &food.Name, &food.Description, &food.Brand, &food.ImageUrl, &food.Barcode, &food.ServingSize, &food.Unit, &food.Calories,
+			&food.ProteinG, &food.CarbsG, &food.FatG, &food.FiberG, &food.IsSystem, &food.CreatedByUserID,
+			&food.Category, &food.CreatedAt, &food.UpdatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		foods = append(foods, food)
+	}
+	return foods, nil
+}
+
+func (r *foodRepository) UpdateVector(ctx context.Context, id uuid.UUID, embedding []float32) error {
+	vec := pgvector.NewVector(embedding)
+	query := `UPDATE foods SET embedding = $1 WHERE id = $2`
+	_, err := r.db.Exec(ctx, query, vec, id)
+	return err
+}
+
+func (r *foodRepository) SearchByVector(ctx context.Context, userID uuid.UUID, vector []float32, limit int) ([]meal.Food, error) {
+	vec := pgvector.NewVector(vector)
+	// Using cosine distance operator `<=>`
+	query := `
+		SELECT id, name, description, brand, image_url, barcode, serving_size, unit, calories, 
+			protein_g, carbs_g, fat_g, fiber_g, is_system, created_by_user_id, 
+			category, created_at, updated_at
+		FROM foods 
+		WHERE embedding IS NOT NULL AND (is_system = true OR created_by_user_id = $1)
+		ORDER BY embedding <=> $2
+		LIMIT $3
+	`
+	rows, err := r.db.Query(ctx, query, userID, vec, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var foods []meal.Food
+	for rows.Next() {
+		var food meal.Food
+		err := rows.Scan(
+			&food.ID, &food.Name, &food.Description, &food.Brand, &food.ImageUrl, &food.Barcode, &food.ServingSize, &food.Unit, &food.Calories,
+			&food.ProteinG, &food.CarbsG, &food.FatG, &food.FiberG, &food.IsSystem, &food.CreatedByUserID,
+			&food.Category, &food.CreatedAt, &food.UpdatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		foods = append(foods, food)
+	}
+	return foods, nil
 }

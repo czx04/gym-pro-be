@@ -4,11 +4,14 @@ import (
 	"context"
 	"time"
 
+	"fmt"
 	"gym-pro-2026-ptit/internal/domain/meal"
 	"gym-pro-2026-ptit/internal/domain/user"
+	"gym-pro-2026-ptit/internal/infrastructure/ai"
 	"gym-pro-2026-ptit/pkg/cloudinary"
 	"gym-pro-2026-ptit/pkg/errors"
 	"gym-pro-2026-ptit/pkg/validator"
+	"strings"
 
 	"github.com/google/uuid"
 )
@@ -17,13 +20,15 @@ type FoodUseCases struct {
 	foodRepo  meal.FoodRepository
 	userRepo  user.Repository
 	validator *validator.Validator
+	aiService ai.Service
 }
 
-func NewFoodUseCases(foodRepo meal.FoodRepository, userRepo user.Repository, validator *validator.Validator) *FoodUseCases {
+func NewFoodUseCases(foodRepo meal.FoodRepository, userRepo user.Repository, validator *validator.Validator, aiService ai.Service) *FoodUseCases {
 	return &FoodUseCases{
 		foodRepo:  foodRepo,
 		userRepo:  userRepo,
 		validator: validator,
+		aiService: aiService,
 	}
 }
 
@@ -100,7 +105,7 @@ func (uc *FoodUseCases) ListFoods(ctx context.Context, userID uuid.UUID, page, p
 	if page <= 0 {
 		page = 1
 	}
-	if pageSize <= 0 || pageSize > 100 {
+	if pageSize <= 0 {
 		pageSize = 20
 	}
 
@@ -116,7 +121,7 @@ func (uc *FoodUseCases) SearchFoods(ctx context.Context, userID uuid.UUID, filte
 	if filter.Page <= 0 {
 		filter.Page = 1
 	}
-	if filter.PageSize <= 0 || filter.PageSize > 100 {
+	if filter.PageSize <= 0 {
 		filter.PageSize = 20
 	}
 
@@ -210,4 +215,89 @@ func (uc *FoodUseCases) DeleteFood(ctx context.Context, id uuid.UUID, userID uui
 	}
 
 	return nil
+}
+
+func (uc *FoodUseCases) ScanFood(ctx context.Context, userID uuid.UUID, imageBytes []byte, mimeType string) ([]meal.Food, error) {
+	// 1. Analyze image to get list of potential foods
+	ingredients, err := uc.aiService.AnalyzeFoodImage(ctx, imageBytes, mimeType)
+	if err != nil {
+		return nil, errors.InternalServer("failed to analyze food image with AI", err)
+	}
+
+	if len(ingredients) == 0 {
+		return []meal.Food{}, nil
+	}
+
+	// 2. Generate vector embedding for the identified ingredients
+	textToEmbed := strings.Join(ingredients, ", ")
+	embedding, err := uc.aiService.GetEmbedding(ctx, textToEmbed)
+	if err != nil {
+		return nil, errors.InternalServer("failed to generate embedding for vector search", err)
+	}
+
+	// 3. Search database using vector
+	foods, err := uc.foodRepo.SearchByVector(ctx, userID, embedding, 3)
+	if err != nil {
+		return nil, errors.DatabaseError("failed to search foods by vector", err)
+	}
+
+	return foods, nil
+}
+
+type SyncVectorsResponse struct {
+	TotalProcessed int `json:"total_processed"`
+	SuccessCount   int `json:"success_count"`
+	ErrorCount     int `json:"error_count"`
+}
+
+func (uc *FoodUseCases) SyncVectors(ctx context.Context, userID uuid.UUID) (*SyncVectorsResponse, error) {
+	// Check if user is admin
+	// u, err := uc.userRepo.GetByID(ctx, userID)
+	// if err != nil || !u.IsAdmin() {
+	// 	return nil, errors.Forbidden("only admins can trigger vector sync")
+	// }
+
+	foods, err := uc.foodRepo.GetAllFoods(ctx)
+	if err != nil {
+		return nil, errors.DatabaseError("failed to get all foods", err)
+	}
+
+	resp := &SyncVectorsResponse{
+		TotalProcessed: len(foods),
+		SuccessCount:   0,
+		ErrorCount:     0,
+	}
+
+	for _, food := range foods {
+		// Prepare text for vector embedding
+		desc := ""
+		if food.Description != nil {
+			desc = *food.Description
+		}
+		cat := ""
+		if food.Category != nil {
+			cat = *food.Category
+		}
+
+		textToEmbed := fmt.Sprintf("%s. %s. Category: %s", food.Name, desc, cat)
+
+		embedding, err := uc.aiService.GetEmbedding(ctx, textToEmbed)
+		if err != nil {
+			fmt.Printf("Error generating embedding for food %s (ID %s): %v\n", food.Name, food.ID, err)
+			resp.ErrorCount++
+			continue
+		}
+
+		if err := uc.foodRepo.UpdateVector(ctx, food.ID, embedding); err != nil {
+			fmt.Printf("Error updating vector for food %s (ID %s): %v\n", food.Name, food.ID, err)
+			resp.ErrorCount++
+			continue
+		}
+		resp.SuccessCount++
+
+		// Avoid hitting rate limits
+		time.Sleep(300 * time.Millisecond)
+	}
+
+	return resp, nil
 }
