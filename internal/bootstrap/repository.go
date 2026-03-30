@@ -46,6 +46,14 @@ func ProvideMealDailyRepository(db *database.DB) meal.MealDailyRepository {
 	return postgres.NewMealDailyRepository(db)
 }
 
+func ProvideUserMealStreakRepository(db *database.DB) meal.UserMealStreakRepository {
+	return postgres.NewUserMealStreakRepository(db)
+}
+
+func ProvidePushTokenRepository(db *database.DB) meal.PushTokenRepository {
+	return postgres.NewPushTokenRepository(db)
+}
+
 // Social repositories
 func ProvideFollowRepository(db *database.DB) social.FollowRepository {
 	return postgres.NewFollowRepository(db)
@@ -78,6 +86,8 @@ var RepositoryProviders = fx.Options(
 		ProvideRecipeRepository,
 		ProvideMealLogRepository,
 		ProvideMealDailyRepository,
+		ProvideUserMealStreakRepository,
+		ProvidePushTokenRepository,
 		ProvideFollowRepository,
 		ProvidePostRepository,
 		ProvideLikeRepository,

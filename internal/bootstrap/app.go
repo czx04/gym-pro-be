@@ -30,6 +30,7 @@ func NewApp() *fx.App {
 			ProvidePasswordManager,
 			ProvideOTPService,
 			ProvideEmailService,
+			ProvideAIService,
 		),
 
 		// Data Layer (Repositories)
@@ -50,6 +51,7 @@ func NewApp() *fx.App {
 			RegisterAutoMigrateHook,
 			RegisterInfrastructureHooks,
 			RegisterWebSocketHooks,
+			RegisterMealReminderCron,
 			RegisterRouterHooks,
 			RegisterAppLifecycle,
 		),
