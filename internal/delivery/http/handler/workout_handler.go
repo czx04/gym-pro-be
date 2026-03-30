@@ -246,6 +246,30 @@ func (h *WorkoutHandler) GetSessionsByDate(c *gin.Context) {
 	response.Success(c, list)
 }
 
+// DeleteWorkoutSession godoc
+// @Summary Delete one workout session
+// @Tags workout-sessions
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "Session ID"
+// @Success 200 {object} response.Response
+// @Router /workout-sessions/{id} [delete]
+func (h *WorkoutHandler) DeleteWorkoutSession(c *gin.Context) {
+	user, err := middleware.GetUser(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	err = h.workoutUC.DeleteWorkoutSession(c.Request.Context(), user.ID, c.Param("id"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	response.Success(c, nil)
+}
+
 // GetSessionByID godoc
 // @Summary Get session detail for tracking screen
 // @Tags workout-sessions
