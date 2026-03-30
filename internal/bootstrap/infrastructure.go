@@ -9,6 +9,7 @@ import (
 	"gym-pro-2026-ptit/internal/infrastructure/email"
 	"gym-pro-2026-ptit/internal/infrastructure/logger"
 	"gym-pro-2026-ptit/internal/infrastructure/otp"
+	"gym-pro-2026-ptit/internal/infrastructure/ai"
 
 	"go.uber.org/fx"
 )
@@ -44,6 +45,10 @@ func ProvideOTPService(cache *cache.Cache) otp.Service {
 
 func ProvideEmailService(cfg *config.Config) email.Service {
 	return email.NewEmailService(&cfg.Email)
+}
+
+func ProvideAIService() ai.Service {
+	return ai.NewGeminiService()
 }
 
 func RegisterInfrastructureHooks(lc fx.Lifecycle, db *database.DB, cache *cache.Cache) {

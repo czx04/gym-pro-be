@@ -109,17 +109,6 @@ func New(
 				workoutPlans.DELETE("/:id/exercises/:exerciseId", placeholderHandler("Remove exercise from plan"))
 			}
 
-			// Workout Schedule routes
-			workoutSchedules := authenticated.Group("/workout-schedules")
-			{
-				workoutSchedules.POST("", placeholderHandler("Schedule workout"))
-				workoutSchedules.POST("/bulk", placeholderHandler("Bulk schedule workouts"))
-				workoutSchedules.GET("", placeholderHandler("List schedules"))
-				workoutSchedules.GET("/calendar/:year/:month", placeholderHandler("Calendar view"))
-				workoutSchedules.PUT("/:id", placeholderHandler("Update schedule"))
-				workoutSchedules.DELETE("/:id", placeholderHandler("Delete schedule"))
-			}
-
 			// Workout Session routes (calendar & tracking)
 			workoutSessions := authenticated.Group("/workout-sessions")
 			{
@@ -127,6 +116,7 @@ func New(
 				workoutSessions.GET("/weekly-summary", workoutHandler.GetWeeklyWorkoutSummary)
 				workoutSessions.GET("", workoutHandler.GetSessionsByDate)
 				workoutSessions.GET("/:id", workoutHandler.GetSessionByID)
+				workoutSessions.DELETE("/:id", workoutHandler.DeleteWorkoutSession)
 				workoutSessions.POST("", workoutHandler.CreateWorkoutSession)
 				workoutSessions.PATCH("/:id", workoutHandler.UpdateWorkoutSession)
 				workoutSessions.PATCH("/:id/exercise-sets/:setId", workoutHandler.UpdateSessionSet)
@@ -142,6 +132,8 @@ func New(
 				foods.POST("", foodHandler.CreateFood)
 				foods.PUT("/:id", foodHandler.UpdateFood)
 				foods.DELETE("/:id", foodHandler.DeleteFood)
+				foods.POST("/scan", foodHandler.ScanFood)
+				foods.POST("/sync-vectors", foodHandler.SyncVectors)
 			}
 
 			// Recipe routes
