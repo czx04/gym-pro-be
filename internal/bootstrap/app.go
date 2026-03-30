@@ -50,6 +50,7 @@ func NewApp() *fx.App {
 			RegisterAutoMigrateHook,
 			RegisterInfrastructureHooks,
 			RegisterWebSocketHooks,
+			RegisterMealReminderCron,
 			RegisterRouterHooks,
 			RegisterAppLifecycle,
 		),

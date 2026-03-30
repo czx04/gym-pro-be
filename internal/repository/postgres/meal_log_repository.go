@@ -563,6 +563,40 @@ func (r *mealLogRepository) GetStats(ctx context.Context, userID uuid.UUID, star
 	return &stats, nil
 }
 
+// ListAllDistinctLogDateStrings returns sorted YYYY-MM-DD from meal_logs.
+func (r *mealLogRepository) ListAllDistinctLogDateStrings(ctx context.Context, userID uuid.UUID) ([]string, error) {
+	query := `
+		SELECT to_char(log_date, 'YYYY-MM-DD')
+		FROM meal_logs
+		WHERE user_id = $1
+		GROUP BY log_date
+		ORDER BY log_date
+	`
+	rows, err := r.db.Query(ctx, query, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []string
+	for rows.Next() {
+		var s string
+		if err := rows.Scan(&s); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
+// HasMealLogOnDate returns true if there is at least one meal log on that date.
+func (r *mealLogRepository) HasMealLogOnDate(ctx context.Context, userID uuid.UUID, date time.Time) (bool, error) {
+	query := `SELECT EXISTS (SELECT 1 FROM meal_logs WHERE user_id = $1 AND log_date = $2::date)`
+	var ok bool
+	err := r.db.QueryRow(ctx, query, userID, date).Scan(&ok)
+	return ok, err
+}
+
 // derefFloat64 safely dereferences a *float64, returning 0 if nil.
 func derefFloat64(f *float64) float64 {
 	if f == nil {

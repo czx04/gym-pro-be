@@ -19,6 +19,7 @@ type MealLogUseCases struct {
 	foodRepo      meal.FoodRepository
 	recipeRepo    meal.RecipeRepository
 	mealDailyUC   *MealDailyUseCases
+	streakUC      *MealStreakUseCases
 	validator     *validator.Validator
 }
 
@@ -27,6 +28,7 @@ func NewMealLogUseCases(
 	foodRepo meal.FoodRepository,
 	recipeRepo meal.RecipeRepository,
 	mealDailyUC *MealDailyUseCases,
+	streakUC *MealStreakUseCases,
 	validator *validator.Validator,
 ) *MealLogUseCases {
 	return &MealLogUseCases{
@@ -34,6 +36,7 @@ func NewMealLogUseCases(
 		foodRepo:      foodRepo,
 		recipeRepo:    recipeRepo,
 		mealDailyUC:   mealDailyUC,
+		streakUC:      streakUC,
 		validator:     validator,
 	}
 }
@@ -49,7 +52,6 @@ func (uc *MealLogUseCases) CreateMealLog(ctx context.Context, userID uuid.UUID, 
 		return nil, errors.DatabaseError("failed to check existing meal logs", err)
 	}
 	for _, l := range existingLogs {
-		fmt.Println(l.MealTime, input.MealTime)
 		if l.MealTime == input.MealTime {
 			return nil, errors.Conflict(fmt.Sprintf("meal log for %s already exists on this date", input.MealTime))
 		}
@@ -90,6 +92,7 @@ func (uc *MealLogUseCases) CreateMealLog(ctx context.Context, userID uuid.UUID, 
 	}
 
 	uc.roundMealLog(log)
+	uc.notifyStreakUpdate(ctx, userID)
 	return log, nil
 }
 
@@ -194,6 +197,7 @@ func (uc *MealLogUseCases) UpdateMealLog(ctx context.Context, id, userID uuid.UU
 	}
 
 	uc.roundMealLog(log)
+	uc.notifyStreakUpdate(ctx, userID)
 	return log, nil
 }
 
@@ -211,7 +215,15 @@ func (uc *MealLogUseCases) DeleteMealLog(ctx context.Context, id, userID uuid.UU
 		return errors.DatabaseError("failed to delete meal log", err)
 	}
 
+	uc.notifyStreakUpdate(ctx, userID)
 	return nil
+}
+
+func (uc *MealLogUseCases) notifyStreakUpdate(ctx context.Context, userID uuid.UUID) {
+	if uc.streakUC == nil {
+		return
+	}
+	_, _ = uc.streakUC.RecalculatePersistAndNotify(ctx, userID)
 }
 
 // addItemToLog validates, calculates nutrition, and persists a meal log item.

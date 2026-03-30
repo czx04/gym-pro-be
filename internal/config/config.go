@@ -22,6 +22,12 @@ type Config struct {
 	Cache      CacheConfig
 	Email      EmailConfig
 	Cloudinary CloudinaryConfig
+	Expo       ExpoConfig
+}
+
+// ExpoConfig holds Expo push credentials (https://expo.dev/accounts/[account]/settings/access-tokens).
+type ExpoConfig struct {
+	AccessToken string
 }
 
 // CloudinaryConfig
@@ -224,6 +230,9 @@ func Load() (*Config, error) {
 		},
 		Cloudinary: CloudinaryConfig{
 			URL: getEnv("CLOUDINARY_URL", ""),
+		},
+		Expo: ExpoConfig{
+			AccessToken: getEnv("EXPO_ACCESS_TOKEN", ""),
 		},
 	}
 
