@@ -30,6 +30,7 @@ func NewApp() *fx.App {
 			ProvidePasswordManager,
 			ProvideOTPService,
 			ProvideEmailService,
+			ProvideAIService,
 		),
 
 		// Data Layer (Repositories)

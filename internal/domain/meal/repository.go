@@ -29,6 +29,15 @@ type FoodRepository interface {
 
 	// Delete deletes a food item (only custom foods)
 	Delete(ctx context.Context, id uuid.UUID, userID uuid.UUID) error
+
+	// GetAllFoods retrieves all foods that need vector syncing
+	GetAllFoods(ctx context.Context) ([]Food, error)
+
+	// UpdateVector updates the pgvector embedding for a food
+	UpdateVector(ctx context.Context, id uuid.UUID, embedding []float32) error
+
+	// SearchByVector performs a cosine similarity search on food vectors (filtered by system or ownership)
+	SearchByVector(ctx context.Context, userID uuid.UUID, vector []float32, limit int) ([]Food, error)
 }
 
 // RecipeRepository defines the interface for recipe data access

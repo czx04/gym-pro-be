@@ -115,7 +115,7 @@ func (uc *RecipeUseCases) ListRecipes(ctx context.Context, userID uuid.UUID, pag
 	if page <= 0 {
 		page = 1
 	}
-	if pageSize <= 0 || pageSize > 100 {
+	if pageSize <= 0 {
 		pageSize = 20
 	}
 
