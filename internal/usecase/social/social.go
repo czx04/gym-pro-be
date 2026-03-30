@@ -308,7 +308,6 @@ type PostOutput struct {
 	Author                AuthorOutput                 `json:"author"`
 	ContentType           string                       `json:"content_type"`
 	ContentID             *uuid.UUID                   `json:"content_id"`
-	StreakText            string                       `json:"streak_text"`
 	TimeLabel             string                       `json:"time_label"`
 	Caption               string                       `json:"caption"`
 	Media                 []PostMediaOutput            `json:"media"`
@@ -339,7 +338,6 @@ type UserProfileOutput struct {
 	Name           string    `json:"name"`
 	AvatarURL      *string   `json:"avatar_url,omitempty"`
 	Subtitle       string    `json:"subtitle"`
-	StreakValue    int       `json:"streak_value"`
 	PostsCount     int64     `json:"posts_count"`
 	FollowersCount int       `json:"followers_count"`
 	FollowingCount int       `json:"following_count"`
@@ -654,7 +652,6 @@ func (uc *SocialUseCases) GetUserProfile(ctx context.Context, currentUserID uuid
 		Name:           u.Name,
 		AvatarURL:      u.AvatarURL,
 		Subtitle:       subtitle,
-		StreakValue:    0,
 		PostsCount:     totalPosts,
 		FollowersCount: stats.FollowersCount,
 		FollowingCount: stats.FollowingCount,
@@ -1017,7 +1014,6 @@ func mapPost(post *socialdomain.Post, isLiked, isInterested, isNotInterested boo
 		Author:              author,
 		ContentType:         post.ContentType,
 		ContentID:           post.ContentID,
-		StreakText:          "0 DAY STREAK",
 		TimeLabel:           humanizeTime(post.CreatedAt),
 		Caption:             caption,
 		Media:               media,
