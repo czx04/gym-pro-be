@@ -4,7 +4,9 @@ import (
 	"time"
 
 	"gym-pro-2026-ptit/internal/delivery/http/middleware"
+	mealdomain "gym-pro-2026-ptit/internal/domain/meal"
 	domainuser "gym-pro-2026-ptit/internal/domain/user"
+	mealuc "gym-pro-2026-ptit/internal/usecase/meal"
 	useruc "gym-pro-2026-ptit/internal/usecase/user"
 	"gym-pro-2026-ptit/pkg/errors"
 	"gym-pro-2026-ptit/pkg/response"
@@ -18,12 +20,24 @@ var _ = domainuser.UserNutritionTarget{}
 // Keeps domainuser.WeightHistoryPoint in scope for swag.
 var _ = domainuser.WeightHistoryPoint{}
 
+var _ = mealdomain.RegisterPushTokenInput{}
+
 type UserHandler struct {
-	userUC *useruc.UserUseCases
+	userUC       *useruc.UserUseCases
+	mealStreakUC *mealuc.MealStreakUseCases
+	pushTokenUC  *mealuc.PushTokenUseCases
 }
 
-func NewUserHandler(userUC *useruc.UserUseCases) *UserHandler {
-	return &UserHandler{userUC: userUC}
+func NewUserHandler(
+	userUC *useruc.UserUseCases,
+	mealStreakUC *mealuc.MealStreakUseCases,
+	pushTokenUC *mealuc.PushTokenUseCases,
+) *UserHandler {
+	return &UserHandler{
+		userUC:       userUC,
+		mealStreakUC: mealStreakUC,
+		pushTokenUC:  pushTokenUC,
+	}
 }
 
 // GetUserNutritionTarget godoc
@@ -139,4 +153,59 @@ func (h *UserHandler) UpdateUserNutritionTarget(c *gin.Context) {
 		return
 	}
 	response.Success(c, target)
+}
+
+// GetMealStreak returns current and longest meal logging streak (recomputed from logs).
+func (h *UserHandler) GetMealStreak(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	s, err := h.mealStreakUC.RecalculateAndPersist(c.Request.Context(), userID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, s)
+}
+
+// RegisterPushToken stores an Expo push token for daily meal reminders.
+func (h *UserHandler) RegisterPushToken(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	var body mealdomain.RegisterPushTokenInput
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, errors.BadRequest("invalid request body"))
+		return
+	}
+	if err := h.pushTokenUC.Register(c.Request.Context(), userID, body); err != nil {
+		response.Error(c, err)
+		return
+	}
+	c.Status(204)
+}
+
+// DeletePushToken removes a registered Expo push token.
+func (h *UserHandler) DeletePushToken(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	var body struct {
+		ExpoPushToken string `json:"expo_push_token"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, errors.BadRequest("invalid request body"))
+		return
+	}
+	if err := h.pushTokenUC.Delete(c.Request.Context(), userID, body.ExpoPushToken); err != nil {
+		response.Error(c, err)
+		return
+	}
+	c.Status(204)
 }
