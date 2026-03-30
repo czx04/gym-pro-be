@@ -3,6 +3,7 @@ package workout
 import (
 	"context"
 	"gym-pro-2026-ptit/internal/infrastructure/database"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -104,6 +105,7 @@ type WorkoutSessionRepository interface {
 	GetScheduledDates(ctx context.Context, userID uuid.UUID, month, year int) ([]string, error)
 	GetByDate(ctx context.Context, userID uuid.UUID, date string) ([]WorkoutSession, error)
 	UpdateSet(ctx context.Context, setID uuid.UUID, input UpdateSessionSetInput) error
+	GetWeeklyAggregate(ctx context.Context, userID uuid.UUID, start, end time.Time) (*WeeklyWorkoutMetrics, error)
 
 	GetExerciseStats(ctx context.Context, userID, exerciseID uuid.UUID) (*ExerciseStats, error)
 }

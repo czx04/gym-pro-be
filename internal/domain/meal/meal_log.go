@@ -55,6 +55,8 @@ type CreateMealLogInput struct {
 
 // UpdateMealLogInput represents input for updating a meal log
 type UpdateMealLogInput struct {
+	LogDate     *time.Time              `json:"log_date,omitempty"`
+	MealTime    *string                 `json:"meal_time,omitempty" validate:"omitempty,oneof=breakfast lunch dinner snack other"`
 	Notes       *string                 `json:"notes,omitempty" validate:"omitempty,max=1000"`
 	Mood        *string                 `json:"mood,omitempty" validate:"omitempty,oneof=great good okay tired"`
 	EnergyLevel *int                    `json:"energy_level,omitempty" validate:"omitempty,gte=1,lte=5"`
@@ -126,6 +128,12 @@ type NutritionStats struct {
 }
 // GetNutritionStatsRequest holds the query parameters for the stats API
 type GetNutritionStatsRequest struct {
+	StartDate string `form:"start_date" binding:"required"`
+	EndDate   string `form:"end_date" binding:"required"`
+}
+
+// ListLoggedDatesQuery holds query params for days that have at least one meal log
+type ListLoggedDatesQuery struct {
 	StartDate string `form:"start_date" binding:"required"`
 	EndDate   string `form:"end_date" binding:"required"`
 }

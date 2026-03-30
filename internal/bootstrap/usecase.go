@@ -15,6 +15,9 @@ var UseCaseProviders = fx.Options(
 	fx.Provide(exerciseuc.NewExerciseUseCases),
 	fx.Provide(mealuc.NewFoodUseCases),
 	fx.Provide(mealuc.NewRecipeUseCases),
+	fx.Provide(mealuc.NewMealStreakUseCases),
+	fx.Provide(mealuc.NewPushTokenUseCases),
 	fx.Provide(mealuc.NewMealLogUseCases),
-	fx.Provide(ProvideSocialUseCases),
+	fx.Provide(mealuc.NewMealDailyUseCases),
+	fx.Provide(socialuc.NewSocialUseCases),
 )

@@ -4,6 +4,7 @@ import (
 	"gym-pro-2026-ptit/internal/config"
 	"gym-pro-2026-ptit/internal/delivery/http/handler"
 	"gym-pro-2026-ptit/internal/delivery/http/middleware"
+	"gym-pro-2026-ptit/internal/delivery/http/websocket"
 
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
@@ -19,12 +20,14 @@ type Router struct {
 func New(
 	cfg *config.Config,
 	authMiddleware middleware.AuthMiddleware,
+	wsHub *websocket.Hub,
 	authHandler *handler.AuthHandler,
 	workoutHandler *handler.WorkoutHandler,
 	exerciseHandler *handler.ExerciseHandler,
 	foodHandler *handler.FoodHandler,
 	recipeHandler *handler.RecipeHandler,
 	mealLogHandler *handler.MealLogHandler,
+	mealDailyHandler *handler.MealDailyHandler,
 	userHandler *handler.UserHandler,
 	socialHandler *handler.SocialHandler,
 ) *Router {
@@ -45,6 +48,8 @@ func New(
 	v1 := engine.Group("/api/v1")
 	{
 		//v1.Use(middleware.RateLimitMiddleware(&cfg.RateLimit))
+
+		wsHub.RegisterRoutes(v1)
 
 		authRoutes := v1.Group("/auth")
 		{
@@ -70,6 +75,10 @@ func New(
 			{
 				users.GET("/me", authHandler.GetMe)
 				users.PUT("/me", authHandler.UpdateMe)
+				users.GET("/me/weight-history", userHandler.GetMyWeightHistory)
+				users.GET("/me/meal-streak", userHandler.GetMealStreak)
+				users.POST("/me/push-token", userHandler.RegisterPushToken)
+				users.DELETE("/me/push-token", userHandler.DeletePushToken)
 				users.GET("/:id", placeholderHandler("Get user by ID"))
 				users.GET("/nutrition-target", userHandler.GetUserNutritionTarget)
 				users.PUT("/nutrition-target", userHandler.UpdateUserNutritionTarget)
@@ -113,6 +122,7 @@ func New(
 			workoutSessions := authenticated.Group("/workout-sessions")
 			{
 				workoutSessions.GET("/scheduled-dates", workoutHandler.GetScheduledDates)
+				workoutSessions.GET("/weekly-summary", workoutHandler.GetWeeklyWorkoutSummary)
 				workoutSessions.GET("", workoutHandler.GetSessionsByDate)
 				workoutSessions.GET("/:id", workoutHandler.GetSessionByID)
 				workoutSessions.POST("", workoutHandler.CreateWorkoutSession)
@@ -130,6 +140,8 @@ func New(
 				foods.POST("", foodHandler.CreateFood)
 				foods.PUT("/:id", foodHandler.UpdateFood)
 				foods.DELETE("/:id", foodHandler.DeleteFood)
+				foods.POST("/scan", foodHandler.ScanFood)
+				foods.POST("/sync-vectors", foodHandler.SyncVectors)
 			}
 
 			// Recipe routes
@@ -152,10 +164,17 @@ func New(
 			{
 				mealLogs.POST("", mealLogHandler.CreateMealLog)
 				mealLogs.GET("/stats", mealLogHandler.GetNutritionStats)
+				mealLogs.GET("/logged-dates", mealLogHandler.ListLoggedDates)
 				mealLogs.GET("/date/:date", mealLogHandler.GetMealLogsByDate)
 				mealLogs.GET("/:id", mealLogHandler.GetMealLog)
 				mealLogs.PUT("/:id", mealLogHandler.UpdateMealLog)
 				mealLogs.DELETE("/:id", mealLogHandler.DeleteMealLog)
+			}
+
+			// Meal Daily routes
+			mealDaily := authenticated.Group("/meal-daily")
+			{
+				mealDaily.GET("/date/:date", mealDailyHandler.GetMealDailyTargetByDate)
 			}
 
 			// Social routes

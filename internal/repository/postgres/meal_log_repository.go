@@ -168,12 +168,47 @@ func (r *mealLogRepository) GetByDate(ctx context.Context, userID uuid.UUID, dat
 	return logs, nil
 }
 
+// ListDistinctLogDates returns each calendar day in [from, to] that has at least one meal log.
+func (r *mealLogRepository) ListDistinctLogDates(ctx context.Context, userID uuid.UUID, from, to time.Time) ([]time.Time, error) {
+	query := `
+		SELECT DISTINCT log_date
+		FROM meal_logs
+		WHERE user_id = $1 AND log_date >= $2::date AND log_date <= $3::date
+		ORDER BY log_date
+	`
+	rows, err := r.db.Query(ctx, query, userID, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var dates []time.Time
+	for rows.Next() {
+		var d time.Time
+		if err := rows.Scan(&d); err != nil {
+			return nil, err
+		}
+		dates = append(dates, d.UTC().Truncate(24*time.Hour))
+	}
+	return dates, rows.Err()
+}
+
 // Update applies partial updates (notes, mood, energy_level) to a meal log.
 func (r *mealLogRepository) Update(ctx context.Context, id uuid.UUID, input meal.UpdateMealLogInput) error {
 	setClauses := []string{"updated_at = CURRENT_TIMESTAMP"}
 	args := []interface{}{id}
 	argID := 2
 
+	if input.LogDate != nil {
+		setClauses = append(setClauses, fmt.Sprintf("log_date = $%d", argID))
+		args = append(args, *input.LogDate)
+		argID++
+	}
+	if input.MealTime != nil {
+		setClauses = append(setClauses, fmt.Sprintf("meal_time = $%d", argID))
+		args = append(args, *input.MealTime)
+		argID++
+	}
 	if input.Notes != nil {
 		setClauses = append(setClauses, fmt.Sprintf("notes = $%d", argID))
 		args = append(args, *input.Notes)
@@ -526,6 +561,40 @@ func (r *mealLogRepository) GetStats(ctx context.Context, userID uuid.UUID, star
 	}
 
 	return &stats, nil
+}
+
+// ListAllDistinctLogDateStrings returns sorted YYYY-MM-DD from meal_logs.
+func (r *mealLogRepository) ListAllDistinctLogDateStrings(ctx context.Context, userID uuid.UUID) ([]string, error) {
+	query := `
+		SELECT to_char(log_date, 'YYYY-MM-DD')
+		FROM meal_logs
+		WHERE user_id = $1
+		GROUP BY log_date
+		ORDER BY log_date
+	`
+	rows, err := r.db.Query(ctx, query, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []string
+	for rows.Next() {
+		var s string
+		if err := rows.Scan(&s); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
+// HasMealLogOnDate returns true if there is at least one meal log on that date.
+func (r *mealLogRepository) HasMealLogOnDate(ctx context.Context, userID uuid.UUID, date time.Time) (bool, error) {
+	query := `SELECT EXISTS (SELECT 1 FROM meal_logs WHERE user_id = $1 AND log_date = $2::date)`
+	var ok bool
+	err := r.db.QueryRow(ctx, query, userID, date).Scan(&ok)
+	return ok, err
 }
 
 // derefFloat64 safely dereferences a *float64, returning 0 if nil.

@@ -31,6 +31,7 @@ func NewApp() *fx.App {
 			ProvidePasswordManager,
 			ProvideOTPService,
 			ProvideEmailService,
+			ProvideAIService,
 		),
 
 		// Data Layer (Repositories)
@@ -42,9 +43,8 @@ func NewApp() *fx.App {
 		// HTTP Layer (Handlers & Router)
 		HandlerProviders,
 		fx.Provide(ProvideAuthMiddleware),
-		fx.Provide(ws.NewHub),
+		fx.Provide(ProvideWebSocketHub),
 		fx.Provide(ProvideSocialBroadcaster),
-		fx.Provide(ws.NewHandler),
 		fx.Provide(ProvideRouter),
 
 		// Lifecycle hooks
@@ -52,6 +52,8 @@ func NewApp() *fx.App {
 			InitGlobalLogger,
 			RegisterAutoMigrateHook,
 			RegisterInfrastructureHooks,
+			RegisterWebSocketHooks,
+			RegisterMealReminderCron,
 			RegisterRouterHooks,
 			RegisterSocialWebSocketHook,
 			RegisterAppLifecycle,

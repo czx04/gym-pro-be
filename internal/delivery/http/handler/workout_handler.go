@@ -383,3 +383,39 @@ func (h *WorkoutHandler) FinishWorkoutSession(c *gin.Context) {
 	}
 	response.Success(c, session)
 }
+
+// GetWeeklyWorkoutSummary godoc
+// @Summary Get weekly workout summary
+// @Description Get weekly training summary with week-over-week trends and recommendations
+// @Tags workout-sessions
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param start_date query string true "Start Date (YYYY-MM-DD)"
+// @Param end_date query string true "End Date (YYYY-MM-DD)"
+// @Success 200 {object} response.Response{data=workout.WeeklyWorkoutSummary}
+// @Failure 400 {object} response.Response
+// @Failure 401 {object} response.Response
+// @Failure 500 {object} response.Response
+// @Router /workout-sessions/weekly-summary [get]
+func (h *WorkoutHandler) GetWeeklyWorkoutSummary(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	var input workout.GetWeeklySummaryRequest
+	if err := c.ShouldBindQuery(&input); err != nil {
+		response.Error(c, errors.BadRequest("invalid query parameters"))
+		return
+	}
+
+	summary, err := h.workoutUC.GetWeeklySummary(c.Request.Context(), userID, input)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	response.Success(c, summary)
+}

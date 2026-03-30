@@ -29,6 +29,15 @@ type FoodRepository interface {
 
 	// Delete deletes a food item (only custom foods)
 	Delete(ctx context.Context, id uuid.UUID, userID uuid.UUID) error
+
+	// GetAllFoods retrieves all foods that need vector syncing
+	GetAllFoods(ctx context.Context) ([]Food, error)
+
+	// UpdateVector updates the pgvector embedding for a food
+	UpdateVector(ctx context.Context, id uuid.UUID, embedding []float32) error
+
+	// SearchByVector performs a cosine similarity search on food vectors (filtered by system or ownership)
+	SearchByVector(ctx context.Context, userID uuid.UUID, vector []float32, limit int) ([]Food, error)
 }
 
 // RecipeRepository defines the interface for recipe data access
@@ -107,4 +116,48 @@ type MealLogRepository interface {
 
 	// GetStats retrieves nutrition statistics for a period
 	GetStats(ctx context.Context, userID uuid.UUID, startDate, endDate time.Time, period string) (*NutritionStats, error)
+
+	// ListDistinctLogDates returns calendar dates (UTC midnight) that have at least one meal log in [from, to].
+	ListDistinctLogDates(ctx context.Context, userID uuid.UUID, from, to time.Time) ([]time.Time, error)
+
+	// ListAllDistinctLogDateStrings returns sorted YYYY-MM-DD values from meal_logs (civil dates as stored).
+	ListAllDistinctLogDateStrings(ctx context.Context, userID uuid.UUID) ([]string, error)
+
+	// HasMealLogOnDate returns true if the user has at least one meal log on that calendar date.
+	HasMealLogOnDate(ctx context.Context, userID uuid.UUID, date time.Time) (bool, error)
+}
+
+// UserMealStreakRepository persists cached meal streak counters.
+type UserMealStreakRepository interface {
+	GetByUserID(ctx context.Context, userID uuid.UUID) (*MealStreak, error)
+	Upsert(ctx context.Context, streak *MealStreak) error
+}
+
+// PushTokenRow is a user + device token for Expo push.
+type PushTokenRow struct {
+	UserID        uuid.UUID
+	ExpoPushToken string
+}
+
+// PushTokenRepository stores Expo push tokens per user.
+type PushTokenRepository interface {
+	Upsert(ctx context.Context, userID uuid.UUID, expoPushToken, platform string) error
+	DeleteByUserAndToken(ctx context.Context, userID uuid.UUID, expoPushToken string) error
+	// ListTokensUsersWithoutMealOnDate returns rows for users who have no meal log on that calendar date.
+	ListTokensUsersWithoutMealOnDate(ctx context.Context, date time.Time) ([]PushTokenRow, error)
+}
+
+// MealDailyRepository defines the interface for meal daily targets data access
+type MealDailyRepository interface {
+	// InsertOrUpdate creates or updates a meal daily target (ON CONFLICT DO NOTHING)
+	InsertOrUpdate(ctx context.Context, mealDaily *MealDaily) error
+
+	// UpsertTargets inserts or updates target columns for (user_id, date).
+	UpsertTargets(ctx context.Context, mealDaily *MealDaily) error
+
+	// GetByDate retrieves a meal daily target by exact date
+	GetByDate(ctx context.Context, userID uuid.UUID, date time.Time) (*MealDaily, error)
+
+	// GetLatestBeforeDate retrieves the most recent meal daily target before a given date
+	GetLatestBeforeDate(ctx context.Context, userID uuid.UUID, date time.Time) (*MealDaily, error)
 }

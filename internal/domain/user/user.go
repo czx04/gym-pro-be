@@ -60,6 +60,31 @@ type UserNutritionTarget struct {
 	FatTargetG         *int `json:"fat_target_g,omitempty"`
 }
 
+type WeightHistory struct {
+	ID         uuid.UUID `json:"id"`
+	UserID     uuid.UUID `json:"user_id"`
+	WeightKg   float64   `json:"weight_kg"`
+	MeasuredAt time.Time `json:"measured_at"`
+	Source     string    `json:"source"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+// WeightHistoryGranularity controls how weight samples are bucketed for charts.
+type WeightHistoryGranularity string
+
+const (
+	WeightHistoryGranularityDay   WeightHistoryGranularity = "day"
+	WeightHistoryGranularityWeek  WeightHistoryGranularity = "week"
+	WeightHistoryGranularityMonth WeightHistoryGranularity = "month"
+)
+
+// WeightHistoryPoint is one chart point: latest measurement within each calendar bucket (in timezone).
+type WeightHistoryPoint struct {
+	PeriodStart time.Time `json:"period_start"`
+	WeightKg    float64   `json:"weight_kg"`
+	MeasuredAt  time.Time `json:"measured_at"`
+}
+
 type LoginInput struct {
 	Email    string `json:"email" validate:"required,email"`
 	Password string `json:"password" validate:"required"`
