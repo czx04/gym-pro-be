@@ -25,10 +25,6 @@ func ProvideWorkoutPlanRepository(db *database.DB) workout.WorkoutPlanRepository
 	return postgres.NewWorkoutPlanRepository(db)
 }
 
-func ProvideWorkoutScheduleRepository(db *database.DB) workout.WorkoutScheduleRepository {
-	return postgres.NewWorkoutScheduleRepository(db)
-}
-
 func ProvideWorkoutSessionRepository(db *database.DB) workout.WorkoutSessionRepository {
 	return postgres.NewWorkoutSessionRepository(db)
 }
@@ -77,7 +73,6 @@ var RepositoryProviders = fx.Options(
 		ProvideUserRepository,
 		ProvideExerciseRepository,
 		ProvideWorkoutPlanRepository,
-		ProvideWorkoutScheduleRepository,
 		ProvideWorkoutSessionRepository,
 		ProvideFoodRepository,
 		ProvideRecipeRepository,
