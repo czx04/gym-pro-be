@@ -53,6 +53,12 @@ type (
 		FatTargetG         *int    `json:"fat_target_g,omitempty" validate:"omitempty,gte=0,lte=300"`
 		EffectiveDate      *string `json:"effective_date,omitempty"`
 	}
+
+	UpsertDailyStepsInput struct {
+		Date   string `json:"date" validate:"required"` // YYYY-MM-DD
+		Steps  int    `json:"steps" validate:"gte=0,lte=500000"`
+		Source string `json:"source,omitempty"`
+	}
 )
 
 // UserUseCases groups all user/auth use cases with a single dependency set.
@@ -273,6 +279,7 @@ func (uc *UserUseCases) GetUserNutritionTarget(ctx context.Context, userID uuid.
 }
 
 const maxWeightHistoryQueryRange = 732 * 24 * time.Hour // 2 years
+const maxDailyStepsQueryRange = 732 * 24 * time.Hour   // 2 years
 
 // ListMyWeightHistory returns chart points: latest measurement per calendar bucket in the given IANA timezone.
 func (uc *UserUseCases) ListMyWeightHistory(ctx context.Context, userID uuid.UUID, from, to time.Time, tz string, granularity user.WeightHistoryGranularity) ([]user.WeightHistoryPoint, error) {
@@ -331,4 +338,44 @@ func (uc *UserUseCases) UpdateUserNutritionTarget(ctx context.Context, userID uu
 		CarbsTargetG:       u.CarbsTargetG,
 		FatTargetG:         u.FatTargetG,
 	}, nil
+}
+
+func (uc *UserUseCases) UpsertMyDailySteps(ctx context.Context, userID uuid.UUID, input UpsertDailyStepsInput) error {
+	if err := uc.validator.Validate(input); err != nil {
+		return errors.Validation(err.Error())
+	}
+
+	d, err := time.Parse("2006-01-02", input.Date)
+	if err != nil {
+		return errors.BadRequest("invalid date, expected YYYY-MM-DD")
+	}
+	day := d.UTC().Truncate(24 * time.Hour)
+
+	source := input.Source
+	if source == "" {
+		source = user.DailyStepsSourceAppleHealth
+	}
+	if source != user.DailyStepsSourceAppleHealth {
+		return errors.BadRequest("invalid source")
+	}
+
+	return uc.userRepo.UpsertDailySteps(ctx, userID, day, source, input.Steps)
+}
+
+func (uc *UserUseCases) ListMyDailySteps(ctx context.Context, userID uuid.UUID, from, to time.Time, source string) ([]user.DailyStepsPoint, error) {
+	if to.Before(from) {
+		return nil, errors.BadRequest("to must be on or after from")
+	}
+	if to.Sub(from) > maxDailyStepsQueryRange {
+		return nil, errors.BadRequest("date range too large (max 2 years)")
+	}
+
+	if source == "" {
+		source = user.DailyStepsSourceAppleHealth
+	}
+	if source != user.DailyStepsSourceAppleHealth {
+		return nil, errors.BadRequest("invalid source")
+	}
+
+	return uc.userRepo.ListDailySteps(ctx, userID, from.UTC().Truncate(24*time.Hour), to.UTC().Truncate(24*time.Hour), source)
 }

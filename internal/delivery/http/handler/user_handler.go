@@ -209,3 +209,86 @@ func (h *UserHandler) DeletePushToken(c *gin.Context) {
 	}
 	c.Status(204)
 }
+
+// UpsertMyDailySteps godoc
+// @Summary Upsert daily step count (Apple Health)
+// @Description Upsert total steps for a local calendar day
+// @Tags users
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body useruc.UpsertDailyStepsInput true "Daily steps payload"
+// @Success 204 {object} response.Response
+// @Failure 400 {object} response.Response
+// @Failure 401 {object} response.Response
+// @Failure 422 {object} response.Response
+// @Router /users/me/steps/daily [post]
+func (h *UserHandler) UpsertMyDailySteps(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	var body useruc.UpsertDailyStepsInput
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, errors.BadRequest("invalid request body"))
+		return
+	}
+
+	if err := h.userUC.UpsertMyDailySteps(c.Request.Context(), userID, body); err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	c.Status(204)
+}
+
+// ListMyDailySteps godoc
+// @Summary List daily step totals
+// @Description List totals in [from,to] (YYYY-MM-DD)
+// @Tags users
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param from query string true "YYYY-MM-DD"
+// @Param to query string true "YYYY-MM-DD"
+// @Param source query string false "apple_health (default)"
+// @Success 200 {object} response.Response
+// @Failure 400 {object} response.Response
+// @Failure 401 {object} response.Response
+// @Router /users/me/steps/daily [get]
+func (h *UserHandler) ListMyDailySteps(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	fromStr := c.Query("from")
+	toStr := c.Query("to")
+	if fromStr == "" || toStr == "" {
+		response.Error(c, errors.BadRequest("from and to query parameters are required (YYYY-MM-DD)"))
+		return
+	}
+
+	from, err := time.Parse("2006-01-02", fromStr)
+	if err != nil {
+		response.Error(c, errors.BadRequest("invalid from date, expected YYYY-MM-DD"))
+		return
+	}
+	to, err := time.Parse("2006-01-02", toStr)
+	if err != nil {
+		response.Error(c, errors.BadRequest("invalid to date, expected YYYY-MM-DD"))
+		return
+	}
+
+	source := c.Query("source")
+	points, err := h.userUC.ListMyDailySteps(c.Request.Context(), userID, from, to, source)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	response.Success(c, gin.H{"points": points})
+}

@@ -7,6 +7,7 @@ import (
 	"gym-pro-2026-ptit/internal/infrastructure/database"
 	"gym-pro-2026-ptit/pkg/errors"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -402,6 +403,64 @@ func (r *userRepository) ListWeightHistoryByGranularity(ctx context.Context, use
 	}
 	if out == nil {
 		out = []user.WeightHistoryPoint{}
+	}
+	return out, nil
+}
+
+func (r *userRepository) UpsertDailySteps(ctx context.Context, userID uuid.UUID, date time.Time, source string, steps int) error {
+	source = strings.TrimSpace(source)
+	if source == "" {
+		source = user.DailyStepsSourceAppleHealth
+	}
+
+	query := `
+		INSERT INTO user_daily_steps (user_id, date, steps, source, updated_at)
+		VALUES ($1, $2::date, $3, $4, NOW())
+		ON CONFLICT (user_id, date, source)
+		DO UPDATE SET
+			steps = EXCLUDED.steps,
+			updated_at = NOW()
+	`
+
+	_, err := r.db.Exec(ctx, query, userID, date, steps, source)
+	if err != nil {
+		return errors.DatabaseError("upsert daily steps", err)
+	}
+	return nil
+}
+
+func (r *userRepository) ListDailySteps(ctx context.Context, userID uuid.UUID, from, to time.Time, source string) ([]user.DailyStepsPoint, error) {
+	source = strings.TrimSpace(source)
+	if source == "" {
+		source = user.DailyStepsSourceAppleHealth
+	}
+
+	query := `
+		SELECT date::text, steps
+		FROM user_daily_steps
+		WHERE user_id = $1 AND source = $2 AND date >= $3::date AND date <= $4::date
+		ORDER BY date ASC
+	`
+
+	rows, err := r.db.Query(ctx, query, userID, source, from, to)
+	if err != nil {
+		return nil, errors.DatabaseError("list daily steps", err)
+	}
+	defer rows.Close()
+
+	var out []user.DailyStepsPoint
+	for rows.Next() {
+		var p user.DailyStepsPoint
+		if err := rows.Scan(&p.Date, &p.Steps); err != nil {
+			return nil, errors.DatabaseError("scan daily steps point", err)
+		}
+		out = append(out, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, errors.DatabaseError("iterate daily steps", err)
+	}
+	if out == nil {
+		out = []user.DailyStepsPoint{}
 	}
 	return out, nil
 }

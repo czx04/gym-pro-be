@@ -47,4 +47,10 @@ type Repository interface {
 
 	// ListWeightHistoryByGranularity returns one point per bucket (latest measured_at in that bucket).
 	ListWeightHistoryByGranularity(ctx context.Context, userID uuid.UUID, from, to time.Time, tz string, granularity WeightHistoryGranularity) ([]WeightHistoryPoint, error)
+
+	// UpsertDailySteps inserts or updates daily steps for a given local calendar day.
+	UpsertDailySteps(ctx context.Context, userID uuid.UUID, date time.Time, source string, steps int) error
+
+	// ListDailySteps returns daily totals for local calendar days in [from, to] (inclusive).
+	ListDailySteps(ctx context.Context, userID uuid.UUID, from, to time.Time, source string) ([]DailyStepsPoint, error)
 }

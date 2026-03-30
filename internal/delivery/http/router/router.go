@@ -77,6 +77,8 @@ func New(
 				users.PUT("/me", authHandler.UpdateMe)
 				users.GET("/me/weight-history", userHandler.GetMyWeightHistory)
 				users.GET("/me/meal-streak", userHandler.GetMealStreak)
+				users.POST("/me/steps/daily", userHandler.UpsertMyDailySteps)
+				users.GET("/me/steps/daily", userHandler.ListMyDailySteps)
 				users.POST("/me/push-token", userHandler.RegisterPushToken)
 				users.DELETE("/me/push-token", userHandler.DeletePushToken)
 				users.GET("/:id", placeholderHandler("Get user by ID"))
