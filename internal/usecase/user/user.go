@@ -3,6 +3,7 @@ package user
 import (
 	"context"
 	"mime/multipart"
+	"strings"
 	"time"
 
 	"gym-pro-2026-ptit/internal/domain/user"
@@ -61,6 +62,13 @@ type (
 	UploadAvatarImageOutput struct {
 		AvatarURL string `json:"avatar_url"`
 	}
+	RequestChangeEmailOTPInput struct {
+		NewEmail string `json:"new_email" validate:"required,email"`
+	}
+	VerifyChangeEmailOTPInput struct {
+		NewEmail string `json:"new_email" validate:"required,email"`
+		OTP      string `json:"otp" validate:"required,len=6"`
+	}
 )
 
 // UserUseCases groups all user/auth use cases with a single dependency set.
@@ -112,6 +120,69 @@ func (uc *UserUseCases) RegisterRequestOTP(ctx context.Context, input RegisterRe
 	}
 	if err := uc.emailService.SendOTP(input.Email, otpCode); err != nil {
 		return errors.InternalServer("failed to send OTP email", err)
+	}
+	return nil
+}
+
+func (uc *UserUseCases) RequestChangeEmailOTP(ctx context.Context, userID uuid.UUID, input RequestChangeEmailOTPInput) error {
+	if err := uc.validator.Validate(input); err != nil {
+		return errors.Validation(err.Error())
+	}
+
+	u, err := uc.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if u != nil && strings.EqualFold(strings.TrimSpace(u.Email), strings.TrimSpace(input.NewEmail)) {
+		return errors.BadRequest("new_email must be different from current email")
+	}
+
+	exists, err := uc.userRepo.Exists(ctx, input.NewEmail)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return errors.Conflict("email already registered")
+	}
+
+	otpCode, err := uc.otpService.Generate(ctx, input.NewEmail)
+	if err != nil {
+		return err
+	}
+	if err := uc.emailService.SendOTP(input.NewEmail, otpCode); err != nil {
+		return errors.InternalServer("failed to send OTP email", err)
+	}
+	return nil
+}
+
+func (uc *UserUseCases) VerifyChangeEmailOTP(ctx context.Context, userID uuid.UUID, input VerifyChangeEmailOTPInput) error {
+	if err := uc.validator.Validate(input); err != nil {
+		return errors.Validation(err.Error())
+	}
+
+	u, err := uc.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if u != nil && strings.EqualFold(strings.TrimSpace(u.Email), strings.TrimSpace(input.NewEmail)) {
+		return errors.BadRequest("new_email must be different from current email")
+	}
+
+	if err := uc.otpService.Verify(ctx, input.NewEmail, input.OTP); err != nil {
+		return err
+	}
+
+	// Re-check existence to avoid race (and still rely on unique constraint in DB).
+	exists, err := uc.userRepo.Exists(ctx, input.NewEmail)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return errors.Conflict("email already registered")
+	}
+
+	if err := uc.userRepo.UpdateEmail(ctx, userID, input.NewEmail); err != nil {
+		return err
 	}
 	return nil
 }

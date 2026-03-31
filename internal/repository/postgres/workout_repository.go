@@ -579,6 +579,27 @@ func (r *workoutSessionRepository) GetStats(ctx context.Context, userID uuid.UUI
 	return nil, nil
 }
 
+func (r *workoutSessionRepository) GetProfileWorkoutStats(ctx context.Context, userID uuid.UUID) (int64, int64, error) {
+	var totalWorkouts int64
+	if err := r.db.QueryRow(ctx, `SELECT COUNT(*) FROM workout_sessions WHERE user_id = $1`, userID).Scan(&totalWorkouts); err != nil {
+		return 0, 0, errors.DatabaseError("count workout sessions", err)
+	}
+
+	var totalWorkoutDays int64
+	// Use started_at when available; fall back to created_at so newly-created sessions still count.
+	qDays := `
+		SELECT COUNT(*) FROM (
+			SELECT DISTINCT (COALESCE(started_at, created_at) AT TIME ZONE 'UTC')::date AS d
+			FROM workout_sessions
+			WHERE user_id = $1
+		) sub
+	`
+	if err := r.db.QueryRow(ctx, qDays, userID).Scan(&totalWorkoutDays); err != nil {
+		return 0, 0, errors.DatabaseError("count workout session days", err)
+	}
+	return totalWorkouts, totalWorkoutDays, nil
+}
+
 func (r *workoutSessionRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	_, err := r.db.Exec(ctx, "DELETE FROM workout_sessions WHERE id = $1", id)
 	if err != nil {

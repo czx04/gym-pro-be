@@ -33,6 +33,9 @@ type Repository interface {
 	// UpdatePassword updates user password
 	UpdatePassword(ctx context.Context, id uuid.UUID, passwordHash string) error
 
+	// UpdateEmail updates user's email (must remain unique).
+	UpdateEmail(ctx context.Context, id uuid.UUID, email string) error
+
 	// Exists checks if a user with given email exists
 	Exists(ctx context.Context, email string) (bool, error)
 
