@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -428,6 +429,23 @@ func (r *userRepository) UpdatePassword(ctx context.Context, id uuid.UUID, passw
 		return errors.NotFound("user")
 	}
 
+	return nil
+}
+
+func (r *userRepository) UpdateEmail(ctx context.Context, id uuid.UUID, email string) error {
+	query := `UPDATE users SET email = $2, updated_at = NOW() WHERE id = $1`
+
+	result, err := r.db.Exec(ctx, query, id, email)
+	if err != nil {
+		// Unique constraint violation on users.email.
+		if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Code == "23505" {
+			return errors.Conflict("email already registered")
+		}
+		return errors.DatabaseError("update email", err)
+	}
+	if result.RowsAffected() == 0 {
+		return errors.NotFound("user")
+	}
 	return nil
 }
 

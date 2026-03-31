@@ -34,6 +34,22 @@ type WorkoutUseCases struct {
 	validator       *validator.Validator
 }
 
+type ProfileWorkoutStats struct {
+	TotalWorkouts    int64 `json:"total_workouts"`
+	TotalWorkoutDays int64 `json:"total_workout_days"`
+}
+
+func (uc *WorkoutUseCases) GetProfileWorkoutStats(ctx context.Context, userID uuid.UUID) (*ProfileWorkoutStats, error) {
+	totalWorkouts, totalDays, err := uc.sessionRepo.GetProfileWorkoutStats(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return &ProfileWorkoutStats{
+		TotalWorkouts:    totalWorkouts,
+		TotalWorkoutDays: totalDays,
+	}, nil
+}
+
 func NewWorkoutUseCases(
 	db *database.DB,
 	cache *cacheinfra.Cache,

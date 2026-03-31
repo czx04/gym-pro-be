@@ -77,11 +77,18 @@ func New(
 				users.PUT("/me", authHandler.UpdateMe)
 				users.GET("/me/weight-history", userHandler.GetMyWeightHistory)
 				users.GET("/me/meal-streak", userHandler.GetMealStreak)
+				users.GET("/me/workout-stats", userHandler.GetMyWorkoutStats)
+				users.POST("/me/email/request-otp", userHandler.RequestChangeEmailOTP)
+				users.POST("/me/email/verify", userHandler.VerifyChangeEmailOTP)
 				users.POST("/me/push-token", userHandler.RegisterPushToken)
 				users.DELETE("/me/push-token", userHandler.DeletePushToken)
+				users.PUT("/me/avatar", userHandler.UploadAvatarImage)
 				users.GET("/:id", placeholderHandler("Get user by ID"))
 				users.GET("/nutrition-target", userHandler.GetUserNutritionTarget)
 				users.PUT("/nutrition-target", userHandler.UpdateUserNutritionTarget)
+				// Backward compatibility (deprecated): use PUT /users/me/avatar
+				users.PUT("/avatar", userHandler.UploadAvatarImage)
+				users.DELETE("/me", userHandler.DeleteAccount)
 			}
 
 			// Exercise routes

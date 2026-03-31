@@ -80,4 +80,7 @@ type WorkoutSessionRepository interface {
 	GetWeeklyAggregate(ctx context.Context, userID uuid.UUID, start, end time.Time) (*WeeklyWorkoutMetrics, error)
 
 	GetExerciseStats(ctx context.Context, userID, exerciseID uuid.UUID) (*ExerciseStats, error)
+
+	// GetProfileWorkoutStats returns lightweight stats for the profile screen.
+	GetProfileWorkoutStats(ctx context.Context, userID uuid.UUID) (totalWorkouts int64, totalWorkoutDays int64, err error)
 }
