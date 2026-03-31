@@ -25,6 +25,12 @@ type FollowRepository interface {
 
 	// GetStats retrieves follow statistics
 	GetStats(ctx context.Context, userID uuid.UUID) (*FollowStats, error)
+
+	// HasBlockRelation checks whether either side blocks the other
+	HasBlockRelation(ctx context.Context, userAID, userBID uuid.UUID) (bool, error)
+
+	// SearchUsers returns users matching name (excluding self and blocked users).
+	SearchUsers(ctx context.Context, viewerID uuid.UUID, query string, page, pageSize int) ([]UserSearchRow, int64, error)
 }
 
 // PostRepository defines the interface for post data access
@@ -44,11 +50,17 @@ type PostRepository interface {
 	// GetFeed retrieves activity feed for a user (posts from followed users)
 	GetFeed(ctx context.Context, userID uuid.UUID, filter GetFeedFilter) ([]ActivityFeedItem, int64, error)
 
+	// SearchPosts searches posts visible in feed by caption, author name, or hashtags (ILIKE).
+	SearchPosts(ctx context.Context, viewerID uuid.UUID, query string, filter GetFeedFilter) ([]ActivityFeedItem, int64, error)
+
 	// GetMediaByPostIDs retrieves media grouped by post IDs
 	GetMediaByPostIDs(ctx context.Context, postIDs []uuid.UUID) (map[uuid.UUID][]PostMedia, error)
 
 	// Update updates a post
 	Update(ctx context.Context, post *Post) error
+
+	// UpdateWithMediaReplace updates post row and optionally replaces all post_media rows in one transaction.
+	UpdateWithMediaReplace(ctx context.Context, post *Post, replaceMedia bool, media []PostMedia) error
 
 	// Delete deletes a post
 	Delete(ctx context.Context, id uuid.UUID) error
@@ -86,6 +98,9 @@ type LikeRepository interface {
 	// Exists checks if a like exists
 	Exists(ctx context.Context, postID, userID uuid.UUID) (bool, error)
 
+	// ExistsForPosts returns whether the user liked each post (batch).
+	ExistsForPosts(ctx context.Context, userID uuid.UUID, postIDs []uuid.UUID) (map[uuid.UUID]bool, error)
+
 	// GetByPostID retrieves likes for a post
 	GetByPostID(ctx context.Context, postID uuid.UUID, page, pageSize int) ([]Like, int64, error)
 }
@@ -95,6 +110,9 @@ type CommentRepository interface {
 	// Create creates a comment
 	Create(ctx context.Context, comment *Comment) error
 
+	// CreateWithMedia creates a comment and attaches media atomically
+	CreateWithMedia(ctx context.Context, comment *Comment, media []CommentMedia) error
+
 	// GetByID retrieves a comment by ID
 	GetByID(ctx context.Context, id uuid.UUID) (*Comment, error)
 
@@ -103,6 +121,9 @@ type CommentRepository interface {
 
 	// GetLatestRepliesByParentIDs retrieves latest replies for parent comments
 	GetLatestRepliesByParentIDs(ctx context.Context, parentCommentIDs []uuid.UUID, limitPerParent int) (map[uuid.UUID][]Comment, error)
+
+	// GetMediaByCommentIDs retrieves media grouped by comment IDs
+	GetMediaByCommentIDs(ctx context.Context, commentIDs []uuid.UUID) (map[uuid.UUID][]CommentMedia, error)
 
 	// Update updates a comment
 	Update(ctx context.Context, comment *Comment) error
@@ -115,4 +136,28 @@ type CommentRepository interface {
 
 	// DecrementReplyCount decrements reply count for a parent comment
 	DecrementReplyCount(ctx context.Context, parentCommentID uuid.UUID) error
+}
+
+type PreferenceRepository interface {
+	Upsert(ctx context.Context, preference *PostPreference) error
+	Delete(ctx context.Context, userID, postID uuid.UUID, preference string) error
+	GetByPostAndUser(ctx context.Context, userID, postID uuid.UUID) (*PostPreference, error)
+	GetByPostsAndUser(ctx context.Context, userID uuid.UUID, postIDs []uuid.UUID) (map[uuid.UUID]*PostPreference, error)
+}
+
+type ReportRepository interface {
+	Upsert(ctx context.Context, report *PostReport) error
+}
+
+type BlockRepository interface {
+	Block(ctx context.Context, blockerID, blockedID uuid.UUID) error
+	Unblock(ctx context.Context, blockerID, blockedID uuid.UUID) error
+	IsBlocked(ctx context.Context, blockerID, blockedID uuid.UUID) (bool, error)
+}
+
+type InAppNotificationRepository interface {
+	Create(ctx context.Context, n *InAppNotification) error
+	ListForUser(ctx context.Context, userID uuid.UUID, filter string, page, limit int) ([]InAppNotification, int64, error)
+	CountUnread(ctx context.Context, userID uuid.UUID) (int64, error)
+	MarkRead(ctx context.Context, userID uuid.UUID, ids []uuid.UUID) (int64, error)
 }

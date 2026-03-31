@@ -9,6 +9,7 @@ import (
 	"gym-pro-2026-ptit/internal/delivery/http/router"
 	"gym-pro-2026-ptit/internal/delivery/http/websocket"
 	"gym-pro-2026-ptit/internal/infrastructure/logger"
+	"net"
 	"net/http"
 
 	"go.uber.org/fx"
@@ -43,13 +44,19 @@ func RegisterRouterHooks(lc fx.Lifecycle, r *router.Router, cfg *config.Config) 
 		OnStart: func(ctx context.Context) error {
 			logger.Info("Starting HTTP server", "host", cfg.Server.Host, "port", cfg.Server.Port, "mode", cfg.Server.GinMode)
 
+			ln, err := net.Listen("tcp", server.Addr)
+			if err != nil {
+				logger.Error("Failed to listen", "address", server.Addr, "err", err)
+				return err
+			}
+
 			go func() {
-				if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-					logger.Fatal("Failed to start HTTP server", "err", err)
+				if err := server.Serve(ln); err != nil && err != http.ErrServerClosed {
+					logger.Fatal("HTTP server error", "err", err)
 				}
 			}()
 
-			logger.Info("HTTP server started successfully", "address", server.Addr)
+			logger.Info("HTTP server listening", "address", ln.Addr().String())
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {

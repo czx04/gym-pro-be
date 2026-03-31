@@ -2,12 +2,11 @@ package postgres
 
 import (
 	"context"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"gym-pro-2026-ptit/internal/domain/social"
 	"gym-pro-2026-ptit/internal/infrastructure/database"
 	"gym-pro-2026-ptit/pkg/errors"
-
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 )
 
 // FollowRepository implementation
@@ -80,6 +79,84 @@ func (r *followRepository) GetStats(ctx context.Context, userID uuid.UUID) (*soc
 	}
 
 	return stats, nil
+}
+
+func (r *followRepository) HasBlockRelation(ctx context.Context, userAID, userBID uuid.UUID) (bool, error) {
+	query := `
+		SELECT EXISTS(
+			SELECT 1
+			FROM user_blocks ub
+			WHERE (ub.blocker_id = $1 AND ub.blocked_id = $2)
+			   OR (ub.blocker_id = $2 AND ub.blocked_id = $1)
+		)
+	`
+	var hasRelation bool
+	if err := r.db.QueryRow(ctx, query, userAID, userBID).Scan(&hasRelation); err != nil {
+		return false, errors.DatabaseError("check block relation", err)
+	}
+	return hasRelation, nil
+}
+
+func (r *followRepository) SearchUsers(ctx context.Context, viewerID uuid.UUID, query string, page, pageSize int) ([]social.UserSearchRow, int64, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	offset := (page - 1) * pageSize
+	pattern := "%" + query + "%"
+
+	countQuery := `
+		SELECT COUNT(*)
+		FROM users u
+		WHERE NOT EXISTS (
+			SELECT 1
+			FROM user_blocks ub
+			WHERE (ub.blocker_id = $1 AND ub.blocked_id = u.id)
+			   OR (ub.blocker_id = u.id AND ub.blocked_id = $1)
+		  )
+		  AND u.name ILIKE $2
+	`
+
+	var total int64
+	if err := r.db.QueryRow(ctx, countQuery, viewerID, pattern).Scan(&total); err != nil {
+		return nil, 0, errors.DatabaseError("count search users", err)
+	}
+
+	listQuery := `
+		SELECT u.id, u.name, u.avatar_url, u.bio
+		FROM users u
+		WHERE NOT EXISTS (
+			SELECT 1
+			FROM user_blocks ub
+			WHERE (ub.blocker_id = $1 AND ub.blocked_id = u.id)
+			   OR (ub.blocker_id = u.id AND ub.blocked_id = $1)
+		  )
+		  AND u.name ILIKE $2
+		ORDER BY u.name ASC
+		LIMIT $3 OFFSET $4
+	`
+
+	rows, err := r.db.Query(ctx, listQuery, viewerID, pattern, pageSize, offset)
+	if err != nil {
+		return nil, 0, errors.DatabaseError("search users", err)
+	}
+	defer rows.Close()
+
+	out := make([]social.UserSearchRow, 0)
+	for rows.Next() {
+		var u social.UserSearchRow
+		if err := rows.Scan(&u.ID, &u.Name, &u.AvatarURL, &u.Bio); err != nil {
+			return nil, 0, errors.DatabaseError("scan search user", err)
+		}
+		out = append(out, u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, errors.DatabaseError("iterate search users", err)
+	}
+
+	return out, total, nil
 }
 
 // PostRepository implementation
@@ -213,6 +290,7 @@ func (r *postRepository) GetByID(ctx context.Context, id uuid.UUID) (*social.Pos
 		FROM posts p
 		JOIN users u ON u.id = p.user_id
 		WHERE p.id = $1
+		  AND p.deleted_at IS NULL
 	`
 
 	var post social.Post
@@ -255,7 +333,7 @@ func (r *postRepository) GetByUserID(ctx context.Context, userID uuid.UUID, page
 
 	offset := (page - 1) * pageSize
 
-	countQuery := `SELECT COUNT(*) FROM posts WHERE user_id = $1`
+	countQuery := `SELECT COUNT(*) FROM posts WHERE user_id = $1 AND deleted_at IS NULL`
 	var total int64
 	if err := r.db.QueryRow(ctx, countQuery, userID).Scan(&total); err != nil {
 		return nil, 0, errors.DatabaseError("count user posts", err)
@@ -281,6 +359,7 @@ func (r *postRepository) GetByUserID(ctx context.Context, userID uuid.UUID, page
 		FROM posts p
 		JOIN users u ON u.id = p.user_id
 		WHERE p.user_id = $1
+		  AND p.deleted_at IS NULL
 		ORDER BY p.created_at DESC
 		LIMIT $2 OFFSET $3
 	`
@@ -336,10 +415,20 @@ func (r *postRepository) GetFeed(ctx context.Context, userID uuid.UUID, filter s
 
 	offset := (filter.Page - 1) * filter.PageSize
 
-	countQuery := `SELECT COUNT(*) FROM posts`
+	countQuery := `
+		SELECT COUNT(*)
+		FROM posts p
+		WHERE p.deleted_at IS NULL
+		  AND NOT EXISTS (
+			SELECT 1
+			FROM user_blocks ub
+			WHERE (ub.blocker_id = $1 AND ub.blocked_id = p.user_id)
+			   OR (ub.blocker_id = p.user_id AND ub.blocked_id = $1)
+		  )
+	`
 
 	var total int64
-	if err := r.db.QueryRow(ctx, countQuery).Scan(&total); err != nil {
+	if err := r.db.QueryRow(ctx, countQuery, userID).Scan(&total); err != nil {
 		return nil, 0, errors.DatabaseError("count feed posts", err)
 	}
 
@@ -365,10 +454,24 @@ func (r *postRepository) GetFeed(ctx context.Context, userID uuid.UUID, filter s
 				FROM likes l
 				WHERE l.post_id = p.id
 				  AND l.user_id = $1
-			) AS is_liked
+			) AS is_liked,
+			COALESCE(pp.preference = 'interested', FALSE) AS is_interested,
+			COALESCE(pp.preference = 'not_interested', FALSE) AS is_not_interested
 		FROM posts p
 		JOIN users u ON u.id = p.user_id
-		ORDER BY p.created_at DESC
+		LEFT JOIN post_preferences pp
+			ON pp.post_id = p.id
+		   AND pp.user_id = $1
+		WHERE p.deleted_at IS NULL
+		  AND NOT EXISTS (
+			SELECT 1
+			FROM user_blocks ub
+			WHERE (ub.blocker_id = $1 AND ub.blocked_id = p.user_id)
+			   OR (ub.blocker_id = p.user_id AND ub.blocked_id = $1)
+		  )
+		ORDER BY
+			CASE WHEN COALESCE(pp.preference = 'not_interested', FALSE) THEN 1 ELSE 0 END,
+			p.created_at DESC
 		LIMIT $2 OFFSET $3
 	`
 
@@ -399,6 +502,8 @@ func (r *postRepository) GetFeed(ctx context.Context, userID uuid.UUID, filter s
 			&item.Post.User.Name,
 			&item.Post.User.AvatarURL,
 			&item.IsLiked,
+			&item.IsInterested,
+			&item.IsNotInterested,
 		); err != nil {
 			return nil, 0, errors.DatabaseError("scan feed item", err)
 		}
@@ -409,6 +514,139 @@ func (r *postRepository) GetFeed(ctx context.Context, userID uuid.UUID, filter s
 
 	if err := rows.Err(); err != nil {
 		return nil, 0, errors.DatabaseError("iterate feed", err)
+	}
+
+	return feed, total, nil
+}
+
+func (r *postRepository) SearchPosts(ctx context.Context, viewerID uuid.UUID, query string, filter social.GetFeedFilter) ([]social.ActivityFeedItem, int64, error) {
+	if filter.Page < 1 {
+		filter.Page = 1
+	}
+	if filter.PageSize < 1 {
+		filter.PageSize = 20
+	}
+	offset := (filter.Page - 1) * filter.PageSize
+	pattern := "%" + query + "%"
+
+	countQuery := `
+		SELECT COUNT(*)
+		FROM posts p
+		JOIN users u ON u.id = p.user_id
+		WHERE p.deleted_at IS NULL
+		  AND NOT EXISTS (
+			SELECT 1
+			FROM user_blocks ub
+			WHERE (ub.blocker_id = $1 AND ub.blocked_id = p.user_id)
+			   OR (ub.blocker_id = p.user_id AND ub.blocked_id = $1)
+		  )
+		  AND (
+			COALESCE(p.caption, '') ILIKE $2
+			OR u.name ILIKE $2
+			OR EXISTS (
+				SELECT 1
+				FROM unnest(COALESCE(p.hashtags, ARRAY[]::text[])) AS tag
+				WHERE tag ILIKE $2
+			)
+		  )
+	`
+
+	var total int64
+	if err := r.db.QueryRow(ctx, countQuery, viewerID, pattern).Scan(&total); err != nil {
+		return nil, 0, errors.DatabaseError("count search posts", err)
+	}
+
+	querySQL := `
+		SELECT
+			p.id,
+			p.user_id,
+			p.content_type,
+			p.content_id,
+			p.caption,
+			p.feeling,
+			p.location_name,
+			p.hashtags,
+			p.likes_count,
+			p.comments_count,
+			p.created_at,
+			p.updated_at,
+			u.id,
+			u.name,
+			u.avatar_url,
+			EXISTS(
+				SELECT 1
+				FROM likes l
+				WHERE l.post_id = p.id
+				  AND l.user_id = $1
+			) AS is_liked,
+			COALESCE(pp.preference = 'interested', FALSE) AS is_interested,
+			COALESCE(pp.preference = 'not_interested', FALSE) AS is_not_interested
+		FROM posts p
+		JOIN users u ON u.id = p.user_id
+		LEFT JOIN post_preferences pp
+			ON pp.post_id = p.id
+		   AND pp.user_id = $1
+		WHERE p.deleted_at IS NULL
+		  AND NOT EXISTS (
+			SELECT 1
+			FROM user_blocks ub
+			WHERE (ub.blocker_id = $1 AND ub.blocked_id = p.user_id)
+			   OR (ub.blocker_id = p.user_id AND ub.blocked_id = $1)
+		  )
+		  AND (
+			COALESCE(p.caption, '') ILIKE $2
+			OR u.name ILIKE $2
+			OR EXISTS (
+				SELECT 1
+				FROM unnest(COALESCE(p.hashtags, ARRAY[]::text[])) AS tag
+				WHERE tag ILIKE $2
+			)
+		  )
+		ORDER BY
+			CASE WHEN COALESCE(pp.preference = 'not_interested', FALSE) THEN 1 ELSE 0 END,
+			p.created_at DESC
+		LIMIT $3 OFFSET $4
+	`
+
+	rows, err := r.db.Query(ctx, querySQL, viewerID, pattern, filter.PageSize, offset)
+	if err != nil {
+		return nil, 0, errors.DatabaseError("search posts", err)
+	}
+	defer rows.Close()
+
+	feed := make([]social.ActivityFeedItem, 0)
+	for rows.Next() {
+		item := social.ActivityFeedItem{Post: &social.Post{User: &social.PostUser{}}}
+
+		if err := rows.Scan(
+			&item.Post.ID,
+			&item.Post.UserID,
+			&item.Post.ContentType,
+			&item.Post.ContentID,
+			&item.Post.Caption,
+			&item.Post.Feeling,
+			&item.Post.LocationName,
+			&item.Post.Hashtags,
+			&item.Post.LikesCount,
+			&item.Post.CommentsCount,
+			&item.Post.CreatedAt,
+			&item.Post.UpdatedAt,
+			&item.Post.User.ID,
+			&item.Post.User.Name,
+			&item.Post.User.AvatarURL,
+			&item.IsLiked,
+			&item.IsInterested,
+			&item.IsNotInterested,
+		); err != nil {
+			return nil, 0, errors.DatabaseError("scan search post", err)
+		}
+
+		item.CreatedAt = item.Post.CreatedAt
+		feed = append(feed, item)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, 0, errors.DatabaseError("iterate search posts", err)
 	}
 
 	return feed, total, nil
@@ -456,12 +694,124 @@ func (r *postRepository) GetMediaByPostIDs(ctx context.Context, postIDs []uuid.U
 }
 
 func (r *postRepository) Update(ctx context.Context, post *social.Post) error {
-	// TODO: Update post (mainly caption)
+	query := `
+		UPDATE posts
+		SET caption = $2,
+			feeling = $3,
+			location_name = $4,
+			hashtags = $5,
+			updated_at = NOW()
+		WHERE id = $1
+		  AND deleted_at IS NULL
+	`
+	result, err := r.db.Exec(ctx, query, post.ID, post.Caption, post.Feeling, post.LocationName, post.Hashtags)
+	if err != nil {
+		return errors.DatabaseError("update post", err)
+	}
+	if result.RowsAffected() == 0 {
+		return errors.NotFound("post")
+	}
+	return nil
+}
+
+func (r *postRepository) UpdateWithMediaReplace(ctx context.Context, post *social.Post, replaceMedia bool, media []social.PostMedia) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return errors.DatabaseError("begin update post transaction", err)
+	}
+	defer tx.Rollback(ctx)
+
+	updateQuery := `
+		UPDATE posts
+		SET caption = $2,
+			feeling = $3,
+			location_name = $4,
+			hashtags = $5,
+			updated_at = NOW()
+		WHERE id = $1
+		  AND deleted_at IS NULL
+	`
+	result, err := tx.Exec(ctx, updateQuery, post.ID, post.Caption, post.Feeling, post.LocationName, post.Hashtags)
+	if err != nil {
+		return errors.DatabaseError("update post", err)
+	}
+	if result.RowsAffected() == 0 {
+		return errors.NotFound("post")
+	}
+
+	if replaceMedia {
+		_, err = tx.Exec(ctx, `
+			UPDATE social_media_assets
+			SET status = 'ready',
+				post_id = NULL,
+				attached_at = NULL,
+				updated_at = NOW()
+			WHERE post_id = $1
+		`, post.ID)
+		if err != nil {
+			return errors.DatabaseError("detach post media assets", err)
+		}
+
+		_, err = tx.Exec(ctx, `DELETE FROM post_media WHERE post_id = $1`, post.ID)
+		if err != nil {
+			return errors.DatabaseError("delete post media", err)
+		}
+
+		for _, m := range media {
+			var resourceType string
+			attachAssetQuery := `
+				UPDATE social_media_assets
+				SET status = 'attached',
+					post_id = $3,
+					attached_at = NOW(),
+					updated_at = NOW()
+				WHERE public_id = $1
+				  AND user_id = $2
+				  AND status = 'ready'
+				RETURNING resource_type
+			`
+
+			err = tx.QueryRow(ctx, attachAssetQuery, m.PublicID, post.UserID, post.ID).Scan(&resourceType)
+			if err != nil {
+				if err == pgx.ErrNoRows {
+					return errors.Conflict("media asset not ready or not owned by current user")
+				}
+				return errors.DatabaseError("attach media asset", err)
+			}
+
+			insertPostMediaQuery := `
+				INSERT INTO post_media (post_id, public_id, resource_type, order_index)
+				VALUES ($1, $2, $3, $4)
+			`
+
+			_, err = tx.Exec(ctx, insertPostMediaQuery, post.ID, m.PublicID, resourceType, m.OrderIndex)
+			if err != nil {
+				return errors.DatabaseError("insert post media", err)
+			}
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return errors.DatabaseError("commit update post transaction", err)
+	}
 	return nil
 }
 
 func (r *postRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	// TODO: Delete post (cascade will delete likes and comments)
+	query := `
+		UPDATE posts
+		SET deleted_at = NOW(),
+			updated_at = NOW()
+		WHERE id = $1
+		  AND deleted_at IS NULL
+	`
+	result, err := r.db.Exec(ctx, query, id)
+	if err != nil {
+		return errors.DatabaseError("delete post", err)
+	}
+	if result.RowsAffected() == 0 {
+		return errors.NotFound("post")
+	}
 	return nil
 }
 
@@ -535,6 +885,36 @@ func (r *likeRepository) Exists(ctx context.Context, postID, userID uuid.UUID) (
 	return exists, nil
 }
 
+func (r *likeRepository) ExistsForPosts(ctx context.Context, userID uuid.UUID, postIDs []uuid.UUID) (map[uuid.UUID]bool, error) {
+	out := make(map[uuid.UUID]bool, len(postIDs))
+	for _, id := range postIDs {
+		out[id] = false
+	}
+	if len(postIDs) == 0 {
+		return out, nil
+	}
+
+	query := `SELECT post_id FROM likes WHERE user_id = $1 AND post_id = ANY($2)`
+	rows, err := r.db.Query(ctx, query, userID, postIDs)
+	if err != nil {
+		return nil, errors.DatabaseError("batch check likes", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var postID uuid.UUID
+		if err := rows.Scan(&postID); err != nil {
+			return nil, errors.DatabaseError("scan liked post id", err)
+		}
+		out[postID] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, errors.DatabaseError("iterate liked posts", err)
+	}
+
+	return out, nil
+}
+
 func (r *likeRepository) GetByPostID(ctx context.Context, postID uuid.UUID, page, pageSize int) ([]social.Like, int64, error) {
 	if page < 1 {
 		page = 1
@@ -605,6 +985,69 @@ func (r *commentRepository) Create(ctx context.Context, comment *social.Comment)
 	); err != nil {
 		return errors.DatabaseError("create comment", err)
 	}
+	return nil
+}
+
+func (r *commentRepository) CreateWithMedia(ctx context.Context, comment *social.Comment, media []social.CommentMedia) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return errors.DatabaseError("begin create comment transaction", err)
+	}
+	defer tx.Rollback(ctx)
+
+	insertCommentQuery := `
+		INSERT INTO comments (id, post_id, user_id, parent_comment_id, content, reply_count, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	`
+	_, err = tx.Exec(ctx, insertCommentQuery,
+		comment.ID,
+		comment.PostID,
+		comment.UserID,
+		comment.ParentCommentID,
+		comment.Content,
+		comment.ReplyCount,
+		comment.CreatedAt,
+		comment.UpdatedAt,
+	)
+	if err != nil {
+		return errors.DatabaseError("insert comment", err)
+	}
+
+	for _, m := range media {
+		var resourceType string
+		attachAssetQuery := `
+			UPDATE social_media_assets
+			SET status = 'attached',
+				attached_at = NOW(),
+				updated_at = NOW()
+			WHERE public_id = $1
+			  AND user_id = $2
+			  AND status = 'ready'
+			RETURNING resource_type
+		`
+
+		err := tx.QueryRow(ctx, attachAssetQuery, m.PublicID, comment.UserID).Scan(&resourceType)
+		if err != nil {
+			if err == pgx.ErrNoRows {
+				return errors.Conflict("media asset not ready or not owned by current user")
+			}
+			return errors.DatabaseError("attach media asset", err)
+		}
+
+		insertCommentMediaQuery := `
+			INSERT INTO comment_media (comment_id, public_id, resource_type, order_index)
+			VALUES ($1, $2, $3, $4)
+		`
+		_, err = tx.Exec(ctx, insertCommentMediaQuery, comment.ID, m.PublicID, resourceType, m.OrderIndex)
+		if err != nil {
+			return errors.DatabaseError("insert comment media", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return errors.DatabaseError("commit create comment transaction", err)
+	}
+
 	return nil
 }
 
@@ -794,6 +1237,39 @@ func (r *commentRepository) GetLatestRepliesByParentIDs(ctx context.Context, par
 	return result, nil
 }
 
+func (r *commentRepository) GetMediaByCommentIDs(ctx context.Context, commentIDs []uuid.UUID) (map[uuid.UUID][]social.CommentMedia, error) {
+	grouped := make(map[uuid.UUID][]social.CommentMedia)
+	if len(commentIDs) == 0 {
+		return grouped, nil
+	}
+
+	query := `
+		SELECT cm.comment_id, cm.public_id, cm.resource_type, sma.secure_url, cm.order_index
+		FROM comment_media cm
+		LEFT JOIN social_media_assets sma ON sma.public_id = cm.public_id
+		WHERE cm.comment_id = ANY($1)
+		ORDER BY cm.comment_id, cm.order_index
+	`
+	rows, err := r.db.Query(ctx, query, commentIDs)
+	if err != nil {
+		return nil, errors.DatabaseError("get comment media", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var item social.CommentMedia
+		if err := rows.Scan(&item.CommentID, &item.PublicID, &item.ResourceType, &item.SecureURL, &item.OrderIndex); err != nil {
+			return nil, errors.DatabaseError("scan comment media", err)
+		}
+		grouped[item.CommentID] = append(grouped[item.CommentID], item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, errors.DatabaseError("iterate comment media", err)
+	}
+
+	return grouped, nil
+}
+
 func (r *commentRepository) Update(ctx context.Context, comment *social.Comment) error {
 	query := `
 		UPDATE comments
@@ -913,4 +1389,181 @@ func (r *mediaAssetRepository) Confirm(ctx context.Context, userID uuid.UUID, pu
 	}
 
 	return nil
+}
+
+type preferenceRepository struct {
+	db *database.DB
+}
+
+func NewPreferenceRepository(db *database.DB) social.PreferenceRepository {
+	return &preferenceRepository{db: db}
+}
+
+func (r *preferenceRepository) Upsert(ctx context.Context, preference *social.PostPreference) error {
+	query := `
+		INSERT INTO post_preferences (user_id, post_id, preference, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (user_id, post_id)
+		DO UPDATE
+		SET preference = EXCLUDED.preference,
+			updated_at = EXCLUDED.updated_at
+	`
+	_, err := r.db.Exec(ctx, query,
+		preference.UserID,
+		preference.PostID,
+		preference.Preference,
+		preference.CreatedAt,
+		preference.UpdatedAt,
+	)
+	if err != nil {
+		return errors.DatabaseError("upsert post preference", err)
+	}
+	return nil
+}
+
+func (r *preferenceRepository) Delete(ctx context.Context, userID, postID uuid.UUID, preference string) error {
+	query := `
+		DELETE FROM post_preferences
+		WHERE user_id = $1
+		  AND post_id = $2
+		  AND preference = $3
+	`
+	if _, err := r.db.Exec(ctx, query, userID, postID, preference); err != nil {
+		return errors.DatabaseError("delete post preference", err)
+	}
+	return nil
+}
+
+func (r *preferenceRepository) GetByPostAndUser(ctx context.Context, userID, postID uuid.UUID) (*social.PostPreference, error) {
+	query := `
+		SELECT user_id, post_id, preference, created_at, updated_at
+		FROM post_preferences
+		WHERE user_id = $1
+		  AND post_id = $2
+	`
+	var preference social.PostPreference
+	err := r.db.QueryRow(ctx, query, userID, postID).Scan(
+		&preference.UserID,
+		&preference.PostID,
+		&preference.Preference,
+		&preference.CreatedAt,
+		&preference.UpdatedAt,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, errors.DatabaseError("get post preference", err)
+	}
+	return &preference, nil
+}
+
+func (r *preferenceRepository) GetByPostsAndUser(ctx context.Context, userID uuid.UUID, postIDs []uuid.UUID) (map[uuid.UUID]*social.PostPreference, error) {
+	out := make(map[uuid.UUID]*social.PostPreference)
+	if len(postIDs) == 0 {
+		return out, nil
+	}
+
+	query := `
+		SELECT user_id, post_id, preference, created_at, updated_at
+		FROM post_preferences
+		WHERE user_id = $1 AND post_id = ANY($2)
+	`
+	rows, err := r.db.Query(ctx, query, userID, postIDs)
+	if err != nil {
+		return nil, errors.DatabaseError("batch get post preferences", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var pref social.PostPreference
+		if err := rows.Scan(
+			&pref.UserID,
+			&pref.PostID,
+			&pref.Preference,
+			&pref.CreatedAt,
+			&pref.UpdatedAt,
+		); err != nil {
+			return nil, errors.DatabaseError("scan post preference", err)
+		}
+		out[pref.PostID] = &pref
+	}
+	if err := rows.Err(); err != nil {
+		return nil, errors.DatabaseError("iterate post preferences", err)
+	}
+
+	return out, nil
+}
+
+type reportRepository struct {
+	db *database.DB
+}
+
+func NewReportRepository(db *database.DB) social.ReportRepository {
+	return &reportRepository{db: db}
+}
+
+func (r *reportRepository) Upsert(ctx context.Context, report *social.PostReport) error {
+	query := `
+		INSERT INTO post_reports (
+			id, post_id, reporter_id, reason, description, status, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		ON CONFLICT (post_id, reporter_id)
+		DO UPDATE
+		SET reason = EXCLUDED.reason,
+			description = EXCLUDED.description,
+			status = EXCLUDED.status,
+			updated_at = EXCLUDED.updated_at
+	`
+	_, err := r.db.Exec(ctx, query,
+		report.ID,
+		report.PostID,
+		report.ReporterID,
+		report.Reason,
+		report.Description,
+		report.Status,
+		report.CreatedAt,
+		report.UpdatedAt,
+	)
+	if err != nil {
+		return errors.DatabaseError("upsert post report", err)
+	}
+	return nil
+}
+
+type blockRepository struct {
+	db *database.DB
+}
+
+func NewBlockRepository(db *database.DB) social.BlockRepository {
+	return &blockRepository{db: db}
+}
+
+func (r *blockRepository) Block(ctx context.Context, blockerID, blockedID uuid.UUID) error {
+	query := `
+		INSERT INTO user_blocks (blocker_id, blocked_id)
+		VALUES ($1, $2)
+		ON CONFLICT (blocker_id, blocked_id) DO NOTHING
+	`
+	if _, err := r.db.Exec(ctx, query, blockerID, blockedID); err != nil {
+		return errors.DatabaseError("block user", err)
+	}
+	return nil
+}
+
+func (r *blockRepository) Unblock(ctx context.Context, blockerID, blockedID uuid.UUID) error {
+	query := `DELETE FROM user_blocks WHERE blocker_id = $1 AND blocked_id = $2`
+	if _, err := r.db.Exec(ctx, query, blockerID, blockedID); err != nil {
+		return errors.DatabaseError("unblock user", err)
+	}
+	return nil
+}
+
+func (r *blockRepository) IsBlocked(ctx context.Context, blockerID, blockedID uuid.UUID) (bool, error) {
+	query := `SELECT EXISTS(SELECT 1 FROM user_blocks WHERE blocker_id = $1 AND blocked_id = $2)`
+	var blocked bool
+	if err := r.db.QueryRow(ctx, query, blockerID, blockedID).Scan(&blocked); err != nil {
+		return false, errors.DatabaseError("check blocked relation", err)
+	}
+	return blocked, nil
 }

@@ -43,6 +43,7 @@ func NewApp() *fx.App {
 		HandlerProviders,
 		fx.Provide(ProvideAuthMiddleware),
 		fx.Provide(ProvideWebSocketHub),
+		fx.Provide(ProvideSocialBroadcaster),
 		fx.Provide(ProvideRouter),
 
 		// Lifecycle hooks
@@ -53,6 +54,7 @@ func NewApp() *fx.App {
 			RegisterWebSocketHooks,
 			RegisterMealReminderCron,
 			RegisterRouterHooks,
+			RegisterSocialWebSocketHook,
 			RegisterAppLifecycle,
 		),
 	)
