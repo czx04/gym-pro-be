@@ -45,7 +45,7 @@ func (h *WorkoutHandler) CreateWorkoutPlan(c *gin.Context) {
 
 	var input workout.CreateWorkoutPlanInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		response.Error(c, errors.BadRequest("invalid request body"))
+		response.Error(c, errors.BadRequest("Dữ liệu gửi lên không hợp lệ"))
 		return
 	}
 
@@ -151,7 +151,7 @@ func (h *WorkoutHandler) UpdateWorkoutPlan(c *gin.Context) {
 	input.ID = uuidPlanID
 	input.IsUpdateExercises = isUpdateExercises
 	if err := c.ShouldBindJSON(&input); err != nil {
-		response.Error(c, errors.BadRequest("invalid request body"))
+		response.Error(c, errors.BadRequest("Dữ liệu gửi lên không hợp lệ"))
 		return
 	}
 	plan, err := h.workoutUC.UpdateWorkoutPlan(c.Request.Context(), user.ID, input)
@@ -309,7 +309,7 @@ func (h *WorkoutHandler) CreateWorkoutSession(c *gin.Context) {
 	}
 	var input workout.CreateWorkoutSessionInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		response.Error(c, errors.BadRequest("invalid request body"))
+		response.Error(c, errors.BadRequest("Dữ liệu gửi lên không hợp lệ"))
 		return
 	}
 	session, err := h.workoutUC.CreateWorkoutSession(c.Request.Context(), user.ID, input)
@@ -338,7 +338,7 @@ func (h *WorkoutHandler) FinishWorkoutSession(c *gin.Context) {
 	}
 	var input workout.CompleteWorkoutSessionInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		response.Error(c, errors.BadRequest("invalid request body"))
+		response.Error(c, errors.BadRequest("Dữ liệu gửi lên không hợp lệ"))
 		return
 	}
 	session, err := h.workoutUC.FinishWorkoutSession(c.Request.Context(), user.ID, c.Param("id"), input)

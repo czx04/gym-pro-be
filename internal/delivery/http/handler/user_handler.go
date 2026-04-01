@@ -179,7 +179,7 @@ func (h *UserHandler) UpdateUserNutritionTarget(c *gin.Context) {
 
 	var input useruc.UpdateUserNutritionTargetInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		response.Error(c, errors.BadRequest("invalid request body"))
+		response.Error(c, errors.BadRequest("Dữ liệu gửi lên không hợp lệ"))
 		return
 	}
 
@@ -215,7 +215,7 @@ func (h *UserHandler) RegisterPushToken(c *gin.Context) {
 	}
 	var body mealdomain.RegisterPushTokenInput
 	if err := c.ShouldBindJSON(&body); err != nil {
-		response.Error(c, errors.BadRequest("invalid request body"))
+		response.Error(c, errors.BadRequest("Dữ liệu gửi lên không hợp lệ"))
 		return
 	}
 	if err := h.pushTokenUC.Register(c.Request.Context(), userID, body); err != nil {
@@ -246,7 +246,7 @@ func (h *UserHandler) UploadAvatarImage(c *gin.Context) {
 	}
 	var input useruc.UploadAvatarImageInput
 	if err := c.ShouldBind(&input); err != nil {
-		response.Error(c, errors.BadRequest("invalid request body"))
+		response.Error(c, errors.BadRequest("Dữ liệu gửi lên không hợp lệ"))
 		return
 	}
 	if err := validateAvatarFileHeader(input.File); err != nil {
@@ -308,7 +308,7 @@ func (h *UserHandler) RequestChangeEmailOTP(c *gin.Context) {
 	}
 	var input useruc.RequestChangeEmailOTPInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		response.Error(c, errors.BadRequest("invalid request body"))
+		response.Error(c, errors.BadRequest("Dữ liệu gửi lên không hợp lệ"))
 		return
 	}
 	if err := h.userUC.RequestChangeEmailOTP(c.Request.Context(), userID, input); err != nil {
@@ -340,7 +340,7 @@ func (h *UserHandler) VerifyChangeEmailOTP(c *gin.Context) {
 	}
 	var input useruc.VerifyChangeEmailOTPInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		response.Error(c, errors.BadRequest("invalid request body"))
+		response.Error(c, errors.BadRequest("Dữ liệu gửi lên không hợp lệ"))
 		return
 	}
 	if err := h.userUC.VerifyChangeEmailOTP(c.Request.Context(), userID, input); err != nil {
