@@ -439,7 +439,7 @@ func (r *userRepository) UpdateEmail(ctx context.Context, id uuid.UUID, email st
 	if err != nil {
 		// Unique constraint violation on users.email.
 		if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Code == "23505" {
-			return errors.Conflict("email already registered")
+			return errors.Conflict("Email đã được đăng ký")
 		}
 		return errors.DatabaseError("update email", err)
 	}

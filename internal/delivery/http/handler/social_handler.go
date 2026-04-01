@@ -201,7 +201,7 @@ func (h *SocialHandler) CreatePost(c *gin.Context) {
 
 	var input socialuc.CreatePostInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		response.Error(c, errors.BadRequest("invalid request body"))
+		response.Error(c, errors.BadRequest("Dữ liệu gửi lên không hợp lệ"))
 		return
 	}
 
@@ -224,7 +224,7 @@ func (h *SocialHandler) UpdatePost(c *gin.Context) {
 
 	var input socialuc.UpdatePostInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		response.Error(c, errors.BadRequest("invalid request body"))
+		response.Error(c, errors.BadRequest("Dữ liệu gửi lên không hợp lệ"))
 		return
 	}
 
@@ -261,7 +261,7 @@ func (h *SocialHandler) CreateMediaSignature(c *gin.Context) {
 
 	var req createMediaSignatureRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, errors.BadRequest("invalid request body"))
+		response.Error(c, errors.BadRequest("Dữ liệu gửi lên không hợp lệ"))
 		return
 	}
 	input := socialuc.CreateMediaSignatureInput{
@@ -287,7 +287,7 @@ func (h *SocialHandler) ConfirmMedia(c *gin.Context) {
 
 	var req confirmMediaRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, errors.BadRequest("invalid request body"))
+		response.Error(c, errors.BadRequest("Dữ liệu gửi lên không hợp lệ"))
 		return
 	}
 	input := socialuc.ConfirmMediaInput{
@@ -315,7 +315,7 @@ func (h *SocialHandler) CreateComment(c *gin.Context) {
 
 	var req createCommentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, errors.BadRequest("invalid request body"))
+		response.Error(c, errors.BadRequest("Dữ liệu gửi lên không hợp lệ"))
 		return
 	}
 
@@ -359,7 +359,7 @@ func (h *SocialHandler) UpdateComment(c *gin.Context) {
 		Content string `json:"content"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, errors.BadRequest("invalid request body"))
+		response.Error(c, errors.BadRequest("Dữ liệu gửi lên không hợp lệ"))
 		return
 	}
 
@@ -398,7 +398,7 @@ func (h *SocialHandler) ReportPost(c *gin.Context) {
 	}
 	var req reportPostRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, errors.BadRequest("invalid request body"))
+		response.Error(c, errors.BadRequest("Dữ liệu gửi lên không hợp lệ"))
 		return
 	}
 	result, err := h.socialUC.ReportPost(c.Request.Context(), userID, c.Param("postId"), socialuc.ReportPostInput{
@@ -421,7 +421,7 @@ func (h *SocialHandler) SetFollowState(c *gin.Context) {
 
 	var req setFollowStateRequest
 	if err := c.ShouldBindJSON(&req); err != nil || req.Following == nil {
-		response.Error(c, errors.BadRequest("invalid request body"))
+		response.Error(c, errors.BadRequest("Dữ liệu gửi lên không hợp lệ"))
 		return
 	}
 
@@ -452,7 +452,7 @@ func (h *SocialHandler) SetBlockState(c *gin.Context) {
 
 	var req setBlockStateRequest
 	if err := c.ShouldBindJSON(&req); err != nil || req.Blocked == nil {
-		response.Error(c, errors.BadRequest("invalid request body"))
+		response.Error(c, errors.BadRequest("Dữ liệu gửi lên không hợp lệ"))
 		return
 	}
 
@@ -483,7 +483,7 @@ func (h *SocialHandler) SetPostPreference(c *gin.Context) {
 
 	var req setPostPreferenceRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, errors.BadRequest("invalid request body"))
+		response.Error(c, errors.BadRequest("Dữ liệu gửi lên không hợp lệ"))
 		return
 	}
 
@@ -685,7 +685,7 @@ func (h *SocialHandler) SocialNotificationsWrite(c *gin.Context) {
 
 	var req socialNotificationsPostBody
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, errors.BadRequest("invalid request body"))
+		response.Error(c, errors.BadRequest("Dữ liệu gửi lên không hợp lệ"))
 		return
 	}
 	if strings.TrimSpace(strings.ToLower(req.Type)) != "mark_read" {

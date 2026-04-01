@@ -44,7 +44,7 @@ func (h *MealLogHandler) CreateMealLog(c *gin.Context) {
 
 	var input meal.CreateMealLogInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		response.Error(c, errors.BadRequest("invalid request body"))
+		response.Error(c, errors.BadRequest("Dữ liệu gửi lên không hợp lệ"))
 		return
 	}
 
@@ -190,7 +190,7 @@ func (h *MealLogHandler) UpdateMealLog(c *gin.Context) {
 
 	var input meal.UpdateMealLogInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		response.Error(c, errors.BadRequest("invalid request body"))
+		response.Error(c, errors.BadRequest("Dữ liệu gửi lên không hợp lệ"))
 		return
 	}
 

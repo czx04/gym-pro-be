@@ -111,14 +111,14 @@ func (uc *UserUseCases) RegisterRequestOTP(ctx context.Context, input RegisterRe
 		return err
 	}
 	if exists {
-		return errors.Conflict("email already registered")
+		return errors.Conflict("Email đã được đăng ký")
 	}
 	otpCode, err := uc.otpService.Generate(ctx, input.Email)
 	if err != nil {
 		return err
 	}
 	if err := uc.emailService.SendOTP(input.Email, otpCode); err != nil {
-		return errors.InternalServer("failed to send OTP email", err)
+		return errors.InternalServer("Gửi email OTP thất bại", err)
 	}
 	return nil
 }
@@ -133,7 +133,7 @@ func (uc *UserUseCases) RequestChangeEmailOTP(ctx context.Context, userID uuid.U
 		return err
 	}
 	if u != nil && strings.EqualFold(strings.TrimSpace(u.Email), strings.TrimSpace(input.NewEmail)) {
-		return errors.BadRequest("new_email must be different from current email")
+		return errors.BadRequest("Email mới phải khác email hiện tại")
 	}
 
 	exists, err := uc.userRepo.Exists(ctx, input.NewEmail)
@@ -141,7 +141,7 @@ func (uc *UserUseCases) RequestChangeEmailOTP(ctx context.Context, userID uuid.U
 		return err
 	}
 	if exists {
-		return errors.Conflict("email already registered")
+		return errors.Conflict("Email đã được đăng ký")
 	}
 
 	otpCode, err := uc.otpService.Generate(ctx, input.NewEmail)
@@ -149,7 +149,7 @@ func (uc *UserUseCases) RequestChangeEmailOTP(ctx context.Context, userID uuid.U
 		return err
 	}
 	if err := uc.emailService.SendOTP(input.NewEmail, otpCode); err != nil {
-		return errors.InternalServer("failed to send OTP email", err)
+		return errors.InternalServer("Gửi email OTP thất bại", err)
 	}
 	return nil
 }
@@ -164,7 +164,7 @@ func (uc *UserUseCases) VerifyChangeEmailOTP(ctx context.Context, userID uuid.UU
 		return err
 	}
 	if u != nil && strings.EqualFold(strings.TrimSpace(u.Email), strings.TrimSpace(input.NewEmail)) {
-		return errors.BadRequest("new_email must be different from current email")
+		return errors.BadRequest("Email mới phải khác email hiện tại")
 	}
 
 	if err := uc.otpService.Verify(ctx, input.NewEmail, input.OTP); err != nil {
@@ -177,7 +177,7 @@ func (uc *UserUseCases) VerifyChangeEmailOTP(ctx context.Context, userID uuid.UU
 		return err
 	}
 	if exists {
-		return errors.Conflict("email already registered")
+		return errors.Conflict("Email đã được đăng ký")
 	}
 
 	if err := uc.userRepo.UpdateEmail(ctx, userID, input.NewEmail); err != nil {
@@ -198,11 +198,11 @@ func (uc *UserUseCases) VerifyOTP(ctx context.Context, input VerifyOTPInput) (*T
 		return nil, err
 	}
 	if exists {
-		return nil, errors.Conflict("user already exists")
+		return nil, errors.Conflict("Tài khoản đã tồn tại")
 	}
 	passwordHash, err := uc.passwordMgr.HashPassword(input.Password)
 	if err != nil {
-		return nil, errors.InternalServer("failed to hash password", err)
+		return nil, errors.InternalServer("Mã hoá mật khẩu thất bại", err)
 	}
 	newUser := &user.User{
 		ID:           uuid.New(),
