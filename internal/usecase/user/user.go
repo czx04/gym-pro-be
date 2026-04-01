@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"gym-pro-2026-ptit/internal/domain/user"
-	"gym-pro-2026-ptit/internal/helper"
 	"gym-pro-2026-ptit/internal/infrastructure/auth"
 	"gym-pro-2026-ptit/internal/infrastructure/email"
 	"gym-pro-2026-ptit/internal/infrastructure/otp"
@@ -51,9 +50,9 @@ type (
 	}
 	UpdateUserNutritionTargetInput struct {
 		DailyCalorieTarget *int    `json:"daily_calorie_target,omitempty" validate:"omitempty,gte=500,lte=10000"`
-		ProteinTargetG     *int    `json:"protein_target_g,omitempty" validate:"omitempty,gte=0,lte=500"`
-		CarbsTargetG       *int    `json:"carbs_target_g,omitempty" validate:"omitempty,gte=0,lte=1000"`
-		FatTargetG         *int    `json:"fat_target_g,omitempty" validate:"omitempty,gte=0,lte=300"`
+		ProteinTargetG     *int    `json:"protein_target_g,omitempty" validate:"omitempty,gt=0,lte=500"`
+		CarbsTargetG       *int    `json:"carbs_target_g,omitempty" validate:"omitempty,gt=0,lte=1000"`
+		FatTargetG         *int    `json:"fat_target_g,omitempty" validate:"omitempty,gt=0,lte=300"`
 		EffectiveDate      *string `json:"effective_date,omitempty"`
 	}
 	UploadAvatarImageInput struct {
@@ -276,9 +275,37 @@ func (uc *UserUseCases) UpdateProfile(ctx context.Context, userID uuid.UUID, inp
 	if err := uc.validator.Validate(input); err != nil {
 		return nil, errors.Validation(err.Error())
 	}
-	_, err := uc.userRepo.GetByID(ctx, userID)
+	u, err := uc.userRepo.GetByID(ctx, userID)
 	if err != nil {
 		return nil, err
+	}
+
+	if input.ProteinTargetG != nil || input.CarbsTargetG != nil || input.FatTargetG != nil || input.DailyCalorieTarget != nil {
+		var p, c, f *int
+		if input.ProteinTargetG != nil {
+			p = input.ProteinTargetG
+		} else {
+			p = u.ProteinTargetG
+		}
+		if input.CarbsTargetG != nil {
+			c = input.CarbsTargetG
+		} else {
+			c = u.CarbsTargetG
+		}
+		if input.FatTargetG != nil {
+			f = input.FatTargetG
+		} else {
+			f = u.FatTargetG
+		}
+
+		if p == nil || c == nil || f == nil {
+			return nil, errors.BadRequest("missing macro targets to compute calories")
+		}
+		if *p <= 0 || *c <= 0 || *f <= 0 {
+			return nil, errors.BadRequest("macro targets must be greater than 0")
+		}
+		cal := (*p)*4 + (*c)*4 + (*f)*9
+		input.DailyCalorieTarget = &cal
 	}
 	if err := uc.userRepo.UpdateProfile(ctx, userID, input); err != nil {
 		return nil, err
@@ -384,10 +411,26 @@ func (uc *UserUseCases) UpdateUserNutritionTarget(ctx context.Context, userID uu
 		return nil, errors.InternalServer("Failed to get user", err)
 	}
 
-	helper.SetIfNotNil(&u.DailyCalorieTarget, &input.DailyCalorieTarget)
-	helper.SetIfNotNil(&u.ProteinTargetG, &input.ProteinTargetG)
-	helper.SetIfNotNil(&u.CarbsTargetG, &input.CarbsTargetG)
-	helper.SetIfNotNil(&u.FatTargetG, &input.FatTargetG)
+	if input.ProteinTargetG != nil {
+		u.ProteinTargetG = input.ProteinTargetG
+	}
+	if input.CarbsTargetG != nil {
+		u.CarbsTargetG = input.CarbsTargetG
+	}
+	if input.FatTargetG != nil {
+		u.FatTargetG = input.FatTargetG
+	}
+
+	if u.ProteinTargetG == nil || u.CarbsTargetG == nil || u.FatTargetG == nil {
+		return nil, errors.BadRequest("missing macro targets to compute calories")
+	}
+	if *u.ProteinTargetG <= 0 || *u.CarbsTargetG <= 0 || *u.FatTargetG <= 0 {
+		return nil, errors.BadRequest("macro targets must be greater than 0")
+	}
+
+	cal := (*u.ProteinTargetG)*4 + (*u.CarbsTargetG)*4 + (*u.FatTargetG)*9
+	u.DailyCalorieTarget = &cal
+
 	if err := uc.userRepo.Update(ctx, u); err != nil {
 		return nil, errors.InternalServer("Failed to update user", err)
 	}
