@@ -191,62 +191,6 @@ func (h *AuthHandler) UpdateMe(c *gin.Context) {
 	response.Success(c, u)
 }
 
-// GoogleOAuth godoc
-// @Summary Google OAuth login
-// @Description Redirect to Google OAuth consent screen
-// @Tags auth
-// @Accept json
-// @Produce json
-// @Router /auth/oauth/google [get]
-func (h *AuthHandler) GoogleOAuth(c *gin.Context) {
-	// TODO: Implement Google OAuth redirect
-	response.Error(c, errors.InternalServer("Chức năng chưa được hỗ trợ", nil))
-}
-
-// GoogleOAuthCallback godoc
-// @Summary Google OAuth callback
-// @Description Handle Google OAuth callback
-// @Tags auth
-// @Accept json
-// @Produce json
-// @Param code query string true "Authorization code"
-// @Param state query string true "State parameter"
-// @Success 200 {object} response.Response{data=useruc.TokenPair}
-// @Failure 401 {object} response.Response
-// @Router /auth/oauth/google/callback [get]
-func (h *AuthHandler) GoogleOAuthCallback(c *gin.Context) {
-	// TODO: Implement Google OAuth callback
-	response.Error(c, errors.InternalServer("Chức năng chưa được hỗ trợ", nil))
-}
-
-// FacebookOAuth godoc
-// @Summary Facebook OAuth login
-// @Description Redirect to Facebook OAuth consent screen
-// @Tags auth
-// @Accept json
-// @Produce json
-// @Router /auth/oauth/facebook [get]
-func (h *AuthHandler) FacebookOAuth(c *gin.Context) {
-	// TODO: Implement Facebook OAuth redirect
-	response.Error(c, errors.InternalServer("Chức năng chưa được hỗ trợ", nil))
-}
-
-// FacebookOAuthCallback godoc
-// @Summary Facebook OAuth callback
-// @Description Handle Facebook OAuth callback
-// @Tags auth
-// @Accept json
-// @Produce json
-// @Param code query string true "Authorization code"
-// @Param state query string true "State parameter"
-// @Success 200 {object} response.Response{data=useruc.TokenPair}
-// @Failure 401 {object} response.Response
-// @Router /auth/oauth/facebook/callback [get]
-func (h *AuthHandler) FacebookOAuthCallback(c *gin.Context) {
-	// TODO: Implement Facebook OAuth callback
-	response.Error(c, errors.InternalServer("Chức năng chưa được hỗ trợ", nil))
-}
-
 // ResetPasswordRequestOTP godoc
 // @Summary Request OTP for resetting password
 // @Description Request an OTP code to be sent via email for resetting password
