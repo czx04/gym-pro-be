@@ -225,27 +225,6 @@ func (h *UserHandler) RegisterPushToken(c *gin.Context) {
 	c.Status(204)
 }
 
-// DeletePushToken removes a registered Expo push token.
-func (h *UserHandler) DeletePushToken(c *gin.Context) {
-	userID, err := middleware.GetUserID(c)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-	var body struct {
-		ExpoPushToken string `json:"expo_push_token"`
-	}
-	if err := c.ShouldBindJSON(&body); err != nil {
-		response.Error(c, errors.BadRequest("invalid request body"))
-		return
-	}
-	if err := h.pushTokenUC.Delete(c.Request.Context(), userID, body.ExpoPushToken); err != nil {
-		response.Error(c, err)
-		return
-	}
-	c.Status(204)
-}
-
 // UploadAvatarImage uploads a new avatar image for the user.
 // @Summary Upload avatar image
 // @Description Upload a new avatar image for the user

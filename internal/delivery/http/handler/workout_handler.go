@@ -320,67 +320,8 @@ func (h *WorkoutHandler) CreateWorkoutSession(c *gin.Context) {
 	response.Created(c, session)
 }
 
-// UpdateWorkoutSession godoc
-// @Summary Update session (e.g. status in_progress, startedAt)
-// @Tags workout-sessions
-// @Accept json
-// @Produce json
-// @Security BearerAuth
-// @Param id path string true "Session ID"
-// @Param body body workout.UpdateWorkoutSessionInput true "Body"
-// @Success 200 {object} response.Response{data=workout.WorkoutSession}
-// @Router /workout-sessions/{id} [patch]
-func (h *WorkoutHandler) UpdateWorkoutSession(c *gin.Context) {
-	user, err := middleware.GetUser(c)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-	var input workout.UpdateWorkoutSessionInput
-	if err := c.ShouldBindJSON(&input); err != nil {
-		response.Error(c, errors.BadRequest("invalid request body"))
-		return
-	}
-	session, err := h.workoutUC.UpdateWorkoutSession(c.Request.Context(), user.ID, c.Param("id"), input)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-	response.Success(c, session)
-}
-
-// UpdateSessionSet godoc
-// @Summary Update one set (reps, weight_kg, completed) - Complete Set
-// @Tags workout-sessions
-// @Accept json
-// @Produce json
-// @Security BearerAuth
-// @Param id path string true "Session ID"
-// @Param setId path string true "Set ID"
-// @Param body body workout.UpdateSessionSetInput true "Body"
-// @Success 200 {object} response.Response
-// @Router /workout-sessions/{id}/exercise-sets/{setId} [patch]
-func (h *WorkoutHandler) UpdateSessionSet(c *gin.Context) {
-	user, err := middleware.GetUser(c)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-	var input workout.UpdateSessionSetInput
-	if err := c.ShouldBindJSON(&input); err != nil {
-		response.Error(c, errors.BadRequest("invalid request body"))
-		return
-	}
-	err = h.workoutUC.UpdateSessionSet(c.Request.Context(), user.ID, c.Param("id"), c.Param("setId"), input)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-	response.Success(c, nil)
-}
-
 // FinishWorkoutSession godoc
-// @Summary Finish session (status completed, durationSecs)
+// @Summary Finish session in one request (batch sets + session completion)
 // @Tags workout-sessions
 // @Accept json
 // @Produce json
