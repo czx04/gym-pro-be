@@ -5,6 +5,7 @@ import (
 	"gym-pro-2026-ptit/internal/infrastructure/logger"
 	"gym-pro-2026-ptit/pkg/errors"
 	"gym-pro-2026-ptit/pkg/response"
+	"strconv"
 
 	exerciseuc "gym-pro-2026-ptit/internal/usecase/exercise"
 
@@ -21,12 +22,12 @@ func NewExerciseHandler(exerciseUC *exerciseuc.ExerciseUseCases) *ExerciseHandle
 }
 
 func (h *ExerciseHandler) ListExercises(c *gin.Context) {
-	page, pageSize := c.GetInt("page"), c.GetInt("page_size")
-	if page == 0 {
-		page = 1
+	page, pageSize := 1, 20
+	if c.Query("page") != "" {
+		page, _ = strconv.Atoi(c.Query("page"))
 	}
-	if pageSize == 0 {
-		pageSize = 20
+	if c.Query("page_size") != "" {
+		pageSize, _ = strconv.Atoi(c.Query("page_size"))
 	}
 
 	isFilter := false
