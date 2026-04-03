@@ -564,11 +564,14 @@ func (r *mealLogRepository) GetStats(ctx context.Context, userID uuid.UUID, star
 }
 
 // ListAllDistinctLogDateStrings returns sorted YYYY-MM-DD from meal_logs.
+// Only dates where the log was created on the same VN calendar day are included
+// so that retroactive logging does not inflate streaks.
 func (r *mealLogRepository) ListAllDistinctLogDateStrings(ctx context.Context, userID uuid.UUID) ([]string, error) {
 	query := `
 		SELECT to_char(log_date, 'YYYY-MM-DD')
 		FROM meal_logs
 		WHERE user_id = $1
+		  AND (created_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date = log_date
 		GROUP BY log_date
 		ORDER BY log_date
 	`
