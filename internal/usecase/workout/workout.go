@@ -34,6 +34,22 @@ type WorkoutUseCases struct {
 	validator       *validator.Validator
 }
 
+type ProfileWorkoutStats struct {
+	TotalWorkouts    int64 `json:"total_workouts"`
+	TotalWorkoutDays int64 `json:"total_workout_days"`
+}
+
+func (uc *WorkoutUseCases) GetProfileWorkoutStats(ctx context.Context, userID uuid.UUID) (*ProfileWorkoutStats, error) {
+	totalWorkouts, totalDays, err := uc.sessionRepo.GetProfileWorkoutStats(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return &ProfileWorkoutStats{
+		TotalWorkouts:    totalWorkouts,
+		TotalWorkoutDays: totalDays,
+	}, nil
+}
+
 func NewWorkoutUseCases(
 	db *database.DB,
 	cache *cacheinfra.Cache,
@@ -237,9 +253,6 @@ func (uc *WorkoutUseCases) buildWorkoutPlanFromUpdateInput(currentPlan *workout.
 	}
 	currentPlan.UpdatedAt = time.Now()
 }
-
-// ——— Workout Session (Calendar / Tracking) ———
-
 func (uc *WorkoutUseCases) GetScheduledDates(ctx context.Context, userID uuid.UUID, month, year int) ([]string, error) {
 	return uc.sessionRepo.GetScheduledDates(ctx, userID, month, year)
 }
@@ -323,7 +336,6 @@ func (uc *WorkoutUseCases) CreateWorkoutSession(ctx context.Context, userID uuid
 		Title:         plan.Title,
 	}
 	if input.StartNow {
-		session.Status = workout.SessionStatusInProgress
 		session.StartedAt = &now
 	}
 	session.Exercises = make([]workout.WorkoutSessionExercise, 0, len(exercises))
@@ -349,66 +361,56 @@ func (uc *WorkoutUseCases) CreateWorkoutSession(ctx context.Context, userID uuid
 	return session, nil
 }
 
-func (uc *WorkoutUseCases) UpdateWorkoutSession(ctx context.Context, userID uuid.UUID, sessionID string, input workout.UpdateWorkoutSessionInput) (*workout.WorkoutSession, error) {
-	id, err := uuid.Parse(sessionID)
-	if err != nil {
-		return nil, errors.BadRequest("invalid session ID")
-	}
-	s, err := uc.sessionRepo.GetByID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	if s.UserID != userID {
-		return nil, errors.Forbidden("not your session")
-	}
-	if input.Status != nil {
-		s.Status = *input.Status
-	}
-	if input.StartedAt != nil {
-		s.StartedAt = input.StartedAt
-	}
-	s.UpdatedAt = time.Now()
-	if err := uc.sessionRepo.Update(ctx, s); err != nil {
-		return nil, err
-	}
-	return uc.sessionRepo.GetByID(ctx, id)
-}
-
-func (uc *WorkoutUseCases) UpdateSessionSet(ctx context.Context, userID uuid.UUID, sessionID, setID string, input workout.UpdateSessionSetInput) error {
-	sid, err := uuid.Parse(sessionID)
-	if err != nil {
-		return errors.BadRequest("invalid session ID")
-	}
-	setUUID, err := uuid.Parse(setID)
-	if err != nil {
-		return errors.BadRequest("invalid set ID")
-	}
-	s, err := uc.sessionRepo.GetByID(ctx, sid)
-	if err != nil {
-		return err
-	}
-	if s.UserID != userID {
-		return errors.Forbidden("not your session")
-	}
-	return uc.sessionRepo.UpdateSet(ctx, setUUID, input)
-}
-
 func (uc *WorkoutUseCases) FinishWorkoutSession(ctx context.Context, userID uuid.UUID, sessionID string, input workout.CompleteWorkoutSessionInput) (*workout.WorkoutSession, error) {
+	if err := uc.validator.Validate(input); err != nil {
+		return nil, errors.Validation(err.Error())
+	}
+
 	id, err := uuid.Parse(sessionID)
 	if err != nil {
 		return nil, errors.BadRequest("invalid session ID")
 	}
-	s, err := uc.sessionRepo.GetByID(ctx, id)
+
+	tx, err := uc.db.Begin(ctx)
+	if err != nil {
+		return nil, errors.DatabaseError("begin transaction", err)
+	}
+	defer tx.Rollback(ctx)
+
+	sessionRepo := uc.sessionRepo.WithTx(tx)
+
+	s, err := sessionRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 	if s.UserID != userID {
 		return nil, errors.Forbidden("not your session")
 	}
-	if err := uc.sessionRepo.Complete(ctx, id, input); err != nil {
+
+	if len(input.Sets) > 0 {
+		if err := sessionRepo.UpdateSetsBulk(ctx, id, input.Sets); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := sessionRepo.Complete(ctx, id, input); err != nil {
 		return nil, err
 	}
-	return uc.sessionRepo.GetByID(ctx, id)
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, errors.DatabaseError("commit transaction", err)
+	}
+
+	updated, err := uc.sessionRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	if updated.UserID != userID {
+		return nil, errors.Forbidden("not your session")
+	}
+
+	return updated, nil
 }
 
 func (uc *WorkoutUseCases) GetWeeklySummary(ctx context.Context, userID uuid.UUID, input workout.GetWeeklySummaryRequest) (*workout.WeeklyWorkoutSummary, error) {

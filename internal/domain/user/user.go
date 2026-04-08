@@ -48,9 +48,9 @@ type UpdateProfileInput struct {
 	FitnessGoal        *string    `json:"fitness_goal,omitempty" validate:"omitempty,oneof=lose_weight maintain gain_muscle improve_endurance"`
 	ActivityLevel      *string    `json:"activity_level,omitempty" validate:"omitempty,oneof=sedentary light moderate active very_active"`
 	DailyCalorieTarget *int       `json:"daily_calorie_target,omitempty" validate:"omitempty,gte=500,lte=10000"`
-	ProteinTargetG     *int       `json:"protein_target_g,omitempty" validate:"omitempty,gte=0,lte=500"`
-	CarbsTargetG       *int       `json:"carbs_target_g,omitempty" validate:"omitempty,gte=0,lte=1000"`
-	FatTargetG         *int       `json:"fat_target_g,omitempty" validate:"omitempty,gte=0,lte=300"`
+	ProteinTargetG     *int       `json:"protein_target_g,omitempty" validate:"omitempty,gt=0,lte=500"`
+	CarbsTargetG       *int       `json:"carbs_target_g,omitempty" validate:"omitempty,gt=0,lte=1000"`
+	FatTargetG         *int       `json:"fat_target_g,omitempty" validate:"omitempty,gt=0,lte=300"`
 }
 
 type UserNutritionTarget struct {

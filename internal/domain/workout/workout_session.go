@@ -63,48 +63,27 @@ type WorkoutSessionSet struct {
 	UpdatedAt                time.Time  `json:"updated_at"`
 }
 
-type SetData struct {
-	Set      int      `json:"set"`
-	Reps     *int     `json:"reps,omitempty"`
-	WeightKg *float64 `json:"weight_kg,omitempty"`
-	Duration *int     `json:"duration,omitempty"`
-}
-
-type StartWorkoutSessionInput struct {
-	WorkoutPlanID uuid.UUID  `json:"workout_plan_id" validate:"required"`
-	StartedAt     *time.Time `json:"started_at,omitempty"`
-}
-
-type LogExerciseSetInput struct {
-	ExerciseID uuid.UUID `json:"exercise_id" validate:"required"`
-	SetData    []SetData `json:"set_data" validate:"required,min=1"`
-	Notes      *string   `json:"notes,omitempty" validate:"omitempty,max=500"`
-}
-
 type CompleteWorkoutSessionInput struct {
-	CompletedAt      *time.Time `json:"completed_at,omitempty"`
-	DurationSecs     *int       `json:"duration_secs,omitempty" validate:"omitempty,gte=0"`
-	Notes            *string    `json:"notes,omitempty" validate:"omitempty,max=1000"`
-	Mood             *string    `json:"mood,omitempty" validate:"omitempty,oneof=happy neutral tired energetic"`
-	DifficultyRating *int       `json:"difficulty_rating,omitempty" validate:"omitempty,gte=1,lte=5"`
+	StartedAt        *time.Time              `json:"started_at,omitempty"`
+	CompletedAt      *time.Time              `json:"completed_at,omitempty"`
+	Notes            *string                 `json:"notes,omitempty" validate:"omitempty,max=1000"`
+	Mood             *string                 `json:"mood,omitempty" validate:"omitempty,oneof=happy neutral tired energetic"`
+	DifficultyRating *int                    `json:"difficulty_rating,omitempty" validate:"omitempty,gte=1,lte=5"`
+	Sets             []FinishSessionSetInput `json:"sets,omitempty" validate:"omitempty,dive"`
+}
+
+type FinishSessionSetInput struct {
+	SetID     string   `json:"set_id" validate:"required,uuid4"`
+	Reps      *int     `json:"reps,omitempty"`
+	WeightKg  *float64 `json:"weight_kg,omitempty"`
+	RestSecs  *int     `json:"rest_secs,omitempty" validate:"omitempty,gte=0,lte=1800"`
+	Completed *bool    `json:"completed,omitempty"`
 }
 
 type CreateWorkoutSessionInput struct {
 	WorkoutPlanID uuid.UUID `json:"workout_plan_id" validate:"required"`
 	ScheduledDate string    `json:"scheduled_date" validate:"required"` // YYYY-MM-DD
 	StartNow      bool      `json:"start_now,omitempty"`                // true = set status in_progress, started_at = now
-}
-
-type UpdateWorkoutSessionInput struct {
-	Status    *string    `json:"status,omitempty" validate:"omitempty,oneof=scheduled in_progress completed"`
-	StartedAt *time.Time `json:"started_at,omitempty"`
-}
-
-type UpdateSessionSetInput struct {
-	Reps      *int     `json:"reps,omitempty"`
-	WeightKg  *float64 `json:"weight_kg,omitempty"`
-	RestSecs  *int     `json:"rest_secs,omitempty" validate:"omitempty,gte=0,lte=1800"`
-	Completed *bool    `json:"completed,omitempty"`
 }
 
 type GetWeeklySummaryRequest struct {

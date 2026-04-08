@@ -83,7 +83,7 @@ func Forbidden(message string) *AppError {
 func NotFound(resource string) *AppError {
 	return &AppError{
 		Code:    ErrCodeNotFound,
-		Message: fmt.Sprintf("%s not found", resource),
+		Message: fmt.Sprintf("%s không tồn tại", resource),
 		Status:  http.StatusNotFound,
 	}
 }
@@ -120,7 +120,7 @@ func InternalServer(message string, err error) *AppError {
 func DatabaseError(operation string, err error) *AppError {
 	return &AppError{
 		Code:    ErrCodeDatabaseError,
-		Message: fmt.Sprintf("database error during %s", operation),
+		Message: fmt.Sprintf("lỗi cơ sở dữ liệu khi %s", operation),
 		Status:  http.StatusInternalServerError,
 		Err:     err,
 	}
@@ -130,7 +130,7 @@ func DatabaseError(operation string, err error) *AppError {
 func InvalidCredentials() *AppError {
 	return &AppError{
 		Code:    ErrCodeInvalidCredentials,
-		Message: "invalid email or password",
+		Message: "Email hoặc mật khẩu không đúng",
 		Status:  http.StatusUnauthorized,
 	}
 }
@@ -139,7 +139,7 @@ func InvalidCredentials() *AppError {
 func TokenExpired() *AppError {
 	return &AppError{
 		Code:    ErrCodeTokenExpired,
-		Message: "token has expired",
+		Message: "Phiên đăng nhập đã hết hạn",
 		Status:  http.StatusUnauthorized,
 	}
 }
@@ -148,7 +148,7 @@ func TokenExpired() *AppError {
 func TokenInvalid() *AppError {
 	return &AppError{
 		Code:    ErrCodeTokenInvalid,
-		Message: "token is invalid",
+		Message: "Phiên đăng nhập không hợp lệ",
 		Status:  http.StatusUnauthorized,
 	}
 }

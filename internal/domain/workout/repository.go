@@ -51,9 +51,6 @@ type WorkoutPlanRepository interface {
 	// AddExercise adds an exercise to a workout plan
 	AddExercise(ctx context.Context, planID uuid.UUID, exercises []*WorkoutPlanExercise) error
 
-	// UpdateExercise updates an exercise in a workout plan
-	UpdateExercise(ctx context.Context, planExerciseID uuid.UUID, input UpdateExerciseInWorkoutInput) error
-
 	// RemoveExercise removes an exercise from a workout plan
 	RemoveExercise(ctx context.Context, planID uuid.UUID) error
 
@@ -67,7 +64,6 @@ type WorkoutSessionRepository interface {
 	Create(ctx context.Context, session *WorkoutSession) error
 	GetByID(ctx context.Context, id uuid.UUID) (*WorkoutSession, error)
 	GetByUserID(ctx context.Context, userID uuid.UUID, page, pageSize int) ([]WorkoutSession, int64, error)
-	Update(ctx context.Context, session *WorkoutSession) error
 	Complete(ctx context.Context, id uuid.UUID, input CompleteWorkoutSessionInput) error
 	AddExerciseLog(ctx context.Context, sessionID uuid.UUID, exercise *WorkoutSessionExercise) error
 	GetExercises(ctx context.Context, sessionID uuid.UUID) ([]WorkoutSessionExercise, error)
@@ -76,8 +72,11 @@ type WorkoutSessionRepository interface {
 
 	GetScheduledDates(ctx context.Context, userID uuid.UUID, month, year int) ([]string, error)
 	GetByDate(ctx context.Context, userID uuid.UUID, date string) ([]WorkoutSession, error)
-	UpdateSet(ctx context.Context, setID uuid.UUID, input UpdateSessionSetInput) error
+	UpdateSetsBulk(ctx context.Context, sessionID uuid.UUID, sets []FinishSessionSetInput) error
 	GetWeeklyAggregate(ctx context.Context, userID uuid.UUID, start, end time.Time) (*WeeklyWorkoutMetrics, error)
 
 	GetExerciseStats(ctx context.Context, userID, exerciseID uuid.UUID) (*ExerciseStats, error)
+
+	// GetProfileWorkoutStats returns lightweight stats for the profile screen.
+	GetProfileWorkoutStats(ctx context.Context, userID uuid.UUID) (totalWorkouts int64, totalWorkoutDays int64, err error)
 }

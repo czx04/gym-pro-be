@@ -27,7 +27,6 @@ func (r *workoutPlanRepository) WithTx(tx *database.DB) workout.WorkoutPlanRepos
 	return &workoutPlanRepository{db: tx}
 }
 
-// TODO: Implement all WorkoutPlanRepository methods
 func (r *workoutPlanRepository) Create(ctx context.Context, plan *workout.WorkoutPlan) error {
 	query := `
 		INSERT INTO workout_plans (
@@ -188,11 +187,6 @@ func (r *workoutPlanRepository) AddExercise(ctx context.Context, planID uuid.UUI
 		logger.Error("error adding exercise to workout plan", "err", err)
 		return errors.DatabaseError("add exercise to workout plan", err)
 	}
-	return nil
-}
-
-func (r *workoutPlanRepository) UpdateExercise(ctx context.Context, planExerciseID uuid.UUID, input workout.UpdateExerciseInWorkoutInput) error {
-	// TODO: Update exercise configuration in plan
 	return nil
 }
 
@@ -359,7 +353,6 @@ func (r *workoutSessionRepository) getSessionExercisesWithSets(ctx context.Conte
 	if err != nil {
 		return nil, errors.DatabaseError("get session exercises", err)
 	}
-	defer rows.Close()
 	var list []workout.WorkoutSessionExercise
 	for rows.Next() {
 		var ex workout.WorkoutSessionExercise
@@ -369,14 +362,25 @@ func (r *workoutSessionRepository) getSessionExercisesWithSets(ctx context.Conte
 			&ex.Exercise.ID, &ex.Exercise.Name, &ex.Exercise.Description, &ex.Exercise.Category, &ex.Exercise.MuscleGroups, &ex.Exercise.EquipmentNeeded, &ex.Exercise.DifficultyLevel, &ex.Exercise.CaloriesPerMinute, &ex.Exercise.VideoURL, &ex.Exercise.ThumbnailURL, &ex.Exercise.IsActive,
 		)
 		if err != nil {
+			rows.Close()
 			return nil, errors.DatabaseError("scan session exercise", err)
-		}
-		ex.Sets, err = r.getSessionSets(ctx, ex.ID)
-		if err != nil {
-			return nil, err
 		}
 		list = append(list, ex)
 	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, errors.DatabaseError("iterate session exercises", err)
+	}
+	rows.Close()
+
+	for i := range list {
+		sets, err := r.getSessionSets(ctx, list[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		list[i].Sets = sets
+	}
+
 	return list, nil
 }
 
@@ -473,39 +477,78 @@ func (r *workoutSessionRepository) GetByUserID(ctx context.Context, userID uuid.
 	return list, total, nil
 }
 
-func (r *workoutSessionRepository) Update(ctx context.Context, session *workout.WorkoutSession) error {
-	q := `UPDATE workout_sessions SET status = $2, started_at = $3, completed_at = $4, duration_mins = $5, total_calories_burned = $6, notes = $7, mood = $8, difficulty_rating = $9, updated_at = $10 WHERE id = $1`
-	_, err := r.db.Exec(ctx, q, session.ID, session.Status, session.StartedAt, session.CompletedAt, session.DurationMins, session.TotalCaloriesBurned, session.Notes, session.Mood, session.DifficultyRating, session.UpdatedAt)
-	return errors.DatabaseError("update workout session", err)
-}
-
 func (r *workoutSessionRepository) Complete(ctx context.Context, id uuid.UUID, input workout.CompleteWorkoutSessionInput) error {
-	var durationMins *int
-	if input.DurationSecs != nil {
-		m := *input.DurationSecs / 60
-		durationMins = &m
-	}
-	q := `UPDATE workout_sessions SET status = 'completed', completed_at = COALESCE($2, NOW()), duration_mins = COALESCE($3, duration_mins), notes = COALESCE($4, notes), mood = $5, difficulty_rating = $6, updated_at = NOW() WHERE id = $1`
-	_, err := r.db.Exec(ctx, q, id, input.CompletedAt, durationMins, input.Notes, input.Mood, input.DifficultyRating)
+	q := `
+		WITH timing AS (
+			SELECT
+				COALESCE($2, ws.started_at, NOW()) AS started_at,
+				COALESCE($3, NOW()) AS completed_at
+			FROM workout_sessions ws
+			WHERE ws.id = $1
+		)
+		UPDATE workout_sessions ws
+		SET
+			status = 'completed',
+			started_at = LEAST(timing.started_at, timing.completed_at),
+			completed_at = timing.completed_at,
+			duration_mins = GREATEST(FLOOR(EXTRACT(EPOCH FROM (timing.completed_at - LEAST(timing.started_at, timing.completed_at))) / 60)::int, 0),
+			notes = COALESCE($4, notes),
+			mood = $5,
+			difficulty_rating = $6,
+			updated_at = NOW()
+		FROM timing
+		WHERE ws.id = $1`
+	_, err := r.db.Exec(ctx, q, id, input.StartedAt, input.CompletedAt, input.Notes, input.Mood, input.DifficultyRating)
 	if err != nil {
 		return errors.DatabaseError("complete workout session", err)
 	}
 	return nil
 }
 
-func (r *workoutSessionRepository) UpdateSet(ctx context.Context, setID uuid.UUID, input workout.UpdateSessionSetInput) error {
-	q := `UPDATE workout_session_sets SET reps = COALESCE($2, reps), weight_kg = $3, rest_secs = COALESCE($4, rest_secs), completed = COALESCE($5, completed), completed_at = CASE WHEN $5 = true THEN COALESCE(completed_at, NOW()) WHEN $5 = false THEN NULL ELSE completed_at END, updated_at = NOW() WHERE id = $1`
-	var reps interface{} = input.Reps
-	var weightKg interface{} = input.WeightKg
-	var restSecs interface{} = input.RestSecs
-	var completed interface{}
-	if input.Completed != nil {
-		completed = *input.Completed
+func (r *workoutSessionRepository) UpdateSetsBulk(ctx context.Context, sessionID uuid.UUID, sets []workout.FinishSessionSetInput) error {
+	if len(sets) == 0 {
+		return nil
 	}
-	_, err := r.db.Exec(ctx, q, setID, reps, weightKg, restSecs, completed)
-	if err != nil {
-		return errors.DatabaseError("update session set", err)
+
+	q := `
+		UPDATE workout_session_sets wss
+		SET
+			reps = COALESCE($3, wss.reps),
+			weight_kg = $4,
+			rest_secs = COALESCE($5, wss.rest_secs),
+			completed = COALESCE($6, wss.completed),
+			completed_at = CASE
+				WHEN $6 = true THEN COALESCE(wss.completed_at, NOW())
+				WHEN $6 = false THEN NULL
+				ELSE wss.completed_at
+			END,
+			updated_at = NOW()
+		FROM workout_session_exercises wse
+		WHERE wss.id = $1
+			AND wse.id = wss.workout_session_exercise_id
+			AND wse.workout_session_id = $2
+	`
+
+	for _, item := range sets {
+		setID, err := uuid.Parse(item.SetID)
+		if err != nil {
+			return errors.BadRequest("invalid set ID")
+		}
+
+		var completed interface{}
+		if item.Completed != nil {
+			completed = *item.Completed
+		}
+
+		tag, err := r.db.Exec(ctx, q, setID, sessionID, item.Reps, item.WeightKg, item.RestSecs, completed)
+		if err != nil {
+			return errors.DatabaseError("update session set batch", err)
+		}
+		if tag.RowsAffected() == 0 {
+			return errors.BadRequest(fmt.Sprintf("set %s does not belong to workout session", item.SetID))
+		}
 	}
+
 	return nil
 }
 
@@ -577,6 +620,27 @@ func (r *workoutSessionRepository) GetExercises(ctx context.Context, sessionID u
 func (r *workoutSessionRepository) GetStats(ctx context.Context, userID uuid.UUID) (*workout.WorkoutStats, error) {
 	// TODO: aggregate stats
 	return nil, nil
+}
+
+func (r *workoutSessionRepository) GetProfileWorkoutStats(ctx context.Context, userID uuid.UUID) (int64, int64, error) {
+	var totalWorkouts int64
+	if err := r.db.QueryRow(ctx, `SELECT COUNT(*) FROM workout_sessions WHERE user_id = $1`, userID).Scan(&totalWorkouts); err != nil {
+		return 0, 0, errors.DatabaseError("count workout sessions", err)
+	}
+
+	var totalWorkoutDays int64
+	// Use started_at when available; fall back to created_at so newly-created sessions still count.
+	qDays := `
+		SELECT COUNT(*) FROM (
+			SELECT DISTINCT (COALESCE(started_at, created_at) AT TIME ZONE 'UTC')::date AS d
+			FROM workout_sessions
+			WHERE user_id = $1
+		) sub
+	`
+	if err := r.db.QueryRow(ctx, qDays, userID).Scan(&totalWorkoutDays); err != nil {
+		return 0, 0, errors.DatabaseError("count workout session days", err)
+	}
+	return totalWorkouts, totalWorkoutDays, nil
 }
 
 func (r *workoutSessionRepository) Delete(ctx context.Context, id uuid.UUID) error {

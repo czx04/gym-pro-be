@@ -378,30 +378,3 @@ func (h *FoodHandler) ScanFood(c *gin.Context) {
 
 	response.Success(c, foods)
 }
-
-// SyncVectors godoc
-// @Summary Sync food vectors
-// @Description Creates embeddings for all foods in the DB (Admin only)
-// @Tags foods
-// @Accept json
-// @Produce json
-// @Security BearerAuth
-// @Success 200 {object} response.Response
-// @Failure 401 {object} response.Response
-// @Failure 403 {object} response.Response
-// @Router /foods/sync-vectors [post]
-func (h *FoodHandler) SyncVectors(c *gin.Context) {
-	userID, err := middleware.GetUserID(c)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-
-	res, err := h.foodUC.SyncVectors(c.Request.Context(), userID)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-
-	response.Success(c, res)
-}

@@ -57,13 +57,13 @@ func (s *otpService) Verify(ctx context.Context, email, otp string) error {
 	storedOTP, err := s.cache.Get(ctx, key)
 	if err != nil {
 		logger.Warn("OTP verification failed - not found or expired", "email", email)
-		return errors.BadRequest("OTP expired or invalid")
+		return errors.BadRequest("Mã OTP đã hết hạn hoặc không hợp lệ")
 	}
 
 	// Compare OTP
 	if storedOTP != otp {
 		logger.Warn("OTP verification failed - mismatch", "email", email)
-		return errors.BadRequest("OTP is incorrect")
+		return errors.BadRequest("Mã OTP không đúng")
 	}
 
 	logger.Info("OTP verified successfully", "email", email)
