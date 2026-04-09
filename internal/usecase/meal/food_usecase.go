@@ -271,6 +271,7 @@ func (uc *FoodUseCases) ScanFood(ctx context.Context, userID uuid.UUID, imageByt
 	// 1. Analyze image to get list of potential foods
 	ingredients, err := uc.aiService.AnalyzeFoodImage(ctx, imageBytes, mimeType)
 	if err != nil {
+		fmt.Printf("Lỗi Gemini ScanFood: %v\n", err)
 		return nil, errors.InternalServer("failed to analyze food image with AI", err)
 	}
 

@@ -27,7 +27,7 @@ func NewGeminiService() Service {
 	return &geminiService{
 		apiKey: strings.TrimSpace(os.Getenv("GEMINI_API_KEY")),
 		httpClient: &http.Client{
-			Timeout: 15 * time.Second,
+			Timeout: 60 * time.Second, // Tăng timeout lên 60s để AI có đủ thời gian phân tích ảnh
 		},
 	}
 }
@@ -134,6 +134,10 @@ func (s *geminiService) AnalyzeFoodImage(ctx context.Context, imageBytes []byte,
 					},
 				},
 			},
+		},
+		// force JSON mode for faster and 100% accurate output formatting
+		"generationConfig": map[string]interface{}{
+			"responseMimeType": "application/json",
 		},
 	}
 
