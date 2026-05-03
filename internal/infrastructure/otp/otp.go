@@ -10,8 +10,6 @@ import (
 	"gym-pro-2026-ptit/internal/infrastructure/cache"
 	"gym-pro-2026-ptit/internal/infrastructure/logger"
 	"gym-pro-2026-ptit/pkg/errors"
-
-	"go.uber.org/zap"
 )
 
 const (
@@ -28,14 +26,10 @@ type Service interface {
 
 type otpService struct {
 	cache *cache.Cache
-	log   logger.Logger
 }
 
-func NewOTPService(cache *cache.Cache, log logger.Logger) Service {
-	return &otpService{
-		cache: cache,
-		log:   log,
-	}
+func NewOTPService(cache *cache.Cache) Service {
+	return &otpService{cache: cache}
 }
 
 func (s *otpService) Generate(ctx context.Context, email string) (string, error) {
@@ -47,17 +41,11 @@ func (s *otpService) Generate(ctx context.Context, email string) (string, error)
 	// Store in Redis with expiration
 	key := otpKey(email)
 	if err := s.cache.Set(ctx, key, otp, OTPExpiration); err != nil {
-		s.log.Error("Failed to store OTP in cache",
-			zap.String("email", email),
-			zap.Error(err),
-		)
+		logger.Error("Failed to store OTP in cache", "email", email, "err", err)
 		return "", errors.InternalServer("store OTP", err)
 	}
 
-	s.log.Info("OTP generated",
-		zap.String("email", email),
-		zap.String("expires_in", OTPExpiration.String()),
-	)
+	logger.Info("OTP generated", "email", email, "expires_in", OTPExpiration.String())
 
 	return otp, nil
 }
@@ -68,29 +56,20 @@ func (s *otpService) Verify(ctx context.Context, email, otp string) error {
 	// Get stored OTP
 	storedOTP, err := s.cache.Get(ctx, key)
 	if err != nil {
-		s.log.Warn("OTP verification failed - not found or expired",
-			zap.String("email", email),
-		)
-		return errors.BadRequest("OTP expired or invalid")
+		logger.Warn("OTP verification failed - not found or expired", "email", email)
+		return errors.BadRequest("Mã OTP đã hết hạn hoặc không hợp lệ")
 	}
 
 	// Compare OTP
 	if storedOTP != otp {
-		s.log.Warn("OTP verification failed - mismatch",
-			zap.String("email", email),
-		)
-		return errors.BadRequest("OTP is incorrect")
+		logger.Warn("OTP verification failed - mismatch", "email", email)
+		return errors.BadRequest("Mã OTP không đúng")
 	}
 
-	s.log.Info("OTP verified successfully",
-		zap.String("email", email),
-	)
+	logger.Info("OTP verified successfully", "email", email)
 
 	if err := s.Delete(ctx, email); err != nil {
-		s.log.Warn("Failed to delete OTP after verification",
-			zap.String("email", email),
-			zap.Error(err),
-		)
+		logger.Warn("Failed to delete OTP after verification", "email", email, "err", err)
 	}
 
 	return nil

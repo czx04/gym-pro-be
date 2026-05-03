@@ -25,10 +25,6 @@ func ProvideWorkoutPlanRepository(db *database.DB) workout.WorkoutPlanRepository
 	return postgres.NewWorkoutPlanRepository(db)
 }
 
-func ProvideWorkoutScheduleRepository(db *database.DB) workout.WorkoutScheduleRepository {
-	return postgres.NewWorkoutScheduleRepository(db)
-}
-
 func ProvideWorkoutSessionRepository(db *database.DB) workout.WorkoutSessionRepository {
 	return postgres.NewWorkoutSessionRepository(db)
 }
@@ -44,6 +40,18 @@ func ProvideRecipeRepository(db *database.DB) meal.RecipeRepository {
 
 func ProvideMealLogRepository(db *database.DB) meal.MealLogRepository {
 	return postgres.NewMealLogRepository(db)
+}
+
+func ProvideMealDailyRepository(db *database.DB) meal.MealDailyRepository {
+	return postgres.NewMealDailyRepository(db)
+}
+
+func ProvideUserMealStreakRepository(db *database.DB) meal.UserMealStreakRepository {
+	return postgres.NewUserMealStreakRepository(db)
+}
+
+func ProvidePushTokenRepository(db *database.DB) meal.PushTokenRepository {
+	return postgres.NewPushTokenRepository(db)
 }
 
 // Social repositories
@@ -63,20 +71,47 @@ func ProvideCommentRepository(db *database.DB) social.CommentRepository {
 	return postgres.NewCommentRepository(db)
 }
 
+func ProvideMediaAssetRepository(db *database.DB) social.MediaAssetRepository {
+	return postgres.NewMediaAssetRepository(db)
+}
+
+func ProvidePreferenceRepository(db *database.DB) social.PreferenceRepository {
+	return postgres.NewPreferenceRepository(db)
+}
+
+func ProvideReportRepository(db *database.DB) social.ReportRepository {
+	return postgres.NewReportRepository(db)
+}
+
+func ProvideBlockRepository(db *database.DB) social.BlockRepository {
+	return postgres.NewBlockRepository(db)
+}
+
+func ProvideInAppNotificationRepository(db *database.DB) social.InAppNotificationRepository {
+	return postgres.NewInAppNotificationRepository(db)
+}
+
 // RepositoryProviders returns all repository providers
 var RepositoryProviders = fx.Options(
 	fx.Provide(
 		ProvideUserRepository,
 		ProvideExerciseRepository,
 		ProvideWorkoutPlanRepository,
-		ProvideWorkoutScheduleRepository,
 		ProvideWorkoutSessionRepository,
 		ProvideFoodRepository,
 		ProvideRecipeRepository,
 		ProvideMealLogRepository,
+		ProvideMealDailyRepository,
+		ProvideUserMealStreakRepository,
+		ProvidePushTokenRepository,
 		ProvideFollowRepository,
 		ProvidePostRepository,
 		ProvideLikeRepository,
 		ProvideCommentRepository,
+		ProvideMediaAssetRepository,
+		ProvidePreferenceRepository,
+		ProvideReportRepository,
+		ProvideBlockRepository,
+		ProvideInAppNotificationRepository,
 	),
 )

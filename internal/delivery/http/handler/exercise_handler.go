@@ -1,41 +1,33 @@
 package handler
 
 import (
+	"gym-pro-2026-ptit/internal/delivery/http/middleware"
+	"gym-pro-2026-ptit/internal/infrastructure/logger"
 	"gym-pro-2026-ptit/pkg/errors"
 	"gym-pro-2026-ptit/pkg/response"
+	"strconv"
 
-	"gym-pro-2026-ptit/internal/infrastructure/logger"
+	exerciseuc "gym-pro-2026-ptit/internal/usecase/exercise"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"go.uber.org/zap"
-
-	exerciseuc "gym-pro-2026-ptit/internal/usecase/exercise"
 )
 
 type ExerciseHandler struct {
-	listExercisesUC  *exerciseuc.ListExercisesUseCase
-	getExerciseUC    *exerciseuc.GetExerciseUseCase
-	searchExerciseUC *exerciseuc.FilterExerciseUseCase
-	log              logger.Logger
+	exerciseUC *exerciseuc.ExerciseUseCases
 }
 
-func NewExerciseHandler(
-	listExercisesUC *exerciseuc.ListExercisesUseCase,
-	getExerciseUC *exerciseuc.GetExerciseUseCase,
-	searchExerciseUC *exerciseuc.FilterExerciseUseCase,
-	log logger.Logger,
-) *ExerciseHandler {
-	return &ExerciseHandler{listExercisesUC: listExercisesUC, getExerciseUC: getExerciseUC, searchExerciseUC: searchExerciseUC, log: log}
+func NewExerciseHandler(exerciseUC *exerciseuc.ExerciseUseCases) *ExerciseHandler {
+	return &ExerciseHandler{exerciseUC: exerciseUC}
 }
 
 func (h *ExerciseHandler) ListExercises(c *gin.Context) {
-	page, pageSize := c.GetInt("page"), c.GetInt("page_size")
-	if page == 0 {
-		page = 1
+	page, pageSize := 1, 20
+	if c.Query("page") != "" {
+		page, _ = strconv.Atoi(c.Query("page"))
 	}
-	if pageSize == 0 {
-		pageSize = 20
+	if c.Query("page_size") != "" {
+		pageSize, _ = strconv.Atoi(c.Query("page_size"))
 	}
 
 	isFilter := false
@@ -46,15 +38,11 @@ func (h *ExerciseHandler) ListExercises(c *gin.Context) {
 	difficultyLevel := c.Query("difficulty_level")
 	query := c.Query("query")
 	if category != "" || muscleGroup != "" || equipment != "" || difficultyLevel != "" || query != "" {
-		h.log.Info("filtering exercises with category", zap.String("category", category))
-		h.log.Info("filtering exercises with muscleGroup", zap.String("muscleGroup", muscleGroup))
-		h.log.Info("filtering exercises with equipment", zap.String("equipment", equipment))
-		h.log.Info("filtering exercises with difficultyLevel", zap.String("difficultyLevel", difficultyLevel))
-		h.log.Info("filtering exercises with query", zap.String("query", query))
+		logger.Info("filtering exercises", "category", category, "muscle_group", muscleGroup, "equipment", equipment, "difficulty_level", difficultyLevel, "query", query)
 		isFilter = true
 	}
 	if isFilter {
-		exercises, total, err := h.searchExerciseUC.Excute(c.Request.Context(), page, pageSize, category, muscleGroup, equipment, difficultyLevel, query)
+		exercises, total, err := h.exerciseUC.FilterExercises(c.Request.Context(), page, pageSize, category, muscleGroup, equipment, difficultyLevel, query)
 		if err != nil {
 			response.Error(c, err)
 			return
@@ -62,7 +50,7 @@ func (h *ExerciseHandler) ListExercises(c *gin.Context) {
 		response.Paginated(c, exercises, page, pageSize, total)
 		return
 	} else {
-		exercises, total, err := h.listExercisesUC.Excute(c.Request.Context(), page, pageSize)
+		exercises, total, err := h.exerciseUC.ListExercises(c.Request.Context(), page, pageSize)
 		if err != nil {
 			response.Error(c, err)
 			return
@@ -77,10 +65,29 @@ func (h *ExerciseHandler) GetExercise(c *gin.Context) {
 		response.Error(c, errors.BadRequest("invalid exercise ID"))
 		return
 	}
-	exercise, err := h.getExerciseUC.Excute(c.Request.Context(), exerciseID)
+	exercise, err := h.exerciseUC.GetExercise(c.Request.Context(), exerciseID)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
 	response.Success(c, exercise)
+}
+
+func (h *ExerciseHandler) GetExerciseStats(c *gin.Context) {
+	exerciseID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.Error(c, errors.BadRequest("invalid exercise ID"))
+		return
+	}
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	stats, err := h.exerciseUC.GetExerciseStats(c.Request.Context(), userID, exerciseID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, stats)
 }

@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"strconv"
+
 	"gym-pro-2026-ptit/internal/delivery/http/middleware"
 	"gym-pro-2026-ptit/internal/domain/workout"
 	workoutuc "gym-pro-2026-ptit/internal/usecase/workout"
@@ -13,20 +15,12 @@ import (
 
 // WorkoutHandler handles workout-related requests
 type WorkoutHandler struct {
-	createPlanUC  *workoutuc.CreateWorkoutPlanUseCase
-	addExerciseUC *workoutuc.AddExerciseToWorkoutUseCase
-	// TODO: Add more use cases as you implement them
+	workoutUC *workoutuc.WorkoutUseCases
 }
 
 // NewWorkoutHandler creates a new workout handler
-func NewWorkoutHandler(
-	createPlanUC *workoutuc.CreateWorkoutPlanUseCase,
-	addExerciseUC *workoutuc.AddExerciseToWorkoutUseCase,
-) *WorkoutHandler {
-	return &WorkoutHandler{
-		createPlanUC:  createPlanUC,
-		addExerciseUC: addExerciseUC,
-	}
+func NewWorkoutHandler(workoutUC *workoutuc.WorkoutUseCases) *WorkoutHandler {
+	return &WorkoutHandler{workoutUC: workoutUC}
 }
 
 // CreateWorkoutPlan godoc
@@ -43,7 +37,7 @@ func NewWorkoutHandler(
 // @Failure 422 {object} response.Response
 // @Router /workout-plans [post]
 func (h *WorkoutHandler) CreateWorkoutPlan(c *gin.Context) {
-	userID, err := middleware.GetUserID(c)
+	user, err := middleware.GetUser(c)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -51,52 +45,17 @@ func (h *WorkoutHandler) CreateWorkoutPlan(c *gin.Context) {
 
 	var input workout.CreateWorkoutPlanInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		response.Error(c, errors.BadRequest("invalid request body"))
+		response.Error(c, errors.BadRequest("Dữ liệu gửi lên không hợp lệ"))
 		return
 	}
 
-	plan, err := h.createPlanUC.Execute(c.Request.Context(), userID, input)
+	plan, err := h.workoutUC.CreateWorkoutPlan(c.Request.Context(), user, input)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
 
 	response.Created(c, plan)
-}
-
-// AddExerciseToWorkout godoc
-// @Summary Add exercise to workout plan
-// @Description Add an exercise to a workout plan with configuration
-// @Tags workout-plans
-// @Accept json
-// @Produce json
-// @Security BearerAuth
-// @Param id path string true "Workout Plan ID" format(uuid)
-// @Param request body workout.AddExerciseToWorkoutInput true "Exercise configuration"
-// @Success 200 {object} response.Response
-// @Failure 400 {object} response.Response
-// @Failure 401 {object} response.Response
-// @Failure 404 {object} response.Response
-// @Router /workout-plans/{id}/exercises [post]
-func (h *WorkoutHandler) AddExerciseToWorkout(c *gin.Context) {
-	planID, err := uuid.Parse(c.Param("id"))
-	if err != nil {
-		response.Error(c, errors.BadRequest("invalid workout plan ID"))
-		return
-	}
-
-	var input workout.AddExerciseToWorkoutInput
-	if err := c.ShouldBindJSON(&input); err != nil {
-		response.Error(c, errors.BadRequest("invalid request body"))
-		return
-	}
-
-	if err := h.addExerciseUC.Execute(c.Request.Context(), planID, input); err != nil {
-		response.Error(c, err)
-		return
-	}
-
-	response.Success(c, nil)
 }
 
 // ListWorkoutPlans godoc
@@ -112,8 +71,26 @@ func (h *WorkoutHandler) AddExerciseToWorkout(c *gin.Context) {
 // @Failure 401 {object} response.Response
 // @Router /workout-plans [get]
 func (h *WorkoutHandler) ListWorkoutPlans(c *gin.Context) {
-	// TODO: Implement list workout plans
-	response.Error(c, errors.InternalServer("not implemented", nil))
+	user, err := middleware.GetUser(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	page, pageSize := c.GetInt("page"), c.GetInt("page_size")
+	if page == 0 {
+		page = 1
+	}
+	if pageSize == 0 {
+		pageSize = 20
+	}
+
+	plans, total, err := h.workoutUC.ListWorkoutPlans(c.Request.Context(), *user, page, pageSize)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Paginated(c, plans, page, pageSize, total)
 }
 
 // GetWorkoutPlan godoc
@@ -129,8 +106,17 @@ func (h *WorkoutHandler) ListWorkoutPlans(c *gin.Context) {
 // @Failure 404 {object} response.Response
 // @Router /workout-plans/{id} [get]
 func (h *WorkoutHandler) GetWorkoutPlan(c *gin.Context) {
-	// TODO: Implement get workout plan
-	response.Error(c, errors.InternalServer("not implemented", nil))
+	user, err := middleware.GetUser(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	plan, err := h.workoutUC.GetWorkoutPlan(c.Request.Context(), user.ID, c.Param("id"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, plan)
 }
 
 // UpdateWorkoutPlan godoc
@@ -148,8 +134,32 @@ func (h *WorkoutHandler) GetWorkoutPlan(c *gin.Context) {
 // @Failure 404 {object} response.Response
 // @Router /workout-plans/{id} [put]
 func (h *WorkoutHandler) UpdateWorkoutPlan(c *gin.Context) {
-	// TODO: Implement update workout plan
-	response.Error(c, errors.InternalServer("not implemented", nil))
+	user, err := middleware.GetUser(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	planID := c.Param("id")
+	isUpdateExercises := c.Query("is_update_exercises") == "true"
+
+	uuidPlanID, err := uuid.Parse(planID)
+	if err != nil {
+		response.Error(c, errors.BadRequest("invalid plan ID"))
+		return
+	}
+	var input workout.UpdateWorkoutPlanInput
+	input.ID = uuidPlanID
+	input.IsUpdateExercises = isUpdateExercises
+	if err := c.ShouldBindJSON(&input); err != nil {
+		response.Error(c, errors.BadRequest("Dữ liệu gửi lên không hợp lệ"))
+		return
+	}
+	plan, err := h.workoutUC.UpdateWorkoutPlan(c.Request.Context(), user.ID, input)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, plan)
 }
 
 // DeleteWorkoutPlan godoc
@@ -165,28 +175,212 @@ func (h *WorkoutHandler) UpdateWorkoutPlan(c *gin.Context) {
 // @Failure 404 {object} response.Response
 // @Router /workout-plans/{id} [delete]
 func (h *WorkoutHandler) DeleteWorkoutPlan(c *gin.Context) {
-	// TODO: Implement delete workout plan
-	response.Error(c, errors.InternalServer("not implemented", nil))
+	user, err := middleware.GetUser(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	err = h.workoutUC.DeleteWorkoutPlan(c.Request.Context(), user.ID, c.Param("id"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	response.Success(c, nil)
 }
 
-// TODO: Implement more handlers:
-// Exercise handlers:
-// - ListExercises
-// - GetExercise
-// - SearchExercises
-//
-// Schedule handlers:
-// - ScheduleWorkout
-// - BulkScheduleWorkout
-// - ListSchedules
-// - GetCalendarView
-// - UpdateSchedule
-// - DeleteSchedule
-//
-// Session handlers:
-// - StartWorkoutSession
-// - LogExerciseSet
-// - CompleteSession
-// - GetSessionHistory
-// - GetSessionDetails
-// - GetWorkoutStats
+// GetScheduledDates godoc
+// @Summary Get dates in month that have scheduled workouts
+// @Tags workout-sessions
+// @Produce json
+// @Security BearerAuth
+// @Param month query int true "Month (1-12)"
+// @Param year query int true "Year"
+// @Success 200 {object} response.Response{data=[]string}
+// @Router /workout-sessions/scheduled-dates [get]
+func (h *WorkoutHandler) GetScheduledDates(c *gin.Context) {
+	user, err := middleware.GetUser(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	month, _ := strconv.Atoi(c.DefaultQuery("month", "0"))
+	year, _ := strconv.Atoi(c.DefaultQuery("year", "0"))
+	if month < 1 || month > 12 || year < 2000 || year > 2100 {
+		response.Error(c, errors.BadRequest("month (1-12) and year required"))
+		return
+	}
+	dates, err := h.workoutUC.GetScheduledDates(c.Request.Context(), user.ID, month, year)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, dates)
+}
+
+// GetSessionsByDate godoc
+// @Summary Get workout sessions for a date
+// @Tags workout-sessions
+// @Produce json
+// @Security BearerAuth
+// @Param date query string true "Date YYYY-MM-DD"
+// @Success 200 {object} response.Response{data=[]workout.WorkoutSession}
+// @Router /workout-sessions [get]
+func (h *WorkoutHandler) GetSessionsByDate(c *gin.Context) {
+	user, err := middleware.GetUser(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	date := c.Query("date")
+	if date == "" {
+		response.Error(c, errors.BadRequest("date (YYYY-MM-DD) required"))
+		return
+	}
+	list, err := h.workoutUC.GetSessionsByDate(c.Request.Context(), user.ID, date)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, list)
+}
+
+// DeleteWorkoutSession godoc
+// @Summary Delete one workout session
+// @Tags workout-sessions
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "Session ID"
+// @Success 200 {object} response.Response
+// @Router /workout-sessions/{id} [delete]
+func (h *WorkoutHandler) DeleteWorkoutSession(c *gin.Context) {
+	user, err := middleware.GetUser(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	err = h.workoutUC.DeleteWorkoutSession(c.Request.Context(), user.ID, c.Param("id"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	response.Success(c, nil)
+}
+
+// GetSessionByID godoc
+// @Summary Get session detail for tracking screen
+// @Tags workout-sessions
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "Session ID"
+// @Success 200 {object} response.Response{data=workout.WorkoutSession}
+// @Router /workout-sessions/{id} [get]
+func (h *WorkoutHandler) GetSessionByID(c *gin.Context) {
+	user, err := middleware.GetUser(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	session, err := h.workoutUC.GetSessionByID(c.Request.Context(), user.ID, c.Param("id"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, session)
+}
+
+// CreateWorkoutSession godoc
+// @Summary Create / schedule a workout session
+// @Tags workout-sessions
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param body body workout.CreateWorkoutSessionInput true "Body"
+// @Success 201 {object} response.Response{data=workout.WorkoutSession}
+// @Router /workout-sessions [post]
+func (h *WorkoutHandler) CreateWorkoutSession(c *gin.Context) {
+	user, err := middleware.GetUser(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	var input workout.CreateWorkoutSessionInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		response.Error(c, errors.BadRequest("Dữ liệu gửi lên không hợp lệ"))
+		return
+	}
+	session, err := h.workoutUC.CreateWorkoutSession(c.Request.Context(), user.ID, input)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Created(c, session)
+}
+
+// FinishWorkoutSession godoc
+// @Summary Finish session in one request (batch sets + session completion)
+// @Tags workout-sessions
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "Session ID"
+// @Param body body workout.CompleteWorkoutSessionInput true "Body"
+// @Success 200 {object} response.Response{data=workout.WorkoutSession}
+// @Router /workout-sessions/{id}/finish [patch]
+func (h *WorkoutHandler) FinishWorkoutSession(c *gin.Context) {
+	user, err := middleware.GetUser(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	var input workout.CompleteWorkoutSessionInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		response.Error(c, errors.BadRequest("Dữ liệu gửi lên không hợp lệ"))
+		return
+	}
+	session, err := h.workoutUC.FinishWorkoutSession(c.Request.Context(), user.ID, c.Param("id"), input)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, session)
+}
+
+// GetWeeklyWorkoutSummary godoc
+// @Summary Get weekly workout summary
+// @Description Get weekly training summary with week-over-week trends and recommendations
+// @Tags workout-sessions
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param start_date query string true "Start Date (YYYY-MM-DD)"
+// @Param end_date query string true "End Date (YYYY-MM-DD)"
+// @Success 200 {object} response.Response{data=workout.WeeklyWorkoutSummary}
+// @Failure 400 {object} response.Response
+// @Failure 401 {object} response.Response
+// @Failure 500 {object} response.Response
+// @Router /workout-sessions/weekly-summary [get]
+func (h *WorkoutHandler) GetWeeklyWorkoutSummary(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	var input workout.GetWeeklySummaryRequest
+	if err := c.ShouldBindQuery(&input); err != nil {
+		response.Error(c, errors.BadRequest("invalid query parameters"))
+		return
+	}
+
+	summary, err := h.workoutUC.GetWeeklySummary(c.Request.Context(), userID, input)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	response.Success(c, summary)
+}

@@ -1,0 +1,197 @@
+package ai
+
+import (
+	"bytes"
+	"context"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"strings"
+	"time"
+)
+
+type Service interface {
+	GetEmbedding(ctx context.Context, text string) ([]float32, error)
+	AnalyzeFoodImage(ctx context.Context, imageBytes []byte, mimeType string) ([]string, error)
+}
+
+type geminiService struct {
+	apiKey     string
+	httpClient *http.Client
+}
+
+func NewGeminiService() Service {
+	return &geminiService{
+		apiKey: strings.TrimSpace(os.Getenv("GEMINI_API_KEY")),
+		httpClient: &http.Client{
+			Timeout: 60 * time.Second, // Tăng timeout lên 60s để AI có đủ thời gian phân tích ảnh
+		},
+	}
+}
+
+type embeddingRequest struct {
+	Model   string `json:"model,omitempty"`
+	Content string `json:"content,omitempty"`
+	// For actual Gemini API, the payload is: {"model": "models/text-embedding-004", "content": {"parts":[{"text": "example"}]}}
+	// Wait, the v1beta endpoint structure is different. Let's use the explicit structure.
+}
+
+type geminiReqContent struct {
+	Role  string       `json:"role,omitempty"`
+	Parts []geminiPart `json:"parts"`
+}
+
+type geminiPart struct {
+	Text       string            `json:"text,omitempty"`
+	InlineData *geminiInlineData `json:"inlineData,omitempty"`
+}
+
+type geminiInlineData struct {
+	MimeType string `json:"mimeType"`
+	Data     string `json:"data"` // base64 encoded
+}
+
+func (s *geminiService) GetEmbedding(ctx context.Context, text string) ([]float32, error) {
+	if s.apiKey == "" {
+		return nil, fmt.Errorf("GEMINI_API_KEY is missing")
+	}
+
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=%s", s.apiKey)
+	reqBody := map[string]interface{}{
+		"model": "models/gemini-embedding-001",
+		"content": map[string]interface{}{
+			"parts": []map[string]string{
+				{"text": text},
+			},
+		},
+	}
+
+	b, _ := json.Marshal(reqBody)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(b))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("gemini API error (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	var res struct {
+		Embedding struct {
+			Values []float32 `json:"values"`
+		} `json:"embedding"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		return nil, err
+	}
+
+	if len(res.Embedding.Values) == 0 {
+		return nil, fmt.Errorf("no embedding returned")
+	}
+
+	values := res.Embedding.Values
+	// Slice to 768 dimensions since pgvector column is 768 (supported by MRL)
+	if len(values) > 768 {
+		values = values[:768]
+	}
+
+	return values, nil
+}
+
+func (s *geminiService) AnalyzeFoodImage(ctx context.Context, imageBytes []byte, mimeType string) ([]string, error) {
+	if s.apiKey == "" {
+		return nil, fmt.Errorf("GEMINI_API_KEY is missing")
+	}
+
+	// Use gemini-2.5-flash which supports multimodal and is available in the user's token
+	model := "gemini-2.5-flash"
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", model, s.apiKey)
+
+	prompt := "You are a professional nutritionist. Look at this image of food and list the likely individual food components or dish name in Vietnamese. Provide the response as a valid JSON array of strings (e.g. [\"Cơm trắng\", \"Sườn nướng\", \"Trứng ốp la\", \"Dưa chuột\"]). ONLY output the JSON array, nothing else."
+
+	reqBody := map[string]interface{}{
+		"contents": []geminiReqContent{
+			{
+				Parts: []geminiPart{
+					{Text: prompt},
+					{
+						InlineData: &geminiInlineData{
+							MimeType: mimeType,
+							Data:     base64.StdEncoding.EncodeToString(imageBytes),
+						},
+					},
+				},
+			},
+		},
+		// force JSON mode for faster and 100% accurate output formatting
+		"generationConfig": map[string]interface{}{
+			"responseMimeType": "application/json",
+		},
+	}
+
+	b, _ := json.Marshal(reqBody)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(b))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("gemini vision API error (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	var res struct {
+		Candidates []struct {
+			Content struct {
+				Parts []struct {
+					Text string `json:"text"`
+				} `json:"parts"`
+			} `json:"content"`
+		} `json:"candidates"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		return nil, err
+	}
+
+	if len(res.Candidates) == 0 || len(res.Candidates[0].Content.Parts) == 0 {
+		return nil, fmt.Errorf("no content generated by gemini")
+	}
+
+	textResponse := res.Candidates[0].Content.Parts[0].Text
+
+	textResponse = strings.TrimSpace(textResponse)
+	if strings.HasPrefix(textResponse, "```json") {
+		textResponse = strings.TrimPrefix(textResponse, "```json")
+		textResponse = strings.TrimSuffix(textResponse, "```")
+	} else if strings.HasPrefix(textResponse, "```") {
+		textResponse = strings.TrimPrefix(textResponse, "```")
+		textResponse = strings.TrimSuffix(textResponse, "```")
+	}
+
+	var ingredients []string
+	if err := json.Unmarshal([]byte(textResponse), &ingredients); err != nil {
+		return nil, fmt.Errorf("failed to parse JSON from AI response: %w (raw: %s)", err, textResponse)
+	}
+
+	return ingredients, nil
+}

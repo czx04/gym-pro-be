@@ -4,8 +4,7 @@ import (
 	"gym-pro-2026-ptit/internal/config"
 	"gym-pro-2026-ptit/internal/delivery/http/handler"
 	"gym-pro-2026-ptit/internal/delivery/http/middleware"
-	"gym-pro-2026-ptit/internal/infrastructure/auth"
-	"gym-pro-2026-ptit/internal/infrastructure/logger"
+	"gym-pro-2026-ptit/internal/delivery/http/websocket"
 
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
@@ -20,20 +19,26 @@ type Router struct {
 // New creates a new router
 func New(
 	cfg *config.Config,
-	log logger.Logger,
-	jwtManager *auth.JWTManager,
+	authMiddleware middleware.AuthMiddleware,
+	wsHub *websocket.Hub,
 	authHandler *handler.AuthHandler,
 	workoutHandler *handler.WorkoutHandler,
 	exerciseHandler *handler.ExerciseHandler,
+	foodHandler *handler.FoodHandler,
+	recipeHandler *handler.RecipeHandler,
+	mealLogHandler *handler.MealLogHandler,
+	mealDailyHandler *handler.MealDailyHandler,
+	userHandler *handler.UserHandler,
+	socialHandler *handler.SocialHandler,
 ) *Router {
 	gin.SetMode(cfg.Server.GinMode)
 
 	engine := gin.New()
 
-	engine.Use(middleware.RecoveryMiddleware(log))
-	engine.Use(middleware.LoggerMiddleware(log))
+	engine.Use(middleware.RecoveryMiddleware())
+	engine.Use(middleware.LoggerMiddleware())
 	engine.Use(middleware.CORSMiddleware(&cfg.Server))
-	engine.Use(middleware.ErrorHandlerMiddleware(log))
+	engine.Use(middleware.ErrorHandlerMiddleware())
 
 	engine.GET("/health", healthCheckHandler)
 	engine.GET("/ping", pingHandler)
@@ -42,7 +47,7 @@ func New(
 
 	v1 := engine.Group("/api/v1")
 	{
-		//v1.Use(middleware.RateLimitMiddleware(&cfg.RateLimit))
+		wsHub.RegisterRoutes(v1)
 
 		authRoutes := v1.Group("/auth")
 		{
@@ -51,31 +56,37 @@ func New(
 
 			authRoutes.POST("/login", authHandler.Login)
 			authRoutes.POST("/refresh", authHandler.RefreshToken)
-			authRoutes.GET("/oauth/google", authHandler.GoogleOAuth)
-			authRoutes.GET("/oauth/google/callback", authHandler.GoogleOAuthCallback)
-			authRoutes.GET("/oauth/facebook", authHandler.FacebookOAuth)
-			authRoutes.GET("/oauth/facebook/callback", authHandler.FacebookOAuthCallback)
+			authRoutes.POST("/reset-password/request", authHandler.ResetPasswordRequestOTP)
+			authRoutes.POST("/reset-password/verify", authHandler.VerifyOTPForgotPassword)
+			authRoutes.POST("/reset-password", authHandler.ResetPassword)
 		}
 
 		authenticated := v1.Group("")
-		authenticated.Use(middleware.AuthMiddleware(jwtManager))
+		authenticated.Use(gin.HandlerFunc(authMiddleware))
 		{
-			// User routes
 			users := authenticated.Group("/users")
 			{
 				users.GET("/me", authHandler.GetMe)
 				users.PUT("/me", authHandler.UpdateMe)
-				users.GET("/:id", placeholderHandler("Get user by ID"))
+				users.GET("/me/weight-history", userHandler.GetMyWeightHistory)
+				users.GET("/me/meal-streak", userHandler.GetMealStreak)
+				users.GET("/me/workout-stats", userHandler.GetMyWorkoutStats)
+				users.POST("/me/email/request-otp", userHandler.RequestChangeEmailOTP)
+				users.POST("/me/email/verify", userHandler.VerifyChangeEmailOTP)
+				users.POST("/me/push-token", userHandler.RegisterPushToken)
+				users.PUT("/me/avatar", userHandler.UploadAvatarImage)
+				users.GET("/nutrition-target", userHandler.GetUserNutritionTarget)
+				users.PUT("/nutrition-target", userHandler.UpdateUserNutritionTarget)
+				users.DELETE("/me", userHandler.DeleteAccount)
 			}
 
-			// Exercise routes
 			exercises := authenticated.Group("/exercises")
 			{
 				exercises.GET("", exerciseHandler.ListExercises)
+				exercises.GET("/:id/stats", exerciseHandler.GetExerciseStats)
 				exercises.GET("/:id", exerciseHandler.GetExercise)
 			}
 
-			// Workout Plan routes
 			workoutPlans := authenticated.Group("/workout-plans")
 			{
 				workoutPlans.POST("", workoutHandler.CreateWorkoutPlan)
@@ -83,106 +94,79 @@ func New(
 				workoutPlans.GET("/:id", workoutHandler.GetWorkoutPlan)
 				workoutPlans.PUT("/:id", workoutHandler.UpdateWorkoutPlan)
 				workoutPlans.DELETE("/:id", workoutHandler.DeleteWorkoutPlan)
-
-				// Exercise management
-				workoutPlans.POST("/:id/exercises", workoutHandler.AddExerciseToWorkout)
-				workoutPlans.PUT("/:id/exercises/:exerciseId", placeholderHandler("Update exercise in plan"))
-				workoutPlans.DELETE("/:id/exercises/:exerciseId", placeholderHandler("Remove exercise from plan"))
 			}
 
-			// Workout Schedule routes
-			workoutSchedules := authenticated.Group("/workout-schedules")
-			{
-				workoutSchedules.POST("", placeholderHandler("Schedule workout"))
-				workoutSchedules.POST("/bulk", placeholderHandler("Bulk schedule workouts"))
-				workoutSchedules.GET("", placeholderHandler("List schedules"))
-				workoutSchedules.GET("/calendar/:year/:month", placeholderHandler("Calendar view"))
-				workoutSchedules.PUT("/:id", placeholderHandler("Update schedule"))
-				workoutSchedules.DELETE("/:id", placeholderHandler("Delete schedule"))
-			}
-
-			// Workout Session routes
 			workoutSessions := authenticated.Group("/workout-sessions")
 			{
-				workoutSessions.POST("/start", placeholderHandler("Start workout session"))
-				workoutSessions.PUT("/:id/exercises/:exerciseId/log-set", placeholderHandler("Log exercise set"))
-				workoutSessions.POST("/:id/complete", placeholderHandler("Complete session"))
-				workoutSessions.GET("", placeholderHandler("Get session history"))
-				workoutSessions.GET("/:id", placeholderHandler("Get session details"))
-				workoutSessions.GET("/stats", placeholderHandler("Get workout stats"))
+				workoutSessions.GET("/scheduled-dates", workoutHandler.GetScheduledDates)
+				workoutSessions.GET("/weekly-summary", workoutHandler.GetWeeklyWorkoutSummary)
+				workoutSessions.GET("", workoutHandler.GetSessionsByDate)
+				workoutSessions.GET("/:id", workoutHandler.GetSessionByID)
+				workoutSessions.DELETE("/:id", workoutHandler.DeleteWorkoutSession)
+				workoutSessions.POST("", workoutHandler.CreateWorkoutSession)
+				workoutSessions.PATCH("/:id/finish", workoutHandler.FinishWorkoutSession)
 			}
 
-			// Food routes
 			foods := authenticated.Group("/foods")
 			{
-				foods.GET("", placeholderHandler("List foods"))
-				foods.GET("/:id", placeholderHandler("Get food"))
-				foods.GET("/search", placeholderHandler("Search foods"))
-				foods.POST("", placeholderHandler("Create custom food"))
-				foods.PUT("/:id", placeholderHandler("Update custom food"))
-				foods.DELETE("/:id", placeholderHandler("Delete custom food"))
+				foods.GET("", foodHandler.ListFoods)
+				foods.GET("/:id", foodHandler.GetFood)
+				foods.GET("/search", foodHandler.SearchFoods)
+				foods.POST("", foodHandler.CreateFood)
+				foods.PUT("/:id", foodHandler.UpdateFood)
+				foods.DELETE("/:id", foodHandler.DeleteFood)
+				foods.POST("/scan", foodHandler.ScanFood)
 			}
 
-			// Recipe routes
 			recipes := authenticated.Group("/recipes")
 			{
-				recipes.POST("", placeholderHandler("Create recipe"))
-				recipes.GET("", placeholderHandler("List recipes"))
-				recipes.GET("/:id", placeholderHandler("Get recipe"))
-				recipes.PUT("/:id", placeholderHandler("Update recipe"))
-				recipes.DELETE("/:id", placeholderHandler("Delete recipe"))
-
-				// Food management in recipes
-				recipes.POST("/:id/foods", placeholderHandler("Add food to recipe"))
-				recipes.PUT("/:id/foods/:foodId", placeholderHandler("Update food in recipe"))
-				recipes.DELETE("/:id/foods/:foodId", placeholderHandler("Remove food from recipe"))
+				recipes.POST("", recipeHandler.CreateRecipe)
+				recipes.GET("", recipeHandler.ListRecipes)
+				recipes.GET("/:id", recipeHandler.GetRecipe)
+				recipes.PUT("/:id", recipeHandler.UpdateRecipe)
+				recipes.DELETE("/:id", recipeHandler.DeleteRecipe)
 			}
 
-			// Meal Log routes
 			mealLogs := authenticated.Group("/meal-logs")
 			{
-				mealLogs.POST("", placeholderHandler("Create meal log"))
-				mealLogs.GET("", placeholderHandler("Get meal log history"))
-				mealLogs.GET("/date/:date", placeholderHandler("Get logs by date"))
-				mealLogs.GET("/:id", placeholderHandler("Get meal log"))
-				mealLogs.PUT("/:id", placeholderHandler("Update meal log"))
-				mealLogs.DELETE("/:id", placeholderHandler("Delete meal log"))
-
-				// Item management
-				mealLogs.POST("/:id/items", placeholderHandler("Add item to meal log"))
-				mealLogs.PUT("/:id/items/:itemId", placeholderHandler("Update item"))
-				mealLogs.DELETE("/:id/items/:itemId", placeholderHandler("Remove item"))
-
-				// Statistics
-				mealLogs.GET("/stats/daily", placeholderHandler("Daily nutrition stats"))
-				mealLogs.GET("/stats/weekly", placeholderHandler("Weekly nutrition stats"))
-				mealLogs.GET("/stats/monthly", placeholderHandler("Monthly nutrition stats"))
+				mealLogs.POST("", mealLogHandler.CreateMealLog)
+				mealLogs.GET("/stats", mealLogHandler.GetNutritionStats)
+				mealLogs.GET("/logged-dates", mealLogHandler.ListLoggedDates)
+				mealLogs.GET("/date/:date", mealLogHandler.GetMealLogsByDate)
+				mealLogs.GET("/:id", mealLogHandler.GetMealLog)
+				mealLogs.PUT("/:id", mealLogHandler.UpdateMealLog)
+				mealLogs.DELETE("/:id", mealLogHandler.DeleteMealLog)
 			}
 
-			// Social routes
+			mealDaily := authenticated.Group("/meal-daily")
+			{
+				mealDaily.GET("/date/:date", mealDailyHandler.GetMealDailyTargetByDate)
+			}
+
 			social := authenticated.Group("/social")
 			{
-				// Follow management
-				social.POST("/follow/:userId", placeholderHandler("Follow user"))
-				social.DELETE("/follow/:userId", placeholderHandler("Unfollow user"))
-				social.GET("/followers", placeholderHandler("Get followers"))
-				social.GET("/following", placeholderHandler("Get following list"))
-
-				// Post management
-				social.POST("/posts", placeholderHandler("Create post"))
-				social.GET("/posts", placeholderHandler("Get user posts"))
-				social.GET("/feed", placeholderHandler("Get activity feed"))
-				social.DELETE("/posts/:id", placeholderHandler("Delete post"))
-
-				// Likes
-				social.POST("/posts/:id/like", placeholderHandler("Like post"))
-				social.DELETE("/posts/:id/like", placeholderHandler("Unlike post"))
-
-				// Comments
-				social.POST("/posts/:id/comments", placeholderHandler("Add comment"))
-				social.GET("/posts/:id/comments", placeholderHandler("Get comments"))
-				social.PUT("/comments/:id", placeholderHandler("Update comment"))
-				social.DELETE("/comments/:id", placeholderHandler("Delete comment"))
+				social.GET("/notifications", socialHandler.SocialNotifications)
+				social.POST("/notifications", socialHandler.SocialNotificationsWrite)
+				social.GET("/search", socialHandler.Search)
+				social.GET("/feed", socialHandler.GetFeed)
+				social.PUT("/posts/:postId", socialHandler.UpdatePost)
+				social.PUT("/posts/:postId/preference", socialHandler.SetPostPreference)
+				social.PUT("/users/:userId/follow", socialHandler.SetFollowState)
+				social.PUT("/users/:userId/block", socialHandler.SetBlockState)
+				social.POST("/posts", socialHandler.CreatePost)
+				social.DELETE("/posts/:postId", socialHandler.DeletePost)
+				social.GET("/posts/:postId/attachment", socialHandler.GetPostAttachment)
+				social.GET("/posts/:postId", socialHandler.GetPostByID)
+				social.POST("/posts/:postId/reports", socialHandler.ReportPost)
+				social.GET("/posts/:postId/comments", socialHandler.GetPostComments)
+				social.GET("/posts/:postId/comments/:commentId/replies", socialHandler.GetCommentReplies)
+				social.POST("/posts/:postId/comments", socialHandler.CreateComment)
+				social.PUT("/posts/:postId/comments/:commentId", socialHandler.UpdateComment)
+				social.DELETE("/posts/:postId/comments/:commentId", socialHandler.DeleteComment)
+				social.GET("/users/:userId/profile", socialHandler.GetUserProfile)
+				social.GET("/users/:userId/posts", socialHandler.GetUserPosts)
+				social.POST("/media/signature", socialHandler.CreateMediaSignature)
+				social.POST("/media/confirm", socialHandler.ConfirmMedia)
 			}
 		}
 	}
@@ -209,12 +193,4 @@ func pingHandler(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"message": "pong",
 	})
-}
-
-func placeholderHandler(description string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		c.JSON(200, gin.H{
-			"message": "Endpoint not yet implemented: " + description,
-		})
-	}
 }

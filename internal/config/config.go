@@ -21,6 +21,18 @@ type Config struct {
 	Pagination PaginationConfig
 	Cache      CacheConfig
 	Email      EmailConfig
+	Cloudinary CloudinaryConfig
+	Expo       ExpoConfig
+}
+
+// ExpoConfig holds Expo push credentials (https://expo.dev/accounts/[account]/settings/access-tokens).
+type ExpoConfig struct {
+	AccessToken string
+}
+
+// CloudinaryConfig
+type CloudinaryConfig struct {
+	URL string
 }
 
 // ServerConfig
@@ -215,6 +227,12 @@ func Load() (*Config, error) {
 			FromName:       getEnv("SMTP_FROM_NAME", "Gym Pro"),
 			SendGridAPIKey: getEnv("SENDGRID_API_KEY", ""),
 			TimeoutSeconds: getEnvInt("EMAIL_TIMEOUT_SECONDS", 10),
+		},
+		Cloudinary: CloudinaryConfig{
+			URL: getEnv("CLOUDINARY_URL", ""),
+		},
+		Expo: ExpoConfig{
+			AccessToken: getEnv("EXPO_ACCESS_TOKEN", ""),
 		},
 	}
 

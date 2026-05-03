@@ -8,21 +8,21 @@ import (
 	"go.uber.org/fx"
 )
 
-func ProvideDatabase(cfg *config.Config, log logger.Logger) (*DB, error) {
-	return New(&cfg.Database, log)
+func ProvideDatabase(cfg *config.Config) (*DB, error) {
+	return New(&cfg.Database)
 }
 
 // registerHooks registers lifecycle hooks for database
-func registerHooks(lc fx.Lifecycle, db *DB, log logger.Logger) {
+func registerHooks(lc fx.Lifecycle, db *DB) {
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			log.Info("Database connection pool started")
+			logger.Info("Database connection pool started")
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
-			log.Info("Closing database connection pool")
+			logger.Info("Closing database connection pool")
 			db.Close()
-			log.Info("Database connection pool closed")
+			logger.Info("Database connection pool closed")
 			return nil
 		},
 	})

@@ -1,6 +1,7 @@
 package user
 
 import (
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -47,9 +48,41 @@ type UpdateProfileInput struct {
 	FitnessGoal        *string    `json:"fitness_goal,omitempty" validate:"omitempty,oneof=lose_weight maintain gain_muscle improve_endurance"`
 	ActivityLevel      *string    `json:"activity_level,omitempty" validate:"omitempty,oneof=sedentary light moderate active very_active"`
 	DailyCalorieTarget *int       `json:"daily_calorie_target,omitempty" validate:"omitempty,gte=500,lte=10000"`
-	ProteinTargetG     *int       `json:"protein_target_g,omitempty" validate:"omitempty,gte=0,lte=500"`
-	CarbsTargetG       *int       `json:"carbs_target_g,omitempty" validate:"omitempty,gte=0,lte=1000"`
-	FatTargetG         *int       `json:"fat_target_g,omitempty" validate:"omitempty,gte=0,lte=300"`
+	ProteinTargetG     *int       `json:"protein_target_g,omitempty" validate:"omitempty,gt=0,lte=500"`
+	CarbsTargetG       *int       `json:"carbs_target_g,omitempty" validate:"omitempty,gt=0,lte=1000"`
+	FatTargetG         *int       `json:"fat_target_g,omitempty" validate:"omitempty,gt=0,lte=300"`
+}
+
+type UserNutritionTarget struct {
+	DailyCalorieTarget *int `json:"daily_calorie_target,omitempty"`
+	ProteinTargetG     *int `json:"protein_target_g,omitempty"`
+	CarbsTargetG       *int `json:"carbs_target_g,omitempty"`
+	FatTargetG         *int `json:"fat_target_g,omitempty"`
+}
+
+type WeightHistory struct {
+	ID         uuid.UUID `json:"id"`
+	UserID     uuid.UUID `json:"user_id"`
+	WeightKg   float64   `json:"weight_kg"`
+	MeasuredAt time.Time `json:"measured_at"`
+	Source     string    `json:"source"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+// WeightHistoryGranularity controls how weight samples are bucketed for charts.
+type WeightHistoryGranularity string
+
+const (
+	WeightHistoryGranularityDay   WeightHistoryGranularity = "day"
+	WeightHistoryGranularityWeek  WeightHistoryGranularity = "week"
+	WeightHistoryGranularityMonth WeightHistoryGranularity = "month"
+)
+
+// WeightHistoryPoint is one chart point: latest measurement within each calendar bucket (in timezone).
+type WeightHistoryPoint struct {
+	PeriodStart time.Time `json:"period_start"`
+	WeightKg    float64   `json:"weight_kg"`
+	MeasuredAt  time.Time `json:"measured_at"`
 }
 
 type LoginInput struct {
@@ -63,4 +96,8 @@ type OAuthUserInfo struct {
 	Email     string
 	Name      string
 	AvatarURL *string
+}
+
+func (u *User) IsAdmin() bool {
+	return strings.Contains(u.Email, "@gym-pro.com")
 }

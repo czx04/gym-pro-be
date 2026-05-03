@@ -12,29 +12,12 @@ import (
 
 // AuthHandler handles authentication requests
 type AuthHandler struct {
-	registerOTPUC   *useruc.RegisterRequestOTPUseCase
-	verifyOTPUC     *useruc.VerifyOTPUseCase
-	loginUC         *useruc.LoginUseCase
-	getProfileUC    *useruc.GetProfileUseCase
-	updateProfileUC *useruc.UpdateProfileUseCase
-	// TODO: Add OAuth use cases when implemented
+	userUC *useruc.UserUseCases
 }
 
 // NewAuthHandler creates a new auth handler
-func NewAuthHandler(
-	registerOTPUC *useruc.RegisterRequestOTPUseCase,
-	verifyOTPUC *useruc.VerifyOTPUseCase,
-	loginUC *useruc.LoginUseCase,
-	getProfileUC *useruc.GetProfileUseCase,
-	updateProfileUC *useruc.UpdateProfileUseCase,
-) *AuthHandler {
-	return &AuthHandler{
-		registerOTPUC:   registerOTPUC,
-		verifyOTPUC:     verifyOTPUC,
-		loginUC:         loginUC,
-		getProfileUC:    getProfileUC,
-		updateProfileUC: updateProfileUC,
-	}
+func NewAuthHandler(userUC *useruc.UserUseCases) *AuthHandler {
+	return &AuthHandler{userUC: userUC}
 }
 
 // RegisterRequestOTP godoc
@@ -52,18 +35,18 @@ func NewAuthHandler(
 func (h *AuthHandler) RegisterRequestOTP(c *gin.Context) {
 	var input useruc.RegisterRequestOTPInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		response.Error(c, errors.BadRequest("invalid request body"))
+		response.Error(c, errors.BadRequest("Dữ liệu gửi lên không hợp lệ"))
 		return
 	}
 
-	err := h.registerOTPUC.Execute(c.Request.Context(), input)
+	err := h.userUC.RegisterRequestOTP(c.Request.Context(), input)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
 
 	response.Success(c, gin.H{
-		"message": "OTP sent to your email. Please verify within 5 minutes.",
+		"message": "Đã gửi mã OTP tới email. Vui lòng xác thực trong vòng 5 phút.",
 	})
 }
 
@@ -82,11 +65,11 @@ func (h *AuthHandler) RegisterRequestOTP(c *gin.Context) {
 func (h *AuthHandler) VerifyOTP(c *gin.Context) {
 	var input useruc.VerifyOTPInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		response.Error(c, errors.BadRequest("invalid request body"))
+		response.Error(c, errors.BadRequest("Dữ liệu gửi lên không hợp lệ"))
 		return
 	}
 
-	result, err := h.verifyOTPUC.Execute(c.Request.Context(), input)
+	result, err := h.userUC.VerifyOTP(c.Request.Context(), input)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -109,11 +92,11 @@ func (h *AuthHandler) VerifyOTP(c *gin.Context) {
 func (h *AuthHandler) Login(c *gin.Context) {
 	var input user.LoginInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		response.Error(c, errors.BadRequest("invalid request body"))
+		response.Error(c, errors.BadRequest("Dữ liệu gửi lên không hợp lệ"))
 		return
 	}
 
-	result, err := h.loginUC.Execute(c.Request.Context(), input)
+	result, err := h.userUC.Login(c.Request.Context(), input)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -128,21 +111,22 @@ func (h *AuthHandler) Login(c *gin.Context) {
 // @Tags auth
 // @Accept json
 // @Produce json
-// @Param request body RefreshTokenRequest true "Refresh token"
-// @Success 200 {object} response.Response{data=RefreshTokenResponse}
+// @Param request body useruc.RefreshTokenRequest true "Refresh token"
+// @Success 200 {object} response.Response{data=useruc.TokenPair}
 // @Failure 401 {object} response.Response
 // @Router /auth/refresh [post]
 func (h *AuthHandler) RefreshToken(c *gin.Context) {
-	// TODO: Implement refresh token logic
-	response.Error(c, errors.InternalServer("not implemented", nil))
-}
-
-type RefreshTokenRequest struct {
-	RefreshToken string `json:"refresh_token" validate:"required"`
-}
-
-type RefreshTokenResponse struct {
-	AccessToken string `json:"access_token"`
+	var input useruc.RefreshTokenRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		response.Error(c, errors.BadRequest("Dữ liệu gửi lên không hợp lệ"))
+		return
+	}
+	result, err := h.userUC.RefreshToken(c.Request.Context(), input)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, result)
 }
 
 // GetMe godoc
@@ -163,7 +147,7 @@ func (h *AuthHandler) GetMe(c *gin.Context) {
 		return
 	}
 
-	u, err := h.getProfileUC.Execute(c.Request.Context(), userID)
+	u, err := h.userUC.GetProfile(c.Request.Context(), userID)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -194,11 +178,11 @@ func (h *AuthHandler) UpdateMe(c *gin.Context) {
 
 	var input user.UpdateProfileInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		response.Error(c, errors.BadRequest("invalid request body"))
+		response.Error(c, errors.BadRequest("Dữ liệu gửi lên không hợp lệ"))
 		return
 	}
 
-	u, err := h.updateProfileUC.Execute(c.Request.Context(), userID, input)
+	u, err := h.userUC.UpdateProfile(c.Request.Context(), userID, input)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -207,58 +191,78 @@ func (h *AuthHandler) UpdateMe(c *gin.Context) {
 	response.Success(c, u)
 }
 
-// GoogleOAuth godoc
-// @Summary Google OAuth login
-// @Description Redirect to Google OAuth consent screen
+// ResetPasswordRequestOTP godoc
+// @Summary Request OTP for resetting password
+// @Description Request an OTP code to be sent via email for resetting password
 // @Tags auth
 // @Accept json
 // @Produce json
-// @Router /auth/oauth/google [get]
-func (h *AuthHandler) GoogleOAuth(c *gin.Context) {
-	// TODO: Implement Google OAuth redirect
-	response.Error(c, errors.InternalServer("not implemented", nil))
+// @Param request body useruc.ResetPasswordRequestOTPInput true "Reset password OTP request"
+// @Success 200 {object} response.Response
+// @Failure 400 {object} response.Response
+// @Failure 409 {object} response.Response
+// @Failure 422 {object} response.Response
+// @Router /auth/reset-password/request [post]
+func (h *AuthHandler) ResetPasswordRequestOTP(c *gin.Context) {
+	var input useruc.ResetPasswordRequestOTPInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		response.Error(c, errors.BadRequest("Dữ liệu gửi lên không hợp lệ"))
+		return
+	}
+	err := h.userUC.ResetPasswordRequestOTP(c.Request.Context(), input)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
 }
 
-// GoogleOAuthCallback godoc
-// @Summary Google OAuth callback
-// @Description Handle Google OAuth callback
+// VerifyOTPForgotPassword godoc
+// @Summary Verify OTP for resetting password
+// @Description Verify OTP code for resetting password
 // @Tags auth
 // @Accept json
 // @Produce json
-// @Param code query string true "Authorization code"
-// @Param state query string true "State parameter"
-// @Success 200 {object} response.Response{data=useruc.TokenPair}
+// @Param request body useruc.VerifyOTPForgotPassword true "Verify OTP for resetting password"
+// @Success 200 {object} response.Response
+// @Failure 400 {object} response.Response
 // @Failure 401 {object} response.Response
-// @Router /auth/oauth/google/callback [get]
-func (h *AuthHandler) GoogleOAuthCallback(c *gin.Context) {
-	// TODO: Implement Google OAuth callback
-	response.Error(c, errors.InternalServer("not implemented", nil))
+// @Failure 422 {object} response.Response
+// @Router /auth/reset-password/verify [post]
+func (h *AuthHandler) VerifyOTPForgotPassword(c *gin.Context) {
+	var input useruc.VerifyOTPForgotPassword
+	if err := c.ShouldBindJSON(&input); err != nil {
+		response.Error(c, errors.BadRequest("Dữ liệu gửi lên không hợp lệ"))
+		return
+	}
+	err := h.userUC.VerifyOTPForgotPassword(c.Request.Context(), input)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
 }
 
-// FacebookOAuth godoc
-// @Summary Facebook OAuth login
-// @Description Redirect to Facebook OAuth consent screen
+// ResetPassword godoc
+// @Summary Reset password
+// @Description Reset password for user
 // @Tags auth
 // @Accept json
 // @Produce json
-// @Router /auth/oauth/facebook [get]
-func (h *AuthHandler) FacebookOAuth(c *gin.Context) {
-	// TODO: Implement Facebook OAuth redirect
-	response.Error(c, errors.InternalServer("not implemented", nil))
-}
-
-// FacebookOAuthCallback godoc
-// @Summary Facebook OAuth callback
-// @Description Handle Facebook OAuth callback
-// @Tags auth
-// @Accept json
-// @Produce json
-// @Param code query string true "Authorization code"
-// @Param state query string true "State parameter"
-// @Success 200 {object} response.Response{data=useruc.TokenPair}
+// @Param request body useruc.ResetPasswordInput true "Reset password"
+// @Success 200 {object} response.Response{data=user.User}
+// @Failure 400 {object} response.Response
 // @Failure 401 {object} response.Response
-// @Router /auth/oauth/facebook/callback [get]
-func (h *AuthHandler) FacebookOAuthCallback(c *gin.Context) {
-	// TODO: Implement Facebook OAuth callback
-	response.Error(c, errors.InternalServer("not implemented", nil))
+// @Failure 422 {object} response.Response
+// @Router /auth/reset-password [post]
+func (h *AuthHandler) ResetPassword(c *gin.Context) {
+	var input useruc.ResetPasswordInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		response.Error(c, errors.BadRequest("Dữ liệu gửi lên không hợp lệ"))
+		return
+	}
+	result, err := h.userUC.ResetPassword(c.Request.Context(), input)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, result)
 }
