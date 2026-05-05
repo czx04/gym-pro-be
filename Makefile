@@ -16,10 +16,10 @@ help: ## Show this help message
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-15s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 # Development
-run: ## Run the application locally
+run: docs/docs.go ## Run the application locally
 	$(GO) run cmd/api/main.go
 
-build: ## Build the application
+build: docs/docs.go ## Build the application
 	$(GO) build -o bin/$(APP_NAME) cmd/api/main.go
 
 test: ## Run tests
@@ -100,6 +100,13 @@ swagger-install: ## Install swag tool
 
 swagger-gen: ## Generate Swagger documentation
 	$(SWAG) init -g cmd/api/main.go -o docs --parseDependency --parseInternal
+
+docs/docs.go:
+	@if [ ! -x "$(SWAG)" ]; then \
+		echo "Error: swag is not installed. Run 'make swagger-install' first."; \
+		exit 1; \
+	fi
+	@$(MAKE) swagger-gen
 
 swagger-fmt: ## Format Swagger comments
 	$(SWAG) fmt

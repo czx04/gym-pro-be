@@ -7,19 +7,19 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// ErrorDetail represents error details in response
+type ErrorDetail struct {
+	Code    string                 `json:"code"`
+	Message string                 `json:"message"`
+	Details map[string]interface{} `json:"details,omitempty"`
+}
+
 // Response represents a standard API response
 type Response struct {
 	Success bool         `json:"success"`
 	Message string       `json:"message,omitempty"`
 	Data    interface{}  `json:"data,omitempty"`
 	Error   *ErrorDetail `json:"error,omitempty"`
-}
-
-// ErrorDetail represents error details in response
-type ErrorDetail struct {
-	Code    string                 `json:"code"`
-	Message string                 `json:"message"`
-	Details map[string]interface{} `json:"details,omitempty"`
 }
 
 // PaginatedResponse represents a paginated API response

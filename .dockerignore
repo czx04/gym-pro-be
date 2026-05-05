@@ -1,0 +1,16 @@
+.git
+.env
+.env.*
+bin
+coverage.out
+coverage.html
+tmp
+logs
+.DS_Store
+docker
+docs
+*.md
+Makefile
+postman_collection.json
+scripts
+stder

@@ -1,58 +1,35 @@
-# Build stage
+# syntax=docker/dockerfile:1.7
 FROM golang:1.24-alpine AS builder
 
-# Install build dependencies
-RUN apk add --no-cache git make
-
-# Set working directory
 WORKDIR /app
 
-# Copy go mod files
 COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
 
-# Download dependencies
-RUN go mod download
-
-# Copy source code
 COPY . .
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+    go build -ldflags="-w -s" -trimpath -o /out/gym-pro-api ./cmd/api
 
-# Build the application
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /app/bin/gym-pro-api cmd/api/main.go
+FROM alpine:3.21
 
-# Runtime stage
-FROM alpine:latest
+RUN apk add --no-cache ca-certificates tzdata wget && \
+    addgroup -S app && adduser -S app -G app
 
-# Install ca-certificates for HTTPS
-RUN apk --no-cache add ca-certificates tzdata
-
-# Set timezone
 ENV TZ=Asia/Ho_Chi_Minh
 
-# Create non-root user
-RUN addgroup -g 1000 appuser && \
-    adduser -D -u 1000 -G appuser appuser
-
-# Set working directory
 WORKDIR /app
 
-# Copy binary from builder
-COPY --from=builder /app/bin/gym-pro-api ./gym-pro-api
+COPY --from=builder --chown=app:app /out/gym-pro-api ./gym-pro-api
+COPY --from=builder --chown=app:app /app/migrations ./migrations
 
-# Copy migrations
-COPY --from=builder /app/migrations ./migrations
+USER app
 
-# Change ownership
-RUN chown -R appuser:appuser /app
-
-# Switch to non-root user
-USER appuser
-
-# Expose port
 EXPOSE 8080
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=5 \
+    CMD wget -qO- http://localhost:8080/health >/dev/null 2>&1 || exit 1
 
-# Run the application
 CMD ["./gym-pro-api"]
