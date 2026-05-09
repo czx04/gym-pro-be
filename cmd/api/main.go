@@ -1,8 +1,8 @@
 package main
 
 import (
-	"gym-pro-2026-ptit/internal/bootstrap"
 	_ "gym-pro-2026-ptit/docs"
+	"gym-pro-2026-ptit/internal/bootstrap"
 )
 
 // @title Gym Pro API

@@ -71,7 +71,7 @@ func (uc *FoodUseCases) CreateFood(ctx context.Context, userID uuid.UUID, input 
 	}
 
 	textToEmbed := fmt.Sprintf("%s. %s. Category: %s", input.Name, desc, cat)
-	
+
 	var pgEmbedding *pgvector.Vector
 	embedding, err := uc.aiService.GetEmbedding(ctx, textToEmbed)
 	if err != nil {

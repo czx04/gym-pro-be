@@ -3,13 +3,13 @@ package bootstrap
 import (
 	"context"
 	"gym-pro-2026-ptit/internal/config"
+	"gym-pro-2026-ptit/internal/infrastructure/ai"
 	"gym-pro-2026-ptit/internal/infrastructure/auth"
 	"gym-pro-2026-ptit/internal/infrastructure/cache"
 	"gym-pro-2026-ptit/internal/infrastructure/database"
 	"gym-pro-2026-ptit/internal/infrastructure/email"
 	"gym-pro-2026-ptit/internal/infrastructure/logger"
 	"gym-pro-2026-ptit/internal/infrastructure/otp"
-	"gym-pro-2026-ptit/internal/infrastructure/ai"
 
 	"go.uber.org/fx"
 )

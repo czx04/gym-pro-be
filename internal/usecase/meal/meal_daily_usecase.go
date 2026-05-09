@@ -143,7 +143,7 @@ func (uc *MealDailyUseCases) GetMealDailyByDate(ctx context.Context, userID uuid
 	if err != nil {
 		return nil, errors.DatabaseError("failed to get user", err)
 	}
-	
+
 	res := &meal.DailyNutritionTargetResponse{}
 	if currentUser.DailyCalorieTarget != nil {
 		val := float64(*currentUser.DailyCalorieTarget)
@@ -161,6 +161,6 @@ func (uc *MealDailyUseCases) GetMealDailyByDate(ctx context.Context, userID uuid
 		val := float64(*currentUser.FatTargetG)
 		res.FatTargetG = &val
 	}
-	
+
 	return res, nil
 }

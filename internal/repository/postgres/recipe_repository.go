@@ -51,7 +51,7 @@ func (r *recipeRepository) GetByID(ctx context.Context, id uuid.UUID) (*meal.Rec
 	var rec meal.Recipe
 	err := r.db.QueryRow(ctx, query, id).Scan(
 		&rec.ID, &rec.UserID, &rec.Name, &rec.Description, &rec.PrepTimeMins, &rec.CookTimeMins,
-		&rec.Servings, &rec.Instructions, &rec.ImageURL, &rec.IsPublic, &rec.Visibility, 
+		&rec.Servings, &rec.Instructions, &rec.ImageURL, &rec.IsPublic, &rec.Visibility,
 		&rec.CreatedAt, &rec.UpdatedAt,
 		&rec.TotalCalories, &rec.TotalProteinG, &rec.TotalCarbsG, &rec.TotalFatG,
 	)
@@ -121,21 +121,21 @@ func (r *recipeRepository) GetByUserID(ctx context.Context, userID uuid.UUID, pa
 		var rec meal.Recipe
 		err := rows.Scan(
 			&rec.ID, &rec.UserID, &rec.Name, &rec.Description, &rec.PrepTimeMins, &rec.CookTimeMins,
-			&rec.Servings, &rec.Instructions, &rec.ImageURL, &rec.IsPublic, &rec.Visibility, 
+			&rec.Servings, &rec.Instructions, &rec.ImageURL, &rec.IsPublic, &rec.Visibility,
 			&rec.CreatedAt, &rec.UpdatedAt,
 			&rec.TotalCalories, &rec.TotalProteinG, &rec.TotalCarbsG, &rec.TotalFatG,
 		)
 		if err != nil {
 			return nil, 0, err
 		}
-		
+
 		if rec.Servings > 0 {
 			rec.PerServingCalories = rec.TotalCalories / float64(rec.Servings)
 			rec.PerServingProteinG = rec.TotalProteinG / float64(rec.Servings)
 			rec.PerServingCarbsG = rec.TotalCarbsG / float64(rec.Servings)
 			rec.PerServingFatG = rec.TotalFatG / float64(rec.Servings)
 		}
-		
+
 		recipes = append(recipes, rec)
 	}
 
@@ -190,7 +190,6 @@ func (r *recipeRepository) Update(ctx context.Context, id uuid.UUID, input meal.
 	if input.Visibility != nil {
 		setClauses = append(setClauses, fmt.Sprintf("visibility = $%d", argID))
 		args = append(args, *input.Visibility)
-		argID++
 	}
 
 	if len(setClauses) == 1 {
@@ -230,7 +229,6 @@ func (r *recipeRepository) UpdateFood(ctx context.Context, recipeFoodID uuid.UUI
 	if input.Quantity != nil {
 		setClauses = append(setClauses, fmt.Sprintf("quantity = $%d", argID))
 		args = append(args, *input.Quantity)
-		argID++
 	}
 
 	if len(setClauses) == 0 {
@@ -264,7 +262,7 @@ func (r *recipeRepository) GetFoods(ctx context.Context, recipeID uuid.UUID) ([]
 		JOIN foods f ON rf.food_id = f.id
 		WHERE rf.recipe_id = $1
 	`
-	
+
 	rows, err := r.db.Query(ctx, query, recipeID)
 	if err != nil {
 		return nil, err

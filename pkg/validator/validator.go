@@ -15,10 +15,10 @@ type Validator struct {
 // New creates a new validator instance
 func New() *Validator {
 	v := validator.New()
-	
+
 	// Register custom validators here if needed
 	// v.RegisterValidation("custom", customValidator)
-	
+
 	return &Validator{validate: v}
 }
 
@@ -45,7 +45,7 @@ func (v *Validator) formatValidationErrors(err error) error {
 // formatFieldError formats a single field error
 func (v *Validator) formatFieldError(e validator.FieldError) string {
 	field := strings.ToLower(e.Field())
-	
+
 	switch e.Tag() {
 	case "required":
 		return fmt.Sprintf("%s is required", field)
@@ -73,13 +73,13 @@ func (v *Validator) formatFieldError(e validator.FieldError) string {
 // GetValidationErrors returns validation errors as a map
 func (v *Validator) GetValidationErrors(err error) map[string]interface{} {
 	errors := make(map[string]interface{})
-	
+
 	if validationErrs, ok := err.(validator.ValidationErrors); ok {
 		for _, e := range validationErrs {
 			field := strings.ToLower(e.Field())
 			errors[field] = v.formatFieldError(e)
 		}
 	}
-	
+
 	return errors
 }

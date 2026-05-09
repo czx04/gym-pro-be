@@ -15,12 +15,12 @@ import (
 
 // MealLogUseCases encapsulates all meal-log business logic.
 type MealLogUseCases struct {
-	mealLogRepo   meal.MealLogRepository
-	foodRepo      meal.FoodRepository
-	recipeRepo    meal.RecipeRepository
-	mealDailyUC   *MealDailyUseCases
-	streakUC      *MealStreakUseCases
-	validator     *validator.Validator
+	mealLogRepo meal.MealLogRepository
+	foodRepo    meal.FoodRepository
+	recipeRepo  meal.RecipeRepository
+	mealDailyUC *MealDailyUseCases
+	streakUC    *MealStreakUseCases
+	validator   *validator.Validator
 }
 
 func NewMealLogUseCases(
@@ -32,12 +32,12 @@ func NewMealLogUseCases(
 	validator *validator.Validator,
 ) *MealLogUseCases {
 	return &MealLogUseCases{
-		mealLogRepo:   mealLogRepo,
-		foodRepo:      foodRepo,
-		recipeRepo:    recipeRepo,
-		mealDailyUC:   mealDailyUC,
-		streakUC:      streakUC,
-		validator:     validator,
+		mealLogRepo: mealLogRepo,
+		foodRepo:    foodRepo,
+		recipeRepo:  recipeRepo,
+		mealDailyUC: mealDailyUC,
+		streakUC:    streakUC,
+		validator:   validator,
 	}
 }
 

@@ -33,20 +33,20 @@ func IsValidFoodCategory(c string) bool {
 
 // Food represents a food item in the library
 type Food struct {
-	ID              uuid.UUID  `json:"id"`
-	Name            string     `json:"name"`
-	Description     *string    `json:"description,omitempty"`
-	Brand           *string    `json:"brand,omitempty"`
-	ImageUrl        *string    `json:"image_url,omitempty"`
-	Barcode         *string    `json:"barcode,omitempty"`
-	ServingSize     float64    `json:"serving_size"`
-	Unit            string     `json:"unit"` // g, ml, cup, tbsp, etc.
-	Calories        float64    `json:"calories"`
-	ProteinG        float64    `json:"protein_g"`
-	CarbsG          float64    `json:"carbs_g"`
-	FatG            float64    `json:"fat_g"`
-	FiberG          *float64   `json:"fiber_g,omitempty"`
-	IsSystem        bool       `json:"is_system"` // System food vs user custom
+	ID              uuid.UUID        `json:"id"`
+	Name            string           `json:"name"`
+	Description     *string          `json:"description,omitempty"`
+	Brand           *string          `json:"brand,omitempty"`
+	ImageUrl        *string          `json:"image_url,omitempty"`
+	Barcode         *string          `json:"barcode,omitempty"`
+	ServingSize     float64          `json:"serving_size"`
+	Unit            string           `json:"unit"` // g, ml, cup, tbsp, etc.
+	Calories        float64          `json:"calories"`
+	ProteinG        float64          `json:"protein_g"`
+	CarbsG          float64          `json:"carbs_g"`
+	FatG            float64          `json:"fat_g"`
+	FiberG          *float64         `json:"fiber_g,omitempty"`
+	IsSystem        bool             `json:"is_system"` // System food vs user custom
 	CreatedByUserID *uuid.UUID       `json:"created_by_user_id,omitempty"`
 	Category        *string          `json:"category,omitempty"` // protein, carb, vegetable, fruit, dairy, etc.
 	Embedding       *pgvector.Vector `json:"-"`

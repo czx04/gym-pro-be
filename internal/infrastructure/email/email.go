@@ -184,7 +184,7 @@ func (s *emailService) sendViaSendGrid(to, subject, body string) error {
 func (s *emailService) SendResetPasswordOTP(to, otp string) error {
 	subject := "Reset Your Gym Pro Password"
 
-    body := fmt.Sprintf(`
+	body := fmt.Sprintf(`
 
 <!DOCTYPE html>
 

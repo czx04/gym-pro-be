@@ -32,7 +32,6 @@ func NewGeminiService() Service {
 	}
 }
 
-
 type geminiReqContent struct {
 	Role  string       `json:"role,omitempty"`
 	Parts []geminiPart `json:"parts"`

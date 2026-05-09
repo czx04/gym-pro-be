@@ -62,9 +62,9 @@ func (uc *MealStreakUseCases) RecalculatePersistAndNotify(ctx context.Context, u
 	}
 	if uc.hub != nil {
 		_ = uc.hub.SendJSONToUser(userID, map[string]any{
-			"type":            "meal_streak_updated",
-			"current_streak":  s.CurrentStreak,
-			"longest_streak":  s.LongestStreak,
+			"type":           "meal_streak_updated",
+			"current_streak": s.CurrentStreak,
+			"longest_streak": s.LongestStreak,
 		})
 	}
 	return s, nil
