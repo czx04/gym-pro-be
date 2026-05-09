@@ -1,53 +1,43 @@
-# Binaries for programs and plugins
+bin/
 *.exe
-*.exe~
 *.dll
 *.so
 *.dylib
-
-# Test binary, built with `go test -c`
 *.test
 
-# Output of the go coverage tool
 *.out
+coverage.html
 
-# Dependency directories
 vendor/
-
-# Go workspace file
 go.work
+go.work.sum
 
-# Environment variables
 .env
 .env.local
 .env.*.local
 
-# IDE
 .idea/
 .vscode/
 *.swp
 *.swo
 *~
 
-# OS
 .DS_Store
 Thumbs.db
 
-# Application
 tmp/
 logs/
 *.log
 
-# Docker
 docker-compose.override.yml
 
-# Swagger docs (auto-generated)
 docs/docs.go
 docs/swagger.json
 docs/swagger.yaml
 
+k8s/secret.yaml
+
 rule.md
 ep.md
-stder
 social.md
-
+stder
