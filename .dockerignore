@@ -8,7 +8,6 @@ tmp
 logs
 .DS_Store
 docker
-docs
 *.md
 Makefile
 postman_collection.json
