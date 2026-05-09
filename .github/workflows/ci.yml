@@ -25,7 +25,7 @@ jobs:
 
       - run: go install github.com/swaggo/swag/cmd/swag@v1.16.4
 
-      - run: swag init -g cmd/api/main.go -o docs --parseDependency --parseInternal
+      - run: swag init -g cmd/api/main.go -o docs --parseInternal
 
       - uses: golangci/golangci-lint-action@v6
         with:
@@ -44,7 +44,7 @@ jobs:
 
       - run: go install github.com/swaggo/swag/cmd/swag@v1.16.4
 
-      - run: swag init -g cmd/api/main.go -o docs --parseDependency --parseInternal
+      - run: swag init -g cmd/api/main.go -o docs --parseInternal
 
       - run: go test -v -race -coverprofile=coverage.out $(go list ./... | grep -v '/cmd/')
 
