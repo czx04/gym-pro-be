@@ -23,6 +23,10 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
 
+      - run: go install github.com/swaggo/swag/cmd/swag@v1.16.4
+
+      - run: swag init -g cmd/api/main.go -o docs --parseDependency --parseInternal
+
       - uses: golangci/golangci-lint-action@v6
         with:
           version: latest
@@ -38,7 +42,11 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
 
-      - run: go test -v -race -coverprofile=coverage.out ./...
+      - run: go install github.com/swaggo/swag/cmd/swag@v1.16.4
+
+      - run: swag init -g cmd/api/main.go -o docs --parseDependency --parseInternal
+
+      - run: go test -v -race -coverprofile=coverage.out $(go list ./... | grep -v '/cmd/')
 
       - uses: actions/upload-artifact@v4
         if: always()
