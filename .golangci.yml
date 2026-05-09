@@ -22,3 +22,6 @@ issues:
     - path: _test\.go
       linters:
         - errcheck
+    - text: "Error return value of.*`.*Rollback.*` is not checked"
+      linters:
+        - errcheck

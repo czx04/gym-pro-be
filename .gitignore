@@ -31,9 +31,6 @@ logs/
 
 docker-compose.override.yml
 
-docs/docs.go
-docs/swagger.json
-docs/swagger.yaml
 
 k8s/secret.yaml
 

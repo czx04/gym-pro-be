@@ -802,7 +802,7 @@ func roundWeeklyMetrics(m *workout.WeeklyWorkoutMetrics) {
 
 func buildTrendDelta(current, previous, stableThreshold float64) workout.TrendDelta {
 	delta := current - previous
-	trend := "stable"
+	var trend string
 	threshold := stableThreshold
 	if threshold > 0 && math.Abs(previous) > 0 {
 		threshold = math.Abs(previous) * stableThreshold

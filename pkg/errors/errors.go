@@ -29,17 +29,17 @@ func (e *AppError) Unwrap() error {
 
 // Common error codes
 const (
-	ErrCodeBadRequest          = "BAD_REQUEST"
-	ErrCodeUnauthorized        = "UNAUTHORIZED"
-	ErrCodeForbidden           = "FORBIDDEN"
-	ErrCodeNotFound            = "NOT_FOUND"
-	ErrCodeConflict            = "CONFLICT"
-	ErrCodeValidation          = "VALIDATION_ERROR"
-	ErrCodeInternalServer      = "INTERNAL_SERVER_ERROR"
-	ErrCodeDatabaseError       = "DATABASE_ERROR"
-	ErrCodeInvalidCredentials  = "INVALID_CREDENTIALS"
-	ErrCodeTokenExpired        = "TOKEN_EXPIRED"
-	ErrCodeTokenInvalid        = "TOKEN_INVALID"
+	ErrCodeBadRequest         = "BAD_REQUEST"
+	ErrCodeUnauthorized       = "UNAUTHORIZED"
+	ErrCodeForbidden          = "FORBIDDEN"
+	ErrCodeNotFound           = "NOT_FOUND"
+	ErrCodeConflict           = "CONFLICT"
+	ErrCodeValidation         = "VALIDATION_ERROR"
+	ErrCodeInternalServer     = "INTERNAL_SERVER_ERROR"
+	ErrCodeDatabaseError      = "DATABASE_ERROR"
+	ErrCodeInvalidCredentials = "INVALID_CREDENTIALS"
+	ErrCodeTokenExpired       = "TOKEN_EXPIRED"
+	ErrCodeTokenInvalid       = "TOKEN_INVALID"
 )
 
 // NewAppError creates a new AppError
@@ -158,12 +158,12 @@ func Wrap(err error, message string) *AppError {
 	if err == nil {
 		return nil
 	}
-	
+
 	var appErr *AppError
 	if errors.As(err, &appErr) {
 		return appErr
 	}
-	
+
 	return &AppError{
 		Code:    ErrCodeInternalServer,
 		Message: message,

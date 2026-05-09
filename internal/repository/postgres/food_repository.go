@@ -261,7 +261,6 @@ func (r *foodRepository) Update(ctx context.Context, id uuid.UUID, input meal.Up
 	if input.Category != nil {
 		setClauses = append(setClauses, fmt.Sprintf("category = $%d", argID))
 		args = append(args, *input.Category)
-		argID++
 	}
 
 	if len(setClauses) == 1 {

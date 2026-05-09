@@ -1,0 +1,3115 @@
+basePath: /api/v1
+definitions:
+  gym-pro-2026-ptit_internal_domain_meal.AddItemToMealLogInput:
+    properties:
+      food_id:
+        type: string
+      item_type:
+        enum:
+        - food
+        - recipe
+        type: string
+      order:
+        minimum: 1
+        type: integer
+      quantity:
+        type: number
+      recipe_id:
+        type: string
+      serving_size:
+        description: For recipes
+        type: number
+      unit:
+        type: string
+    required:
+    - item_type
+    - order
+    - quantity
+    - unit
+    type: object
+  gym-pro-2026-ptit_internal_domain_meal.CreateMealLogInput:
+    properties:
+      energy_level:
+        maximum: 5
+        minimum: 1
+        type: integer
+      items:
+        items:
+          $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_meal.AddItemToMealLogInput'
+        type: array
+      log_date:
+        type: string
+      meal_time:
+        enum:
+        - breakfast
+        - lunch
+        - dinner
+        - snack
+        - other
+        type: string
+      mood:
+        enum:
+        - great
+        - good
+        - okay
+        - tired
+        type: string
+      notes:
+        maxLength: 1000
+        type: string
+    required:
+    - log_date
+    - meal_time
+    type: object
+  gym-pro-2026-ptit_internal_domain_meal.DailyMealResponse:
+    properties:
+      date:
+        type: string
+      meal_logs:
+        items:
+          $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_meal.MealLog'
+        type: array
+      summary:
+        $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_meal.DailyNutritionSummary'
+    type: object
+  gym-pro-2026-ptit_internal_domain_meal.DailyNutritionSummary:
+    properties:
+      adherence_percent:
+        type: number
+      calorie_target:
+        type: integer
+      date:
+        type: string
+      meals_logged:
+        type: integer
+      total_calories:
+        type: number
+      total_carbs_g:
+        type: number
+      total_fat_g:
+        type: number
+      total_protein_g:
+        type: number
+    type: object
+  gym-pro-2026-ptit_internal_domain_meal.DailyNutritionTargetResponse:
+    properties:
+      carbs_target_g:
+        type: number
+      daily_calorie_target:
+        type: number
+      fat_target_g:
+        type: number
+      protein_target_g:
+        type: number
+    type: object
+  gym-pro-2026-ptit_internal_domain_meal.Food:
+    properties:
+      barcode:
+        type: string
+      brand:
+        type: string
+      calories:
+        type: number
+      carbs_g:
+        type: number
+      category:
+        description: protein, carb, vegetable, fruit, dairy, etc.
+        type: string
+      created_at:
+        type: string
+      created_by_user_id:
+        type: string
+      description:
+        type: string
+      fat_g:
+        type: number
+      fiber_g:
+        type: number
+      id:
+        type: string
+      image_url:
+        type: string
+      is_system:
+        description: System food vs user custom
+        type: boolean
+      name:
+        type: string
+      protein_g:
+        type: number
+      serving_size:
+        type: number
+      unit:
+        description: g, ml, cup, tbsp, etc.
+        type: string
+      updated_at:
+        type: string
+    type: object
+  gym-pro-2026-ptit_internal_domain_meal.MealLog:
+    properties:
+      created_at:
+        type: string
+      energy_level:
+        description: 1-5
+        type: integer
+      id:
+        type: string
+      items:
+        items:
+          $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_meal.MealLogItem'
+        type: array
+      log_date:
+        description: Date only
+        type: string
+      meal_time:
+        description: breakfast, lunch, dinner, snack, other
+        type: string
+      mood:
+        description: great, good, okay, tired
+        type: string
+      notes:
+        type: string
+      total_calories:
+        type: number
+      total_carbs_g:
+        type: number
+      total_fat_g:
+        type: number
+      total_protein_g:
+        type: number
+      updated_at:
+        type: string
+      user_id:
+        type: string
+    type: object
+  gym-pro-2026-ptit_internal_domain_meal.MealLogItem:
+    properties:
+      calories:
+        type: number
+      carbs_g:
+        type: number
+      fat_g:
+        type: number
+      food:
+        $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_meal.Food'
+      food_id:
+        type: string
+      id:
+        type: string
+      item_type:
+        description: food, recipe
+        type: string
+      meal_log_id:
+        type: string
+      order:
+        type: integer
+      protein_g:
+        type: number
+      quantity:
+        type: number
+      recipe:
+        $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_meal.Recipe'
+      recipe_id:
+        type: string
+      serving_size:
+        description: For recipes
+        type: number
+      unit:
+        type: string
+    type: object
+  gym-pro-2026-ptit_internal_domain_meal.NutritionStats:
+    properties:
+      average_adherence_percent:
+        type: number
+      average_calories:
+        type: number
+      average_carbs_g:
+        type: number
+      average_fat_g:
+        type: number
+      average_protein_g:
+        type: number
+      days_tracked:
+        type: integer
+      period:
+        description: daily, weekly, monthly
+        type: string
+      total_calories:
+        type: number
+      total_carbs_g:
+        type: number
+      total_fat_g:
+        type: number
+      total_meals_logged:
+        type: integer
+      total_protein_g:
+        type: number
+    type: object
+  gym-pro-2026-ptit_internal_domain_meal.Recipe:
+    properties:
+      cook_time_mins:
+        type: integer
+      created_at:
+        type: string
+      description:
+        type: string
+      foods:
+        items:
+          $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_meal.RecipeFood'
+        type: array
+      id:
+        type: string
+      image_url:
+        type: string
+      instructions:
+        type: string
+      is_public:
+        type: boolean
+      name:
+        type: string
+      per_serving_calories:
+        type: number
+      per_serving_carbs_g:
+        type: number
+      per_serving_fat_g:
+        type: number
+      per_serving_protein_g:
+        type: number
+      prep_time_mins:
+        type: integer
+      servings:
+        type: integer
+      total_calories:
+        type: number
+      total_carbs_g:
+        type: number
+      total_fat_g:
+        type: number
+      total_protein_g:
+        type: number
+      updated_at:
+        type: string
+      user_id:
+        type: string
+      visibility:
+        description: public, private, friends
+        type: string
+    type: object
+  gym-pro-2026-ptit_internal_domain_meal.RecipeFood:
+    properties:
+      calories:
+        type: number
+      carbs_g:
+        type: number
+      fat_g:
+        type: number
+      food:
+        $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_meal.Food'
+      food_id:
+        type: string
+      id:
+        type: string
+      protein_g:
+        type: number
+      quantity:
+        type: number
+      recipe_id:
+        type: string
+      unit:
+        type: string
+    type: object
+  gym-pro-2026-ptit_internal_domain_meal.UpdateMealLogInput:
+    properties:
+      energy_level:
+        maximum: 5
+        minimum: 1
+        type: integer
+      items:
+        description: Items, when non-nil, replaces ALL existing items in the meal
+          log.
+        items:
+          $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_meal.AddItemToMealLogInput'
+        type: array
+      log_date:
+        type: string
+      meal_time:
+        enum:
+        - breakfast
+        - lunch
+        - dinner
+        - snack
+        - other
+        type: string
+      mood:
+        enum:
+        - great
+        - good
+        - okay
+        - tired
+        type: string
+      notes:
+        maxLength: 1000
+        type: string
+    type: object
+  gym-pro-2026-ptit_internal_domain_user.LoginInput:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  gym-pro-2026-ptit_internal_domain_user.UpdateProfileInput:
+    properties:
+      activity_level:
+        enum:
+        - sedentary
+        - light
+        - moderate
+        - active
+        - very_active
+        type: string
+      avatar_url:
+        type: string
+      bio:
+        maxLength: 500
+        type: string
+      carbs_target_g:
+        maximum: 1000
+        type: integer
+      daily_calorie_target:
+        maximum: 10000
+        minimum: 500
+        type: integer
+      date_of_birth:
+        type: string
+      fat_target_g:
+        maximum: 300
+        type: integer
+      fitness_goal:
+        enum:
+        - lose_weight
+        - maintain
+        - gain_muscle
+        - improve_endurance
+        type: string
+      gender:
+        enum:
+        - male
+        - female
+        - other
+        type: string
+      height_cm:
+        maximum: 300
+        type: number
+      name:
+        maxLength: 100
+        minLength: 2
+        type: string
+      protein_target_g:
+        maximum: 500
+        type: integer
+      weight_kg:
+        maximum: 500
+        type: number
+    type: object
+  gym-pro-2026-ptit_internal_domain_user.User:
+    properties:
+      activity_level:
+        type: string
+      avatar_url:
+        type: string
+      bio:
+        type: string
+      carbs_target_g:
+        type: integer
+      created_at:
+        type: string
+      daily_calorie_target:
+        type: integer
+      date_of_birth:
+        type: string
+      email:
+        type: string
+      fat_target_g:
+        type: integer
+      fitness_goal:
+        type: string
+      gender:
+        type: string
+      height_cm:
+        type: number
+      id:
+        type: string
+      name:
+        type: string
+      oauth_id:
+        type: string
+      oauth_provider:
+        type: string
+      privacy_settings:
+        description: JSON string
+        type: string
+      protein_target_g:
+        type: integer
+      updated_at:
+        type: string
+      weight_kg:
+        type: number
+    type: object
+  gym-pro-2026-ptit_internal_domain_user.UserNutritionTarget:
+    properties:
+      carbs_target_g:
+        type: integer
+      daily_calorie_target:
+        type: integer
+      fat_target_g:
+        type: integer
+      protein_target_g:
+        type: integer
+    type: object
+  gym-pro-2026-ptit_internal_domain_workout.AddExerciseToWorkoutInput:
+    properties:
+      duration_secs:
+        minimum: 1
+        type: integer
+      exercise_id:
+        type: string
+      notes:
+        maxLength: 500
+        type: string
+      order:
+        minimum: 1
+        type: integer
+      reps:
+        maximum: 100
+        minimum: 1
+        type: integer
+      rest_secs:
+        minimum: 0
+        type: integer
+      sets:
+        maximum: 20
+        minimum: 1
+        type: integer
+    required:
+    - exercise_id
+    - order
+    type: object
+  gym-pro-2026-ptit_internal_domain_workout.CompleteWorkoutSessionInput:
+    properties:
+      completed_at:
+        type: string
+      difficulty_rating:
+        maximum: 5
+        minimum: 1
+        type: integer
+      mood:
+        enum:
+        - happy
+        - neutral
+        - tired
+        - energetic
+        type: string
+      notes:
+        maxLength: 1000
+        type: string
+      sets:
+        items:
+          $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_workout.FinishSessionSetInput'
+        type: array
+      started_at:
+        type: string
+    type: object
+  gym-pro-2026-ptit_internal_domain_workout.CreateWorkoutPlanInput:
+    properties:
+      description:
+        maxLength: 1000
+        type: string
+      difficulty_level:
+        enum:
+        - beginner
+        - intermediate
+        - advanced
+        type: string
+      exercises:
+        items:
+          $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_workout.AddExerciseToWorkoutInput'
+        type: array
+      is_public:
+        type: boolean
+      title:
+        maxLength: 200
+        minLength: 3
+        type: string
+    required:
+    - difficulty_level
+    - exercises
+    - title
+    type: object
+  gym-pro-2026-ptit_internal_domain_workout.CreateWorkoutSessionInput:
+    properties:
+      scheduled_date:
+        description: YYYY-MM-DD
+        type: string
+      start_now:
+        description: true = set status in_progress, started_at = now
+        type: boolean
+      workout_plan_id:
+        type: string
+    required:
+    - scheduled_date
+    - workout_plan_id
+    type: object
+  gym-pro-2026-ptit_internal_domain_workout.Exercise:
+    properties:
+      calories_per_minute:
+        type: number
+      category:
+        description: cardio, strength, flexibility, stretching
+        type: string
+      created_at:
+        type: string
+      created_by:
+        description: Admin ID
+        type: string
+      description:
+        type: string
+      difficulty_level:
+        description: beginner, intermediate, advanced
+        type: string
+      equipment_needed:
+        items:
+          type: string
+        type: array
+      id:
+        type: string
+      is_active:
+        type: boolean
+      muscle_groups:
+        items:
+          type: string
+        type: array
+      name:
+        type: string
+      thumbnail_url:
+        type: string
+      updated_at:
+        type: string
+      video_url:
+        type: string
+    type: object
+  gym-pro-2026-ptit_internal_domain_workout.FinishSessionSetInput:
+    properties:
+      completed:
+        type: boolean
+      reps:
+        type: integer
+      rest_secs:
+        maximum: 1800
+        minimum: 0
+        type: integer
+      set_id:
+        type: string
+      weight_kg:
+        type: number
+    required:
+    - set_id
+    type: object
+  gym-pro-2026-ptit_internal_domain_workout.TrendDelta:
+    properties:
+      current:
+        type: number
+      delta:
+        type: number
+      previous:
+        type: number
+      trend:
+        type: string
+    type: object
+  gym-pro-2026-ptit_internal_domain_workout.UpdateExerciseInWorkoutInput:
+    properties:
+      duration_secs:
+        minimum: 1
+        type: integer
+      id:
+        type: string
+      notes:
+        maxLength: 500
+        type: string
+      order:
+        minimum: 1
+        type: integer
+      reps:
+        maximum: 100
+        minimum: 1
+        type: integer
+      rest_secs:
+        minimum: 0
+        type: integer
+      sets:
+        maximum: 20
+        minimum: 1
+        type: integer
+    required:
+    - id
+    type: object
+  gym-pro-2026-ptit_internal_domain_workout.UpdateWorkoutPlanInput:
+    properties:
+      description:
+        maxLength: 1000
+        type: string
+      difficulty_level:
+        enum:
+        - beginner
+        - intermediate
+        - advanced
+        type: string
+      exercises:
+        items:
+          $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_workout.UpdateExerciseInWorkoutInput'
+        type: array
+      id:
+        type: string
+      is_public:
+        type: boolean
+      is_template:
+        type: boolean
+      is_update_exercises:
+        type: boolean
+      title:
+        maxLength: 200
+        minLength: 3
+        type: string
+    required:
+    - id
+    type: object
+  gym-pro-2026-ptit_internal_domain_workout.WeeklyInsight:
+    properties:
+      code:
+        type: string
+      evidence:
+        type: string
+      message:
+        type: string
+      metric_key:
+        type: string
+      severity:
+        type: string
+    type: object
+  gym-pro-2026-ptit_internal_domain_workout.WeeklyWorkoutMetrics:
+    properties:
+      avg_difficulty:
+        type: number
+      avg_mood_score:
+        type: number
+      avg_rest_secs:
+        type: number
+      avg_weight_kg:
+        type: number
+      completed_workouts:
+        type: integer
+      completion_rate:
+        type: number
+      rest_samples:
+        type: integer
+      total_calories_burned:
+        type: integer
+      total_duration_mins:
+        type: integer
+      total_reps_completed:
+        type: integer
+      total_sets_completed:
+        type: integer
+      total_volume_kg:
+        type: number
+      total_workouts:
+        type: integer
+    type: object
+  gym-pro-2026-ptit_internal_domain_workout.WeeklyWorkoutSummary:
+    properties:
+      ai_model:
+        type: string
+      ai_summary:
+        type: string
+      body_weight_trend:
+        $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_workout.TrendDelta'
+      current:
+        $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_workout.WeeklyWorkoutMetrics'
+      end_date:
+        type: string
+      insights:
+        items:
+          $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_workout.WeeklyInsight'
+        type: array
+      mood_trend:
+        $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_workout.TrendDelta'
+      previous:
+        $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_workout.WeeklyWorkoutMetrics'
+      previous_end_date:
+        type: string
+      previous_start_date:
+        type: string
+      recommendation_source:
+        type: string
+      recommendations:
+        items:
+          type: string
+        type: array
+      rest_trend:
+        $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_workout.TrendDelta'
+      start_date:
+        type: string
+      strength_trend:
+        $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_workout.TrendDelta'
+    type: object
+  gym-pro-2026-ptit_internal_domain_workout.WorkoutPlan:
+    properties:
+      created_at:
+        type: string
+      description:
+        type: string
+      difficulty_level:
+        type: string
+      estimated_calories:
+        type: integer
+      estimated_duration_mins:
+        type: integer
+      exercises:
+        items:
+          $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_workout.WorkoutPlanExercise'
+        type: array
+      id:
+        type: string
+      is_public:
+        type: boolean
+      is_template:
+        type: boolean
+      title:
+        type: string
+      updated_at:
+        type: string
+      user_id:
+        type: string
+    type: object
+  gym-pro-2026-ptit_internal_domain_workout.WorkoutPlanExercise:
+    properties:
+      duration_secs:
+        type: integer
+      exercise:
+        $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_workout.Exercise'
+      exercise_id:
+        type: string
+      id:
+        type: string
+      notes:
+        type: string
+      order:
+        type: integer
+      reps:
+        type: integer
+      rest_secs:
+        type: integer
+      sets:
+        type: integer
+      workout_plan_id:
+        type: string
+    type: object
+  gym-pro-2026-ptit_internal_domain_workout.WorkoutSession:
+    properties:
+      completed_at:
+        type: string
+      created_at:
+        type: string
+      difficulty_rating:
+        type: integer
+      duration_mins:
+        type: integer
+      duration_secs:
+        type: integer
+      exercises:
+        items:
+          $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_workout.WorkoutSessionExercise'
+        type: array
+      id:
+        type: string
+      mood:
+        type: string
+      notes:
+        type: string
+      scheduled_date:
+        description: YYYY-MM-DD
+        type: string
+      started_at:
+        type: string
+      status:
+        description: scheduled | in_progress | completed
+        type: string
+      title:
+        description: from plan for list view
+        type: string
+      total_calories_burned:
+        type: integer
+      updated_at:
+        type: string
+      user_id:
+        type: string
+      workout_plan:
+        $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_workout.WorkoutPlan'
+      workout_plan_id:
+        type: string
+    type: object
+  gym-pro-2026-ptit_internal_domain_workout.WorkoutSessionExercise:
+    properties:
+      actual_sets_completed:
+        items:
+          type: integer
+        type: array
+      duration_secs:
+        type: integer
+      exercise:
+        $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_workout.Exercise'
+      exercise_id:
+        type: string
+      id:
+        type: string
+      notes:
+        type: string
+      order:
+        type: integer
+      sets:
+        items:
+          $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_workout.WorkoutSessionSet'
+        type: array
+      skipped:
+        type: boolean
+      target_reps:
+        type: integer
+      target_sets:
+        type: integer
+      workout_session_id:
+        type: string
+    type: object
+  gym-pro-2026-ptit_internal_domain_workout.WorkoutSessionSet:
+    properties:
+      completed:
+        type: boolean
+      completed_at:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      reps:
+        type: integer
+      rest_secs:
+        type: integer
+      set_index:
+        type: integer
+      updated_at:
+        type: string
+      weight_kg:
+        type: number
+      workout_session_exercise_id:
+        type: string
+    type: object
+  gym-pro-2026-ptit_internal_usecase_user.RefreshTokenRequest:
+    properties:
+      refresh_token:
+        type: string
+    required:
+    - refresh_token
+    type: object
+  gym-pro-2026-ptit_internal_usecase_user.RegisterRequestOTPInput:
+    properties:
+      email:
+        type: string
+      password:
+        minLength: 8
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  gym-pro-2026-ptit_internal_usecase_user.RequestChangeEmailOTPInput:
+    properties:
+      new_email:
+        type: string
+    required:
+    - new_email
+    type: object
+  gym-pro-2026-ptit_internal_usecase_user.ResetPasswordInput:
+    properties:
+      email:
+        type: string
+      password:
+        minLength: 8
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  gym-pro-2026-ptit_internal_usecase_user.ResetPasswordRequestOTPInput:
+    properties:
+      email:
+        type: string
+    required:
+    - email
+    type: object
+  gym-pro-2026-ptit_internal_usecase_user.TokenPair:
+    properties:
+      access_token:
+        type: string
+      refresh_token:
+        type: string
+      user:
+        $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_user.User'
+    type: object
+  gym-pro-2026-ptit_internal_usecase_user.UpdateUserNutritionTargetInput:
+    properties:
+      carbs_target_g:
+        maximum: 1000
+        type: integer
+      daily_calorie_target:
+        maximum: 10000
+        minimum: 500
+        type: integer
+      effective_date:
+        type: string
+      fat_target_g:
+        maximum: 300
+        type: integer
+      protein_target_g:
+        maximum: 500
+        type: integer
+    type: object
+  gym-pro-2026-ptit_internal_usecase_user.UploadAvatarImageOutput:
+    properties:
+      avatar_url:
+        type: string
+    type: object
+  gym-pro-2026-ptit_internal_usecase_user.VerifyChangeEmailOTPInput:
+    properties:
+      new_email:
+        type: string
+      otp:
+        type: string
+    required:
+    - new_email
+    - otp
+    type: object
+  gym-pro-2026-ptit_internal_usecase_user.VerifyOTPForgotPassword:
+    properties:
+      email:
+        type: string
+      otp:
+        type: string
+    required:
+    - email
+    - otp
+    type: object
+  gym-pro-2026-ptit_internal_usecase_user.VerifyOTPInput:
+    properties:
+      email:
+        type: string
+      otp:
+        type: string
+      password:
+        minLength: 8
+        type: string
+    required:
+    - email
+    - otp
+    - password
+    type: object
+  gym-pro-2026-ptit_pkg_response.ErrorDetail:
+    properties:
+      code:
+        type: string
+      details:
+        additionalProperties: true
+        type: object
+      message:
+        type: string
+    type: object
+  gym-pro-2026-ptit_pkg_response.PaginatedResponse:
+    properties:
+      data: {}
+      pagination:
+        $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Pagination'
+      success:
+        type: boolean
+    type: object
+  gym-pro-2026-ptit_pkg_response.Pagination:
+    properties:
+      page:
+        type: integer
+      page_size:
+        type: integer
+      total_items:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
+  gym-pro-2026-ptit_pkg_response.Response:
+    properties:
+      data: {}
+      error:
+        $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.ErrorDetail'
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: support@gympro.com
+    name: API Support
+  description: Backend API for Gym Pro - A fitness tracking mobile application
+  license:
+    name: MIT
+  title: Gym Pro API
+  version: "1.0"
+paths:
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticate user with email and password
+      parameters:
+      - description: Login credentials
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_user.LoginInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/gym-pro-2026-ptit_internal_usecase_user.TokenPair'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      summary: Login user
+      tags:
+      - auth
+  /auth/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Get a new access token using refresh token
+      parameters:
+      - description: Refresh token
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/gym-pro-2026-ptit_internal_usecase_user.RefreshTokenRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/gym-pro-2026-ptit_internal_usecase_user.TokenPair'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      summary: Refresh access token
+      tags:
+      - auth
+  /auth/register/request:
+    post:
+      consumes:
+      - application/json
+      description: Request an OTP code to be sent via email for registration
+      parameters:
+      - description: Registration OTP request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/gym-pro-2026-ptit_internal_usecase_user.RegisterRequestOTPInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      summary: Request OTP for registration
+      tags:
+      - auth
+  /auth/register/verify:
+    post:
+      consumes:
+      - application/json
+      description: Verify OTP code and create user account
+      parameters:
+      - description: OTP verification
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/gym-pro-2026-ptit_internal_usecase_user.VerifyOTPInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/gym-pro-2026-ptit_internal_usecase_user.TokenPair'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      summary: Verify OTP and complete registration
+      tags:
+      - auth
+  /auth/reset-password:
+    post:
+      consumes:
+      - application/json
+      description: Reset password for user
+      parameters:
+      - description: Reset password
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/gym-pro-2026-ptit_internal_usecase_user.ResetPasswordInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_user.User'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      summary: Reset password
+      tags:
+      - auth
+  /auth/reset-password/request:
+    post:
+      consumes:
+      - application/json
+      description: Request an OTP code to be sent via email for resetting password
+      parameters:
+      - description: Reset password OTP request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/gym-pro-2026-ptit_internal_usecase_user.ResetPasswordRequestOTPInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      summary: Request OTP for resetting password
+      tags:
+      - auth
+  /auth/reset-password/verify:
+    post:
+      consumes:
+      - application/json
+      description: Verify OTP code for resetting password
+      parameters:
+      - description: Verify OTP for resetting password
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/gym-pro-2026-ptit_internal_usecase_user.VerifyOTPForgotPassword'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      summary: Verify OTP for resetting password
+      tags:
+      - auth
+  /foods:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve food items with pagination (system foods + own custom
+        foods)
+      parameters:
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Items per page
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.PaginatedResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_meal.Food'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: List food items
+      tags:
+      - foods
+    post:
+      consumes:
+      - multipart/form-data
+      description: Create a new custom or system food based on user role
+      parameters:
+      - description: Food Name
+        in: formData
+        name: name
+        required: true
+        type: string
+      - description: Description
+        in: formData
+        name: description
+        type: string
+      - description: Brand
+        in: formData
+        name: brand
+        type: string
+      - description: Barcode
+        in: formData
+        name: barcode
+        type: string
+      - description: Serving Size
+        in: formData
+        name: serving_size
+        required: true
+        type: number
+      - description: Unit
+        in: formData
+        name: unit
+        required: true
+        type: string
+      - description: Calories
+        in: formData
+        name: calories
+        required: true
+        type: number
+      - description: Protein (g)
+        in: formData
+        name: protein_g
+        required: true
+        type: number
+      - description: Carbs (g)
+        in: formData
+        name: carbs_g
+        required: true
+        type: number
+      - description: Fat (g)
+        in: formData
+        name: fat_g
+        required: true
+        type: number
+      - description: Fiber (g)
+        in: formData
+        name: fiber_g
+        type: number
+      - description: Category
+        in: formData
+        name: category
+        type: string
+      - description: Food Image (Max 10MB)
+        in: formData
+        name: image
+        type: file
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_meal.Food'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: Create a food item
+      tags:
+      - foods
+  /foods/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete a custom food item (must be owner)
+      parameters:
+      - description: Food ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: Delete a food item
+      tags:
+      - foods
+    get:
+      consumes:
+      - application/json
+      description: Retrieve a food item by ID
+      parameters:
+      - description: Food ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_meal.Food'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: Get a food item
+      tags:
+      - foods
+    put:
+      consumes:
+      - multipart/form-data
+      description: Update a food item's details (must be owner or admin for system
+        foods)
+      parameters:
+      - description: Food ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Food Name
+        in: formData
+        name: name
+        type: string
+      - description: Description
+        in: formData
+        name: description
+        type: string
+      - description: Brand
+        in: formData
+        name: brand
+        type: string
+      - description: Barcode
+        in: formData
+        name: barcode
+        type: string
+      - description: Serving Size
+        in: formData
+        name: serving_size
+        type: number
+      - description: Unit
+        in: formData
+        name: unit
+        type: string
+      - description: Calories
+        in: formData
+        name: calories
+        type: number
+      - description: Protein (g)
+        in: formData
+        name: protein_g
+        type: number
+      - description: Carbs (g)
+        in: formData
+        name: carbs_g
+        type: number
+      - description: Fat (g)
+        in: formData
+        name: fat_g
+        type: number
+      - description: Fiber (g)
+        in: formData
+        name: fiber_g
+        type: number
+      - description: Category
+        in: formData
+        name: category
+        type: string
+      - description: Food Image (Max 10MB)
+        in: formData
+        name: image
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_meal.Food'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: Update a food item
+      tags:
+      - foods
+  /foods/scan:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Identifies foods in an image and returns matching records from
+        the database
+      parameters:
+      - description: Food Image
+        in: formData
+        name: image
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_meal.Food'
+                  type: array
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: Scan food from image
+      tags:
+      - foods
+  /foods/search:
+    get:
+      consumes:
+      - application/json
+      description: Search food items by name, category, or system flag
+      parameters:
+      - description: Search term
+        in: query
+        name: query
+        type: string
+      - description: Category filter
+        in: query
+        name: category
+        type: string
+      - description: System flag filter
+        in: query
+        name: is_system
+        type: boolean
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Items per page
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.PaginatedResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_meal.Food'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: Search food items
+      tags:
+      - foods
+  /meal-daily/date/{date}:
+    get:
+      consumes:
+      - application/json
+      description: Get user nutrition daily target by date
+      parameters:
+      - description: Date in YYYY-MM-DD format
+        in: path
+        name: date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_meal.DailyNutritionTargetResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: Get user nutrition target for a specific date
+      tags:
+      - meals
+  /meal-logs:
+    post:
+      consumes:
+      - application/json
+      description: Create a new meal log entry. You can include initial items (food
+        or recipe) in the same request.
+      parameters:
+      - description: Meal log details
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_meal.CreateMealLogInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_meal.MealLog'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: Create a meal log
+      tags:
+      - meal-logs
+  /meal-logs/{id}:
+    delete:
+      description: Delete a meal log and all its items
+      parameters:
+      - description: Meal Log ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: Delete a meal log
+      tags:
+      - meal-logs
+    get:
+      description: Retrieve a single meal log entry with all food/recipe items
+      parameters:
+      - description: Meal Log ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_meal.MealLog'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: Get meal log detail
+      tags:
+      - meal-logs
+    put:
+      consumes:
+      - application/json
+      description: Update notes, mood, energy level and/or replace all items of a
+        meal log
+      parameters:
+      - description: Meal Log ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Update data
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_meal.UpdateMealLogInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_meal.MealLog'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: Update a meal log
+      tags:
+      - meal-logs
+  /meal-logs/date/{date}:
+    get:
+      description: Retrieve all meal logs for a specific date (YYYY-MM-DD) along with
+        the daily nutrition summary
+      parameters:
+      - description: Date in YYYY-MM-DD format
+        in: path
+        name: date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_meal.DailyMealResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: Get meal logs by date
+      tags:
+      - meal-logs
+  /meal-logs/logged-dates:
+    get:
+      description: Returns distinct YYYY-MM-DD values in the range that have at least
+        one meal log
+      parameters:
+      - description: Start Date (YYYY-MM-DD)
+        in: query
+        name: start_date
+        required: true
+        type: string
+      - description: End Date (YYYY-MM-DD)
+        in: query
+        name: end_date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: List dates with meal logs
+      tags:
+      - meal-logs
+  /meal-logs/stats:
+    get:
+      consumes:
+      - application/json
+      description: Get nutrition statistics for a date period
+      parameters:
+      - description: Start Date (YYYY-MM-DD)
+        in: query
+        name: start_date
+        required: true
+        type: string
+      - description: End Date (YYYY-MM-DD)
+        in: query
+        name: end_date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_meal.NutritionStats'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: Get nutrition statistics
+      tags:
+      - meal-logs
+  /recipes:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve user's recipes and public recipes. Can filter by recipe
+        name using 'query' param.
+      parameters:
+      - description: Search query by name
+        in: query
+        name: query
+        type: string
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Items per page
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.PaginatedResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_meal.Recipe'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: List recipes
+      tags:
+      - recipes
+    post:
+      consumes:
+      - multipart/form-data
+      description: Create a new recipe with optional foods and image
+      parameters:
+      - description: Recipe Name
+        in: formData
+        name: name
+        required: true
+        type: string
+      - description: Description
+        in: formData
+        name: description
+        type: string
+      - description: Prep Time (mins)
+        in: formData
+        name: prep_time_mins
+        type: integer
+      - description: Cook Time (mins)
+        in: formData
+        name: cook_time_mins
+        type: integer
+      - description: Servings
+        in: formData
+        name: servings
+        required: true
+        type: integer
+      - description: Instructions
+        in: formData
+        name: instructions
+        type: string
+      - description: Is Public
+        in: formData
+        name: is_public
+        type: boolean
+      - description: Visibility (public, private, friends)
+        in: formData
+        name: visibility
+        type: string
+      - description: 'Foods JSON string array: [{\'
+        in: formData
+        name: foods
+        type: string
+      - description: Recipe Image (Max 10MB)
+        in: formData
+        name: image
+        type: file
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_meal.Recipe'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: Create a recipe
+      tags:
+      - recipes
+  /recipes/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete a user's recipe
+      parameters:
+      - description: Recipe ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: Delete a recipe
+      tags:
+      - recipes
+    get:
+      consumes:
+      - application/json
+      description: Retrieve a recipe by ID with dynamically calculated nutrition
+      parameters:
+      - description: Recipe ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_meal.Recipe'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: Get a recipe
+      tags:
+      - recipes
+    put:
+      consumes:
+      - multipart/form-data
+      description: Update a recipe details or foods
+      parameters:
+      - description: Recipe ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Recipe Name
+        in: formData
+        name: name
+        type: string
+      - description: Description
+        in: formData
+        name: description
+        type: string
+      - description: Prep Time (mins)
+        in: formData
+        name: prep_time_mins
+        type: integer
+      - description: Cook Time (mins)
+        in: formData
+        name: cook_time_mins
+        type: integer
+      - description: Servings
+        in: formData
+        name: servings
+        type: integer
+      - description: Instructions
+        in: formData
+        name: instructions
+        type: string
+      - description: Is Public
+        in: formData
+        name: is_public
+        type: boolean
+      - description: Visibility (public, private, friends)
+        in: formData
+        name: visibility
+        type: string
+      - description: 'Foods JSON string array to replace old foods: [{\'
+        in: formData
+        name: foods
+        type: string
+      - description: Recipe Image (Max 10MB)
+        in: formData
+        name: image
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_meal.Recipe'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: Update a recipe
+      tags:
+      - recipes
+  /users/me:
+    delete:
+      consumes:
+      - application/json
+      description: Delete the user's account
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: Delete account
+      tags:
+      - users
+    get:
+      consumes:
+      - application/json
+      description: Get authenticated user's profile information
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_user.User'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: Get current user profile
+      tags:
+      - users
+    put:
+      consumes:
+      - application/json
+      description: Update authenticated user's profile information
+      parameters:
+      - description: Profile update data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_user.UpdateProfileInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_user.User'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: Update current user profile
+      tags:
+      - users
+  /users/me/avatar:
+    put:
+      consumes:
+      - multipart/form-data
+      description: Upload a new avatar image for the user
+      parameters:
+      - description: Avatar image file
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/gym-pro-2026-ptit_internal_usecase_user.UploadAvatarImageOutput'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: Upload avatar image
+      tags:
+      - users
+  /users/me/email/request-otp:
+    post:
+      consumes:
+      - application/json
+      description: Send OTP to new email for verification before updating email
+      parameters:
+      - description: New email
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/gym-pro-2026-ptit_internal_usecase_user.RequestChangeEmailOTPInput'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: Request OTP to change email
+      tags:
+      - users
+  /users/me/email/verify:
+    post:
+      consumes:
+      - application/json
+      description: Verify OTP for new email and update user's email
+      parameters:
+      - description: New email + OTP
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/gym-pro-2026-ptit_internal_usecase_user.VerifyChangeEmailOTPInput'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: Verify OTP and change email
+      tags:
+      - users
+  /users/me/weight-history:
+    get:
+      consumes:
+      - application/json
+      - application/json
+      description: |-
+        Get user nutrition target
+        Latest weight per day/week/month bucket in the given timezone
+      parameters:
+      - description: Start (RFC3339)
+        in: query
+        name: from
+        required: true
+        type: string
+      - description: End (RFC3339)
+        in: query
+        name: to
+        required: true
+        type: string
+      - description: day, week, or month
+        in: query
+        name: granularity
+        required: true
+        type: string
+      - description: IANA timezone (default UTC)
+        in: query
+        name: timezone
+        type: string
+      produces:
+      - application/json
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      - BearerAuth: []
+      summary: List weight history for chart
+      tags:
+      - users
+      - users
+  /users/me/workout-stats:
+    get:
+      description: Get total workouts and total workout days for the current user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: Get workout stats for profile
+      tags:
+      - users
+  /users/nutrition-target:
+    get:
+      consumes:
+      - application/json
+      - application/json
+      description: |-
+        Get user nutrition target
+        Latest weight per day/week/month bucket in the given timezone
+      parameters:
+      - description: Start (RFC3339)
+        in: query
+        name: from
+        required: true
+        type: string
+      - description: End (RFC3339)
+        in: query
+        name: to
+        required: true
+        type: string
+      - description: day, week, or month
+        in: query
+        name: granularity
+        required: true
+        type: string
+      - description: IANA timezone (default UTC)
+        in: query
+        name: timezone
+        type: string
+      produces:
+      - application/json
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      - BearerAuth: []
+      summary: List weight history for chart
+      tags:
+      - users
+      - users
+    put:
+      consumes:
+      - application/json
+      description: Update user nutrition target
+      parameters:
+      - description: Update user nutrition target
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/gym-pro-2026-ptit_internal_usecase_user.UpdateUserNutritionTargetInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_user.UserNutritionTarget'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: Update user nutrition target
+      tags:
+      - users
+  /workout-plans:
+    get:
+      consumes:
+      - application/json
+      description: Get a paginated list of user's workout plans
+      parameters:
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: Page size
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.PaginatedResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_workout.WorkoutPlan'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: List workout plans
+      tags:
+      - workout-plans
+    post:
+      consumes:
+      - application/json
+      description: Create a new workout plan for the authenticated user
+      parameters:
+      - description: Workout plan data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_workout.CreateWorkoutPlanInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_workout.WorkoutPlan'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: Create a workout plan
+      tags:
+      - workout-plans
+  /workout-plans/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete a workout plan
+      parameters:
+      - description: Workout Plan ID
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: Delete workout plan
+      tags:
+      - workout-plans
+    get:
+      consumes:
+      - application/json
+      description: Get workout plan details with exercises
+      parameters:
+      - description: Workout Plan ID
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_workout.WorkoutPlan'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: Get workout plan
+      tags:
+      - workout-plans
+    put:
+      consumes:
+      - application/json
+      description: Update workout plan details
+      parameters:
+      - description: Workout Plan ID
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Update data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_workout.UpdateWorkoutPlanInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_workout.WorkoutPlan'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: Update workout plan
+      tags:
+      - workout-plans
+  /workout-sessions:
+    get:
+      parameters:
+      - description: Date YYYY-MM-DD
+        in: query
+        name: date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_workout.WorkoutSession'
+                  type: array
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Get workout sessions for a date
+      tags:
+      - workout-sessions
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Body
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_workout.CreateWorkoutSessionInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_workout.WorkoutSession'
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Create / schedule a workout session
+      tags:
+      - workout-sessions
+  /workout-sessions/{id}:
+    delete:
+      parameters:
+      - description: Session ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: Delete one workout session
+      tags:
+      - workout-sessions
+    get:
+      parameters:
+      - description: Session ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_workout.WorkoutSession'
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Get session detail for tracking screen
+      tags:
+      - workout-sessions
+  /workout-sessions/{id}/finish:
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Session ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Body
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_workout.CompleteWorkoutSessionInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_workout.WorkoutSession'
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Finish session in one request (batch sets + session completion)
+      tags:
+      - workout-sessions
+  /workout-sessions/scheduled-dates:
+    get:
+      parameters:
+      - description: Month (1-12)
+        in: query
+        name: month
+        required: true
+        type: integer
+      - description: Year
+        in: query
+        name: year
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+            - properties:
+                data:
+                  items:
+                    type: string
+                  type: array
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Get dates in month that have scheduled workouts
+      tags:
+      - workout-sessions
+  /workout-sessions/weekly-summary:
+    get:
+      consumes:
+      - application/json
+      description: Get weekly training summary with week-over-week trends and recommendations
+      parameters:
+      - description: Start Date (YYYY-MM-DD)
+        in: query
+        name: start_date
+        required: true
+        type: string
+      - description: End Date (YYYY-MM-DD)
+        in: query
+        name: end_date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/gym-pro-2026-ptit_internal_domain_workout.WeeklyWorkoutSummary'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/gym-pro-2026-ptit_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: Get weekly workout summary
+      tags:
+      - workout-sessions
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

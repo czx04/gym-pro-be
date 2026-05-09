@@ -32,12 +32,6 @@ func NewGeminiService() Service {
 	}
 }
 
-type embeddingRequest struct {
-	Model   string `json:"model,omitempty"`
-	Content string `json:"content,omitempty"`
-	// For actual Gemini API, the payload is: {"model": "models/text-embedding-004", "content": {"parts":[{"text": "example"}]}}
-	// Wait, the v1beta endpoint structure is different. Let's use the explicit structure.
-}
 
 type geminiReqContent struct {
 	Role  string       `json:"role,omitempty"`

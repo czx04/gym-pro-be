@@ -1096,7 +1096,7 @@ func (r *commentRepository) GetByPostID(ctx context.Context, postID uuid.UUID, f
 
 	offset := (filter.Page - 1) * filter.PageSize
 
-	countQuery := `SELECT COUNT(*) FROM comments WHERE post_id = $1`
+	var countQuery string
 	countArgs := []interface{}{postID}
 	if filter.ParentCommentID == nil {
 		countQuery = `SELECT COUNT(*) FROM comments WHERE post_id = $1 AND parent_comment_id IS NULL AND deleted_at IS NULL`

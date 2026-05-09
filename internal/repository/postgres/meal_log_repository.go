@@ -222,7 +222,6 @@ func (r *mealLogRepository) Update(ctx context.Context, id uuid.UUID, input meal
 	if input.EnergyLevel != nil {
 		setClauses = append(setClauses, fmt.Sprintf("energy_level = $%d", argID))
 		args = append(args, *input.EnergyLevel)
-		argID++
 	}
 
 	if len(setClauses) == 1 {
@@ -285,7 +284,6 @@ func (r *mealLogRepository) UpdateItem(ctx context.Context, itemID uuid.UUID, in
 	if input.Order != nil {
 		setClauses = append(setClauses, fmt.Sprintf(`"order" = $%d`, argID))
 		args = append(args, *input.Order)
-		argID++
 	}
 
 	if len(setClauses) == 0 {

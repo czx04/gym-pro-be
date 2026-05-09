@@ -39,8 +39,8 @@ func Sync() error                          { return global.Sync() }
 type noopLogger struct{}
 
 func (n *noopLogger) Debug(string, ...interface{}) {}
-func (n *noopLogger) Info(string, ...interface{}) {}
-func (n *noopLogger) Warn(string, ...interface{}) {}
+func (n *noopLogger) Info(string, ...interface{})  {}
+func (n *noopLogger) Warn(string, ...interface{})  {}
 func (n *noopLogger) Error(string, ...interface{}) {}
 func (n *noopLogger) Fatal(string, ...interface{}) {}
 func (n *noopLogger) With(...interface{}) Logger   { return n }
@@ -63,11 +63,17 @@ func kvsToFields(kvs ...interface{}) []zap.Field {
 	return fields
 }
 
-func (l *zapLogger) Debug(msg string, kvs ...interface{}) { l.logger.Debug(msg, kvsToFields(kvs...)...) }
-func (l *zapLogger) Info(msg string, kvs ...interface{})  { l.logger.Info(msg, kvsToFields(kvs...)...) }
-func (l *zapLogger) Warn(msg string, kvs ...interface{})  { l.logger.Warn(msg, kvsToFields(kvs...)...) }
-func (l *zapLogger) Error(msg string, kvs ...interface{}) { l.logger.Error(msg, kvsToFields(kvs...)...) }
-func (l *zapLogger) Fatal(msg string, kvs ...interface{}) { l.logger.Fatal(msg, kvsToFields(kvs...)...) }
+func (l *zapLogger) Debug(msg string, kvs ...interface{}) {
+	l.logger.Debug(msg, kvsToFields(kvs...)...)
+}
+func (l *zapLogger) Info(msg string, kvs ...interface{}) { l.logger.Info(msg, kvsToFields(kvs...)...) }
+func (l *zapLogger) Warn(msg string, kvs ...interface{}) { l.logger.Warn(msg, kvsToFields(kvs...)...) }
+func (l *zapLogger) Error(msg string, kvs ...interface{}) {
+	l.logger.Error(msg, kvsToFields(kvs...)...)
+}
+func (l *zapLogger) Fatal(msg string, kvs ...interface{}) {
+	l.logger.Fatal(msg, kvsToFields(kvs...)...)
+}
 func (l *zapLogger) With(kvs ...interface{}) Logger {
 	return &zapLogger{logger: l.logger.With(kvsToFields(kvs...)...)}
 }

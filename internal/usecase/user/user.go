@@ -324,6 +324,9 @@ func (uc *UserUseCases) ResetPasswordRequestOTP(ctx context.Context, input Reset
 		return errors.Validation(err.Error())
 	}
 	exists, err := uc.userRepo.Exists(ctx, input.Email)
+	if err != nil {
+		return err
+	}
 	if !exists {
 		return errors.NotFound("Email not found")
 	}

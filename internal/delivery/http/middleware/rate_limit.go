@@ -101,7 +101,9 @@ func RateLimitMiddleware(cfg *config.RateLimitConfig) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		key := c.ClientIP()
 		if userID, exists := c.Get(UserIDKey); exists {
-			key = userID.(string)
+			if id, ok := userID.(string); ok {
+				key = id
+			}
 		}
 
 		if !limiter.Allow(key) {
