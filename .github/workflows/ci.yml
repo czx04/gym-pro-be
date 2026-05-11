@@ -93,6 +93,18 @@ jobs:
     if: github.event_name == 'push' && github.ref_name == 'master'
 
     steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy production compose
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT }}
+          source: docker-compose.prod.yml
+          target: /opt/gym-pro
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -101,16 +113,20 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT }}
           script: |
-            docker pull ghcr.io/czx04/gym-pro-be:master
+            set -e
+            mkdir -p /opt/gym-pro
+            cd /opt/gym-pro
 
-            docker stop gym-pro-api || true
-            docker rm gym-pro-api || true
+            if [ ! -f .env ]; then
+              echo "ERROR: /opt/gym-pro/.env not found. Create it on VPS before deploy."
+              exit 1
+            fi
 
-            docker run -d \
-              --name gym-pro-api \
-              --restart unless-stopped \
-              --env-file /opt/gym-pro/.env \
-              -p 8080:8080 \
-              ghcr.io/czx04/gym-pro-be:master
+            export API_IMAGE=ghcr.io/czx04/gym-pro-be:master
+
+            # Lần đầu: tự tạo postgres + redis + api nếu chưa có.
+            # Lần sau: chỉ recreate container thay đổi; data giữ trong volumes.
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
 
             docker image prune -f

@@ -1,0 +1,74 @@
+# Production stack on VPS — API image from GHCR + Postgres + Redis.
+# Usage on VPS:
+#   cp .env.example /opt/gym-pro/.env   # edit secrets
+#   docker compose -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.prod.yml up -d
+
+services:
+  api:
+    image: ${API_IMAGE:-ghcr.io/czx04/gym-pro-be:master}
+    container_name: gym-pro-api
+    restart: unless-stopped
+    ports:
+      - "${API_PORT:-8080}:8080"
+    env_file:
+      - ${ENV_FILE:-/opt/gym-pro/.env}
+    environment:
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8080
+      DB_HOST: postgres
+      REDIS_ADDR: redis:6379
+      LOG_OUTPUT_PATHS: stdout
+      LOG_ERROR_OUTPUT_PATHS: stderr
+      GIN_MODE: release
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - gym-pro
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: gym-pro-postgres
+    restart: unless-stopped
+    env_file:
+      - ${ENV_FILE:-/opt/gym-pro/.env}
+    environment:
+      POSTGRES_USER: ${DB_USER:-gymadmin}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-secret123}
+      POSTGRES_DB: ${DB_NAME:-gym_pro_db}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - gym-pro
+
+  redis:
+    image: redis:7-alpine
+    container_name: gym-pro-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - gym-pro
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  gym-pro:
+    driver: bridge
