@@ -4,6 +4,8 @@ namespace: gym-pro
 resources:
   - namespace.yaml
   - configmap.yaml
+  - postgres.yaml
+  - redis.yaml
   - deployment.yaml
   - service.yaml
   - ingress.yaml
