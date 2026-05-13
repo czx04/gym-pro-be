@@ -7,7 +7,7 @@ data:
   SERVER_HOST: "0.0.0.0"
   SERVER_PORT: "8080"
   GIN_MODE: "release"
-  ALLOWED_ORIGINS: "https://yourdomain.com"
+  ALLOWED_ORIGINS: "http://api.gympro.example.com,https://api.gympro.example.com"
   DB_HOST: "postgres-svc"
   DB_PORT: "5432"
   DB_NAME: "gym_pro_db"
