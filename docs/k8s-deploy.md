@@ -26,13 +26,28 @@ Internet
 
 ## First-time setup on VPS
 
-### 1. Namespace
+### 1. Kubeconfig for deploy user
+
+GitHub Actions SSH uses a non-root user. Copy k3s kubeconfig once:
+
+```bash
+mkdir -p ~/.kube
+sudo cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+sudo chown "$(id -u):$(id -g)" ~/.kube/config
+chmod 600 ~/.kube/config
+export KUBECONFIG=$HOME/.kube/config
+kubectl get nodes
+```
+
+CI sets `KUBECONFIG=$HOME/.kube/config` on each deploy.
+
+### 2. Namespace
 
 ```bash
 kubectl apply -f k8s/namespace.yaml
 ```
 
-### 2. Application secrets
+### 3. Application secrets
 
 Edit placeholders, then run:
 
@@ -57,7 +72,7 @@ kubectl create secret generic gym-pro-api-secret \
 
 `POSTGRES_*` and `DB_*` passwords must match. `REDIS_PASSWORD` can be empty when Redis has no auth.
 
-### 3. GHCR pull secret
+### 4. GHCR pull secret
 
 ```bash
 kubectl create secret docker-registry ghcr-secret \
@@ -69,7 +84,7 @@ kubectl create secret docker-registry ghcr-secret \
 
 Token: GitHub → Settings → Developer settings → Personal access tokens → `read:packages`.
 
-### 4. Ingress NGINX controller
+### 5. Ingress NGINX controller
 
 ```bash
 chmod +x k8s/scripts/install-ingress-nginx.sh
@@ -78,13 +93,13 @@ chmod +x k8s/scripts/install-ingress-nginx.sh
 
 Helm is used when available; otherwise the official static manifest is applied.
 
-### 5. Deploy manifests
+### 6. Deploy manifests
 
 ```bash
 kubectl apply -k k8s/
 ```
 
-### 6. DNS
+### 7. DNS
 
 Point `api.gympro.example.com` to the Ingress external IP:
 

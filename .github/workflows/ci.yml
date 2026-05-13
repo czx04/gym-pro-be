@@ -119,10 +119,14 @@ jobs:
           script: |
             set -e
 
+            export KUBECONFIG=$HOME/.kube/config
+
             if ! command -v kubectl >/dev/null 2>&1; then
               echo "ERROR: kubectl not found on VPS"
               exit 1
             fi
+
+            kubectl get nodes
 
             if ! kubectl get secret gym-pro-api-secret -n gym-pro >/dev/null 2>&1; then
               echo "Create gym-pro-api-secret and ghcr-secret on VPS before deploy."
