@@ -91,6 +91,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-push
     if: github.event_name == 'push' && github.ref_name == 'master'
+    permissions:
+      contents: read
+      packages: read
 
     steps:
       - uses: actions/checkout@v4
@@ -118,14 +121,14 @@ jobs:
             cd /opt/gym-pro
 
             if [ ! -f .env ]; then
-              echo "ERROR: /opt/gym-pro/.env not found. Create it on VPS before deploy."
+              echo "ERROR: /opt/gym-pro/.env not found"
               exit 1
             fi
 
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
             export API_IMAGE=ghcr.io/czx04/gym-pro-be:master
 
-            # Lần đầu: tự tạo postgres + redis + api nếu chưa có.
-            # Lần sau: chỉ recreate container thay đổi; data giữ trong volumes.
             docker compose -f docker-compose.prod.yml pull
             docker compose -f docker-compose.prod.yml up -d --remove-orphans
 
